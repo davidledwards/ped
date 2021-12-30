@@ -1,4 +1,4 @@
-# ded
+# edp
 
 An experimental text editor.
 
