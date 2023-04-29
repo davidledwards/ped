@@ -1,4 +1,3 @@
 * text=auto eol=lf
-*.rs rest
+*.rs rust
 *.md markdown
-
