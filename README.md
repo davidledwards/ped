@@ -1,6 +1,6 @@
 # ped
 
-An experimental text editor.
+A hobbyist text editor developed as a means of learning [Rust](https://www.rust-lang.org/).
 
 ## License
 
