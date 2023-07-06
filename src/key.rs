@@ -194,7 +194,7 @@ fn map_control(b: u8) -> Key {
 /// Returns the key corresponding to the VT-style key code and key modifier, or [`Key::None`] if
 /// unrecognized.
 fn map_vt(key_code: u8, key_mod: u8) -> Key {
-    match (key_code, Modifier::from(key_mod)) {
+    match (key_code, key_mod.into()) {
         (1, m) => Key::Home(m),
         (2, _) => Key::Insert,
         (3, _) => Key::Delete,
@@ -220,7 +220,7 @@ fn map_vt(key_code: u8, key_mod: u8) -> Key {
 /// Returns the key corresponding to the xterm-style key code and key modifier, or [`Key::None`] if
 /// unrecognized.
 fn map_xterm(key_code: u8, key_mod: u8) -> Key {
-    match (key_code, Modifier::from(key_mod)) {
+    match (key_code, key_mod.into()) {
         (b'A', m) => Key::Up(m),
         (b'B', m) => Key::Down(m),
         (b'C', m) => Key::Right(m),
