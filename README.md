@@ -1,6 +1,6 @@
 # ped
 
-The **<span style="color: blue">ped</span>**estrian text editor.
+The **ped**estrian text editor.
 
 ## Background
 
