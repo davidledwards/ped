@@ -1,6 +1,14 @@
 # ped
 
-A hobbyist text editor developed as a means of learning [Rust](https://www.rust-lang.org/).
+The **ped**estrian text editor.
+
+## Background
+
+The genesis of this project stemmed from a desire to learn the [Rust](https://www.rust-lang.org/) programming language while also building something useful and nontrivial.
+
+During my college years studying computer science, I spent evenings and weekends developing a text editor for MS-DOS in Turbo Pascal 3.0. Yep, it was that long ago! Unfortunately, the source code has been lost forever, but I can assure you that reviewing that code today would be a dreadful experience.
+
+This is a hobbyist project with the goal of building a fully functional terminal-based editor supporting multiple buffers, regular expression search, syntax highlighting, and perhaps other features yet to be decided. I plan to develop most everything from scratch as opposed to using prebuilt libraries. The desire is to learn, not to go fast.
 
 ## License
 
