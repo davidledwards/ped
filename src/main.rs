@@ -7,8 +7,8 @@ use key::{Key, Keyboard};
 use term::Terminal;
 
 fn main() -> Result<(), Error> {
-    let ts = term::size()?;
-    println!("rows: {}, cols: {}", ts.rows, ts.cols);
+    let (rows, cols) = term::size()?;
+    println!("rows: {}, cols: {}", rows, cols);
 
     let term = Terminal::new()?;
     let mut keyb = Keyboard::new(term);
@@ -18,8 +18,8 @@ fn main() -> Result<(), Error> {
             Key::Control(4) => break,
             Key::None => {
                 if term::size_changed() {
-                    let ts = term::size()?;
-                    println!("rows: {}, cols: {}\r", ts.rows, ts.cols);
+                    let (rows, cols) = term::size()?;
+                    println!("rows: {}, cols: {}\r", rows, cols);
                 }
             }
             key => {

@@ -15,12 +15,6 @@ pub struct Terminal {
     prior_term: termios,
 }
 
-/// Terminal size as the number of *rows* and *columns*.
-pub struct TerminalSize {
-    pub rows: u32,
-    pub cols: u32,
-}
-
 impl Terminal {
     /// Puts the terminal into raw mode.
     ///
@@ -80,7 +74,7 @@ impl Drop for Terminal {
     }
 }
 
-/// Returns the size of the terminal.
+/// Returns the size of the terminal as (rows, cols).
 ///
 /// Calls to this function always query the underlying driver, as the terminal size may have
 /// changed since the prior request.
@@ -88,16 +82,13 @@ impl Drop for Terminal {
 /// # Errors
 ///
 /// Returns [`Err`] if an I/O error occurred.
-pub fn size() -> Result<TerminalSize> {
+pub fn size() -> Result<(u32, u32)> {
     let win = unsafe {
         let mut win = MaybeUninit::<winsize>::uninit();
         os_result(libc::ioctl(STDOUT_FILENO, TIOCGWINSZ, win.as_mut_ptr()))?;
         win.assume_init()
     };
-    Ok(TerminalSize {
-        rows: win.ws_row as u32,
-        cols: win.ws_col as u32,
-    })
+    Ok((win.ws_row as u32, win.ws_col as u32))
 }
 
 /// Returns `true` if the terminal size changed.

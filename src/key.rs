@@ -66,8 +66,11 @@ impl Keyboard {
     /// Returns [`Err`] if an I/O error occurred while reading bytes from the underlying terminal.
     pub fn read(&mut self) -> Result<Key> {
         let key = match self.term.read()? {
+            Some(8) => Key::Backspace,
+            Some(9) => Key::Tab,
+            Some(13) => Key::Return,
             Some(27) => self.read_escape()?,
-            Some(b @ 0..=31) => map_control(b),
+            Some(b @ 0..=31) => Key::Control(b),
             Some(b @ 32..=126) => Key::Char(b as char),
             Some(127) => Key::Backspace,
             Some(b) => self.read_unicode(b)?,
@@ -177,17 +180,6 @@ impl Keyboard {
             }
         };
         Ok(key)
-    }
-}
-
-/// Returns the control key corresponding to `b`, which is presumed to be in the range of
-/// `[0,31]` excluding `27`.
-fn map_control(b: u8) -> Key {
-    match b {
-        8 => Key::Backspace,
-        9 => Key::Tab,
-        13 => Key::Return,
-        _ => Key::Control(b),
     }
 }
 
