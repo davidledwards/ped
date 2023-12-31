@@ -86,7 +86,10 @@ impl Buffer {
     }
 
     pub fn forward(&self) -> Forward<'_> {
-        Forward { buffer: &self, pos: 0 }
+        Forward {
+            buffer: &self,
+            pos: 0,
+        }
     }
 
     pub fn forward_at(&self, pos: usize) -> Forward<'_> {
@@ -95,7 +98,10 @@ impl Buffer {
     }
 
     pub fn backward(&self) -> Backward<'_> {
-        Backward { buffer: &self, pos: self.size }
+        Backward {
+            buffer: &self,
+            pos: self.size,
+        }
     }
 
     pub fn backward_at(&self, pos: usize) -> Backward<'_> {
@@ -131,9 +137,7 @@ impl Buffer {
     pub fn delete(&mut self, pos: usize) -> char {
         assert!(pos < self.size);
         self.align(pos);
-        let c = unsafe {
-            *self.ptr_of(self.gap_end)
-        };
+        let c = unsafe { *self.ptr_of(self.gap_end) };
         self.gap_end += 1;
         self.size -= 1;
         c
@@ -149,9 +153,7 @@ impl Buffer {
         };
         self.align(start);
         let n = end - start;
-        let cs = unsafe {
-            Vec::from(slice::from_raw_parts(self.ptr_of(self.gap_end), n))
-        };
+        let cs = unsafe { Vec::from(slice::from_raw_parts(self.ptr_of(self.gap_end), n)) };
         self.gap_end += n;
         self.size -= n;
         cs
@@ -237,7 +239,6 @@ impl Buffer {
             if buf.is_null() {
                 Err(Error::OutOfMemory)
             } else {
-                println!("alloc: {:?}, {}", buf, capacity);
                 Ok(buf)
             }
         }
@@ -246,12 +247,49 @@ impl Buffer {
     fn dealloc(buf: *mut char, capacity: usize) {
         let layout = Layout::array::<char>(capacity).unwrap();
         unsafe { alloc::dealloc(buf as *mut u8, layout) }
-        println!("dealloc: {:?}, {}", buf, capacity);
     }
 }
 
 impl Drop for Buffer {
     fn drop(&mut self) {
         Buffer::dealloc(self.buf, self.capacity);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::iter;
+
+    #[test]
+    fn new_buffer() {
+        let buf = Buffer::new().unwrap();
+        assert!(!buf.buf.is_null());
+        assert_eq!(buf.capacity, Buffer::INIT_CAPACITY);
+        assert_eq!(buf.size, 0);
+        assert_eq!(buf.gap_start, 0);
+        assert_eq!(buf.gap_end, buf.capacity);
+    }
+
+    #[test]
+    fn new_buffer_with_capacity() {
+        const CAP: usize = 17;
+        let buf = Buffer::with_capacity(CAP).unwrap();
+        assert!(!buf.buf.is_null());
+        assert_eq!(buf.capacity, CAP);
+        assert_eq!(buf.size, 0);
+        assert_eq!(buf.gap_start, 0);
+        assert_eq!(buf.gap_end, CAP);
+    }
+
+    #[test]
+    fn grow_buffer() {
+        const CAP: usize = 17;
+        let mut buf = Buffer::with_capacity(CAP).unwrap();
+        for c in iter::repeat('*').take(CAP + 1) {
+            buf.insert(0, c).unwrap();
+        }
+        assert_eq!(buf.capacity, Buffer::GROW_CAPACITY);
+        assert_eq!(buf.size, CAP + 1);
     }
 }

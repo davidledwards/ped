@@ -1,12 +1,12 @@
+mod buffer;
 mod error;
 mod key;
 mod term;
-mod buffer;
 
+use buffer::Buffer;
 use error::Error;
 use key::{Key, Keyboard};
 use term::Terminal;
-use buffer::Buffer;
 
 fn main() -> Result<(), Error> {
     let mut buf = Buffer::with_capacity(10)?;
