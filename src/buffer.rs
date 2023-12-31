@@ -1,14 +1,56 @@
+//! Gap buffer.
+
 use crate::error::{Error, Result};
 use std::alloc::{self, Layout};
 use std::mem;
 use std::ptr;
+use std::slice;
 
 #[derive(Debug)]
 pub struct Buffer {
     buf: *mut char,
     capacity: usize,
+    size: usize,
     gap_start: usize,
     gap_end: usize,
+}
+
+pub struct Forward<'a> {
+    buffer: &'a Buffer,
+    pos: usize,
+}
+
+pub struct Backward<'a> {
+    buffer: &'a Buffer,
+    pos: usize,
+}
+
+impl Iterator for Forward<'_> {
+    type Item = char;
+
+    fn next(&mut self) -> Option<char> {
+        if self.pos < self.buffer.size {
+            let c = self.buffer.char_at(self.pos);
+            self.pos += 1;
+            Some(c)
+        } else {
+            None
+        }
+    }
+}
+
+impl Iterator for Backward<'_> {
+    type Item = char;
+
+    fn next(&mut self) -> Option<char> {
+        if self.pos > 0 {
+            self.pos -= 1;
+            let c = self.buffer.char_at(self.pos);
+            Some(c)
+        } else {
+            None
+        }
+    }
 }
 
 impl Buffer {
@@ -29,6 +71,7 @@ impl Buffer {
         Ok(Buffer {
             buf: Buffer::alloc(n)?,
             capacity: n,
+            size: 0,
             gap_start: 0,
             gap_end: n,
         })
@@ -39,44 +82,119 @@ impl Buffer {
     }
 
     pub fn size(&self) -> usize {
-        self.capacity - (self.gap_end - self.gap_start)
+        self.size
     }
 
-    fn start_ptr(&mut self) -> *mut char {
-        unsafe { self.buf.add(self.gap_start) }
+    pub fn forward(&self) -> Forward<'_> {
+        Forward { buffer: &self, pos: 0 }
     }
 
-    fn end_ptr(&mut self) -> *mut char {
-        unsafe { self.buf.add(self.gap_end) }
+    pub fn forward_at(&self, pos: usize) -> Forward<'_> {
+        assert!(pos <= self.size);
+        Forward { buffer: &self, pos }
     }
 
-    fn gap(&self) -> usize {
-        self.gap_end - self.gap_start
+    pub fn backward(&self) -> Backward<'_> {
+        Backward { buffer: &self, pos: self.size }
     }
 
-    pub fn insert(&mut self, c: char) -> Result<()> {
-        self.ensure_space(1)?;
-        unsafe { *self.start_ptr() = c };
+    pub fn backward_at(&self, pos: usize) -> Backward<'_> {
+        assert!(pos <= self.size);
+        Backward { buffer: &self, pos }
+    }
+
+    pub fn insert(&mut self, pos: usize, c: char) -> Result<usize> {
+        assert!(pos <= self.size);
+        self.ensure(1)?;
+        self.align(pos);
+        unsafe {
+            *self.ptr_of(self.gap_start) = c;
+        }
         self.gap_start += 1;
-        Ok(())
+        self.size += 1;
+        Ok(pos + 1)
     }
 
-    pub fn insert_str(&mut self, text: &str) -> Result<()> {
-        for c in text.chars() {
-            self.insert(c)?;
+    pub fn insert_chars(&mut self, pos: usize, cs: &Vec<char>) -> Result<usize> {
+        assert!(pos <= self.size);
+        let n = cs.len();
+        self.ensure(n)?;
+        self.align(pos);
+        unsafe {
+            ptr::copy_nonoverlapping(cs.as_ptr(), self.ptr_of(self.gap_start), n);
         }
-        Ok(())
+        self.gap_start += n;
+        self.size += n;
+        Ok(pos + n)
     }
 
-    pub fn remove(&mut self) {
-        if self.gap_start > 0 {
-            self.gap_start -= 1;
+    pub fn delete(&mut self, pos: usize) -> char {
+        assert!(pos < self.size);
+        self.align(pos);
+        let c = unsafe {
+            *self.ptr_of(self.gap_end)
+        };
+        self.gap_end += 1;
+        self.size -= 1;
+        c
+    }
+
+    pub fn delete_chars(&mut self, start_pos: usize, end_pos: usize) -> Vec<char> {
+        assert!(start_pos < self.size);
+        assert!(end_pos <= self.size);
+        let (start, end) = if start_pos > end_pos {
+            (end_pos, start_pos)
+        } else {
+            (start_pos, end_pos)
+        };
+        self.align(start);
+        let n = end - start;
+        let cs = unsafe {
+            Vec::from(slice::from_raw_parts(self.ptr_of(self.gap_end), n))
+        };
+        self.gap_end += n;
+        self.size -= n;
+        cs
+    }
+
+    fn index_of(&self, pos: usize) -> usize {
+        if pos < self.gap_start {
+            pos
+        } else {
+            self.gap_end + (pos - self.gap_start)
         }
     }
 
-    fn ensure_space(&mut self, n: usize) -> Result<()> {
-        if n > self.gap() {
-            self.grow(n - self.gap())
+    fn ptr_of(&self, i: usize) -> *mut char {
+        unsafe { self.buf.add(i) }
+    }
+
+    fn char_at(&self, pos: usize) -> char {
+        unsafe { *self.ptr_of(self.index_of(pos)) }
+    }
+
+    fn align(&mut self, pos: usize) {
+        if pos < self.gap_start {
+            let n = self.gap_start - pos;
+            unsafe {
+                ptr::copy(self.ptr_of(pos), self.ptr_of(self.gap_end - n), n);
+            }
+            self.gap_start -= n;
+            self.gap_end -= n;
+        } else if pos > self.gap_start {
+            let n = pos - self.gap_start;
+            unsafe {
+                ptr::copy(self.ptr_of(self.gap_end), self.ptr_of(self.gap_start), n);
+            }
+            self.gap_start += n;
+            self.gap_end += n;
+        }
+    }
+
+    fn ensure(&mut self, n: usize) -> Result<()> {
+        let free = self.capacity - self.size;
+        if n > free {
+            self.grow(n - free)
         } else {
             Ok(())
         }
@@ -95,10 +213,10 @@ impl Buffer {
         let gap_end = self.gap_end + (capacity - self.capacity);
         unsafe {
             // Copy sections of original buffer left and right of gap into new buffer.
-            ptr::copy_nonoverlapping(buf, self.buf, self.gap_start);
+            ptr::copy_nonoverlapping(self.buf, buf, self.gap_start);
             ptr::copy_nonoverlapping(
-                buf.add(gap_end),
                 self.buf.add(self.gap_end),
+                buf.add(gap_end),
                 capacity - gap_end,
             );
         }
