@@ -146,13 +146,12 @@ impl Buffer {
     pub fn delete_chars(&mut self, start_pos: usize, end_pos: usize) -> Vec<char> {
         assert!(start_pos < self.size);
         assert!(end_pos <= self.size);
-        let (start, end) = if start_pos > end_pos {
-            (end_pos, start_pos)
+        let (pos, n) = if start_pos <= end_pos {
+            (start_pos, end_pos - start_pos)
         } else {
-            (start_pos, end_pos)
+            (end_pos, start_pos - end_pos)
         };
-        self.align(start);
-        let n = end - start;
+        self.align(pos);
         let cs = unsafe { Vec::from(slice::from_raw_parts(self.ptr_of(self.gap_end), n)) };
         self.gap_end += n;
         self.size -= n;
