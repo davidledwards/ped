@@ -13,19 +13,24 @@ fn main() -> Result<(), Error> {
     print_buffer(&buf);
 
     for c in 'a'..='z' {
-        buf.insert(0, c);
+        buf.insert(c)?;
     }
     print_buffer(&buf);
 
-    buf.insert_chars(buf.size() / 2, &vec!['+', '-', '*', '/']);
+    buf.set_pos(buf.size() / 2);
     print_buffer(&buf);
 
-    let c = buf.delete(2);
-    println!("delete(2): {}", c);
+    buf.insert_chars(&vec!['+', '-', '*', '/'])?;
     print_buffer(&buf);
 
-    let cs = buf.delete_chars(12, 16);
-    println!("delete_chars(12, 16): {:?}", cs);
+    buf.set_pos(2);
+    let c = buf.delete();
+    println!("delete: {:?}", c);
+    print_buffer(&buf);
+
+    buf.set_pos(12);
+    let cs = buf.delete_chars(4);
+    println!("delete_chars: {:?}", cs);
     print_buffer(&buf);
 
     let (rows, cols) = term::size()?;
@@ -53,7 +58,7 @@ fn main() -> Result<(), Error> {
 
 fn print_buffer(buf: &Buffer) {
     println!("--- {:?} ---", buf);
-    for c in buf.forward() {
+    for c in buf.forward_iter(0) {
         print!("{}", c);
     }
     println!("\n---");
