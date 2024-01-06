@@ -1,9 +1,11 @@
 mod buffer;
+mod canvas;
 mod error;
 mod key;
 mod term;
 
 use buffer::Buffer;
+use canvas::{Canvas, Cell};
 use error::Error;
 use key::{Key, Keyboard};
 use term::Terminal;
@@ -35,6 +37,11 @@ fn main() -> Result<(), Error> {
 
     let (rows, cols) = term::size()?;
     println!("rows: {}, cols: {}", rows, cols);
+
+    let canvas = Canvas::new(4, 8);
+    for (p, c) in canvas.iter() {
+        println!("{:?} = {:?}", p, c);
+    }
 
     let term = Terminal::new()?;
     let mut keyb = Keyboard::new(term);
