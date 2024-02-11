@@ -181,12 +181,12 @@ impl Window {
         let mut output = String::new();
         for (row, cols) in self.front.row_iter() {
             output.push_str(ansi::set_cursor(self.origin.row + row, self.origin.col).as_str());
-            let mut prev_cell = Cell::EMPTY;
+            let mut prev_cell = &Cell::empty();
             for (col, cell) in cols {
                 if col == 0 || cell.fg != prev_cell.fg || cell.bg != prev_cell.bg {
                     output.push_str(ansi::set_color(cell.fg, cell.bg).as_str());
                 }
-                prev_cell = *cell;
+                prev_cell = cell;
                 output.push(cell.value);
             }
         }

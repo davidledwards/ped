@@ -22,10 +22,6 @@ fn main() -> Result<(), Error> {
     print_buffer(&buf);
     println!("read {} characters", n);
 
-    let n = io::write_file("LICENSE-copy", &buf)?;
-    println!("wrote {} bytes", n);
-    return Ok(());
-
     let (rows, cols) = term::size()?;
     println!("rows: {}, cols: {}", rows, cols);
 

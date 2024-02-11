@@ -1,6 +1,8 @@
+//! Represents visible content of buffers.
+
 use std::ops::{Deref, DerefMut};
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Debug)]
 pub struct Point {
     pub row: usize,
     pub col: usize,
@@ -12,7 +14,7 @@ impl Point {
     }
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Cell {
     pub value: char,
     pub fg: u8,
@@ -20,20 +22,22 @@ pub struct Cell {
 }
 
 impl Cell {
-    pub const EMPTY: Cell = Cell {
-        value: '\0',
-        fg: 0,
-        bg: 0,
-    };
-
     pub fn new(value: char, fg: u8, bg: u8) -> Cell {
         Cell { value, fg, bg }
+    }
+
+    pub fn empty() -> Cell {
+        Cell {
+            value: '\0',
+            fg: 0,
+            bg: 0,
+        }
     }
 }
 
 impl Default for Cell {
     fn default() -> Cell {
-        Cell::EMPTY
+        Cell::empty()
     }
 }
 
@@ -81,7 +85,7 @@ impl Canvas {
         Canvas {
             rows,
             cols,
-            content: vec![Cell::default(); rows * cols],
+            content: vec![Cell::empty(); rows * cols],
         }
     }
 
@@ -113,22 +117,21 @@ impl Canvas {
         self.content[row * self.cols + col] = cell;
     }
 
-    // compare back and front canvases, generate list of changes.
-    // specifically, return list of cells from back that differ from front.
-    // both self and other are equivalent upon completion.
+    // Apply differences in other with respect to this canvas and return a vector of
+    // those differences.
     //
-    // a.reoncile(&b): return cells in "b" that differ from "a"
-    //
-    // front.reconcile(&back): return cells in "back" that differ from cells in "front"
-    //
+    // Note that this canvas will be equivalent to other upon return.
     pub fn reconcile(&mut self, other: &Canvas) -> Vec<(Point, Cell)> {
         assert!(self.rows == other.rows);
         assert!(self.cols == other.cols);
         let mut changes = Vec::new();
         for i in 0..(self.rows * self.cols) {
             if self.content[i] != other.content[i] {
-                changes.push((Point::new(i / self.cols, i % self.cols), other.content[i]));
-                self.content[i] = other.content[i];
+                changes.push((
+                    Point::new(i / self.cols, i % self.cols),
+                    other.content[i].clone(),
+                ));
+                self.content[i] = other.content[i].clone();
             }
         }
         changes

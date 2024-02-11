@@ -4,7 +4,6 @@ use crate::error::{Error, Result};
 use std::alloc::{self, Layout};
 use std::cmp;
 use std::io::{BufRead, Write};
-use std::mem;
 use std::ptr;
 use std::slice;
 
@@ -161,6 +160,9 @@ impl Buffer {
         loop {
             let n = reader.read_line(&mut chunk)?;
             if (n > 0 && chunk.len() >= READ_CHUNK_SIZE) || n == 0 {
+                // Inserts chunk into buffer when either condition occurs:
+                // - enough characters have been read to reach trigger, or
+                // - reader has reached EOF
                 let cs = chunk.chars().collect();
                 let _ = self.insert_chars(&cs)?;
                 count += cs.len();
@@ -177,7 +179,7 @@ impl Buffer {
     where
         W: Write,
     {
-        // Approximate number of bytes to encode from buffer before invoking writer.
+        // Approximate number of bytes to encode from buffer before sending to writer.
         const WRITE_CHUNK_SIZE: usize = 65_536;
 
         let mut bytes = [0; 4];
@@ -189,6 +191,9 @@ impl Buffer {
             let encoding = c.encode_utf8(&mut bytes);
             chunk.extend_from_slice(encoding.as_bytes());
             if chunk.len() >= WRITE_CHUNK_SIZE || pos == self.size - 1 {
+                // Sends chunk of encoded characters to writer when either condition occurs:
+                // - enough bytes have been encoded to reach trigger, or
+                // - end of buffer
                 let _ = writer.write_all(chunk.as_slice())?;
                 count += chunk.len();
                 chunk.clear();
@@ -233,7 +238,7 @@ impl Buffer {
     }
 
     fn grow(&mut self, need: usize) -> Result<()> {
-        // New capacity rounds up to next increment while satisfying need requested by caller.
+        // New capacity rounds up to next increment while satisfying need.
         let capacity = self
             .capacity
             .saturating_add(need)
@@ -241,11 +246,14 @@ impl Buffer {
             .saturating_div(Buffer::GROW_CAPACITY)
             .saturating_mul(Buffer::GROW_CAPACITY);
 
+        // Allocate new buffer and copy contents of old buffer.
         let buf = Buffer::alloc(capacity)?;
         let gap_len = self.gap_len + (capacity - self.capacity);
         unsafe {
-            // Copy sections of original buffer left and right of gap into new buffer.
+            // Copy left of gap.
             ptr::copy_nonoverlapping(self.buf, buf, self.gap);
+
+            // Copy right of gap.
             ptr::copy_nonoverlapping(
                 self.buf.add(self.gap + self.gap_len),
                 buf.add(self.gap + gap_len),
@@ -253,6 +261,7 @@ impl Buffer {
             );
         }
 
+        // Safe to deallocate old buffer and update state to reflect new capacity.
         Buffer::dealloc(self.buf, self.capacity);
         self.buf = buf;
         self.capacity = capacity;
