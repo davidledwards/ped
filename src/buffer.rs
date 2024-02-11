@@ -3,6 +3,7 @@
 use crate::error::{Error, Result};
 use std::alloc::{self, Layout};
 use std::cmp;
+use std::io::{BufRead, Write};
 use std::mem;
 use std::ptr;
 use std::slice;
@@ -26,38 +27,15 @@ pub struct Backward<'a> {
     pos: usize,
 }
 
-impl Iterator for Forward<'_> {
-    type Item = char;
-
-    fn next(&mut self) -> Option<char> {
-        if self.pos < self.buffer.size {
-            let c = self.buffer.char_at(self.pos);
-            self.pos += 1;
-            Some(c)
-        } else {
-            None
-        }
-    }
-}
-
-impl Iterator for Backward<'_> {
-    type Item = char;
-
-    fn next(&mut self) -> Option<char> {
-        if self.pos > 0 {
-            self.pos -= 1;
-            let c = self.buffer.char_at(self.pos);
-            Some(c)
-        } else {
-            None
-        }
-    }
-}
-
 impl Buffer {
-    const INIT_CAPACITY: usize = 65536;
-    const GROW_CAPACITY: usize = 65536;
-    const MAX_CAPACITY: usize = isize::MAX as usize / mem::size_of::<char>();
+    // Initial capacity of buffer if not specified.
+    const INIT_CAPACITY: usize = 65_536;
+
+    // Smallest increment of capacity growth.
+    const GROW_CAPACITY: usize = 65_536;
+
+    // Largest possible buffer capacity.
+    const MAX_CAPACITY: usize = 2_147_483_648;
 
     pub fn new() -> Result<Buffer> {
         Buffer::with_capacity(Buffer::INIT_CAPACITY)
@@ -170,6 +148,55 @@ impl Buffer {
         }
     }
 
+    pub fn read<R>(&mut self, reader: &mut R) -> Result<usize>
+    where
+        R: BufRead,
+    {
+        // Approximate number of characters to decode from reader before inserting into buffer.
+        const READ_CHUNK_SIZE: usize = 16_384;
+
+        let mut chunk = String::with_capacity(READ_CHUNK_SIZE);
+        let mut count = 0;
+
+        loop {
+            let n = reader.read_line(&mut chunk)?;
+            if (n > 0 && chunk.len() >= READ_CHUNK_SIZE) || n == 0 {
+                let cs = chunk.chars().collect();
+                let _ = self.insert_chars(&cs)?;
+                count += cs.len();
+                chunk.clear();
+            }
+            if n == 0 {
+                break;
+            }
+        }
+        Ok(count)
+    }
+
+    pub fn write<W>(&self, writer: &mut W) -> Result<usize>
+    where
+        W: Write,
+    {
+        // Approximate number of bytes to encode from buffer before invoking writer.
+        const WRITE_CHUNK_SIZE: usize = 65_536;
+
+        let mut bytes = [0; 4];
+        let mut chunk = Vec::with_capacity(WRITE_CHUNK_SIZE);
+        let mut count = 0;
+
+        for pos in 0..self.size {
+            let c = self.char_at(pos);
+            let encoding = c.encode_utf8(&mut bytes);
+            chunk.extend_from_slice(encoding.as_bytes());
+            if chunk.len() >= WRITE_CHUNK_SIZE || pos == self.size - 1 {
+                let _ = writer.write_all(chunk.as_slice())?;
+                count += chunk.len();
+                chunk.clear();
+            }
+        }
+        Ok(count)
+    }
+
     pub fn forward_iter(&self, pos: usize) -> Forward<'_> {
         Forward {
             buffer: &self,
@@ -253,6 +280,34 @@ impl Buffer {
     }
 }
 
+impl Iterator for Forward<'_> {
+    type Item = char;
+
+    fn next(&mut self) -> Option<char> {
+        if self.pos < self.buffer.size {
+            let c = self.buffer.char_at(self.pos);
+            self.pos += 1;
+            Some(c)
+        } else {
+            None
+        }
+    }
+}
+
+impl Iterator for Backward<'_> {
+    type Item = char;
+
+    fn next(&mut self) -> Option<char> {
+        if self.pos > 0 {
+            self.pos -= 1;
+            let c = self.buffer.char_at(self.pos);
+            Some(c)
+        } else {
+            None
+        }
+    }
+}
+
 impl Drop for Buffer {
     fn drop(&mut self) {
         Buffer::dealloc(self.buf, self.capacity);
@@ -262,7 +317,8 @@ impl Drop for Buffer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::iter;
+    use std::io::Cursor;
+    use std::iter::{self, zip};
 
     #[test]
     fn new_buffer() {
@@ -277,6 +333,7 @@ mod tests {
     #[test]
     fn new_buffer_with_capacity() {
         const CAP: usize = 17;
+
         let buf = Buffer::with_capacity(CAP).unwrap();
         assert!(!buf.buf.is_null());
         assert_eq!(buf.capacity, CAP);
@@ -288,11 +345,43 @@ mod tests {
     #[test]
     fn grow_buffer() {
         const CAP: usize = 17;
+
         let mut buf = Buffer::with_capacity(CAP).unwrap();
         for c in iter::repeat('*').take(CAP + 1) {
             buf.insert(c).unwrap();
         }
         assert_eq!(buf.capacity, Buffer::GROW_CAPACITY);
         assert_eq!(buf.size, CAP + 1);
+    }
+
+    #[test]
+    fn read_into_buffer() {
+        const TEXT: &str = "ƿŠɎĊȹ·ĽĖ]ɄɁɈǍȶĸĔȚì.İĈËĩ·øǮƩŒƆŉȡȅǫĈǞǿDǶǳȦǧž¬Ǿ3ÙģDíĎȪƐŖUƝËǻ";
+
+        let mut reader = Cursor::new(TEXT.to_string());
+        let mut buf = Buffer::new().unwrap();
+
+        let n = buf.read(&mut reader).unwrap();
+        assert_eq!(n, TEXT.chars().count());
+
+        for (a, b) in zip(buf.forward_iter(0), TEXT.chars()) {
+            assert_eq!(a, b);
+        }
+    }
+
+    #[test]
+    fn write_from_buffer() {
+        const TEXT: &str = "ųų!)EÝ×vĶǑǟ²ȋØWÚųțòWůĪĎɎ«ƿǎǓC±ţOƹǅĠ/9ŷŌȈïĚſ°ǼȎ¢2^ÁǑī0ÄgŐĢśŧ¶";
+
+        let mut buf = Buffer::new().unwrap();
+        let _ = buf.insert_chars(&TEXT.chars().collect()).unwrap();
+        let mut writer = Cursor::new(Vec::new());
+
+        let n = buf.write(&mut writer).unwrap();
+        assert_eq!(n, TEXT.len());
+
+        for (a, b) in zip(writer.into_inner(), TEXT.bytes()) {
+            assert_eq!(a, b);
+        }
     }
 }
