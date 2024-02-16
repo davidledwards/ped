@@ -189,7 +189,7 @@ impl Window {
     // in theory, a repaint could simply use the refresh() function after clearing the front
     // canvas, effectively causing each cell to be redisplayed. however, the operation can
     // be optimized because we know the front canvas needs to be entirely refreshed.
-    pub fn repaint(&self) {
+    pub fn draw(&self) {
         let mut output = String::new();
         for (row, cols) in self.front.row_iter() {
             output.push_str(ansi::set_cursor(self.origin.row + row, self.origin.col).as_str());

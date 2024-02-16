@@ -21,9 +21,17 @@ pub struct Forward<'a> {
     pos: usize,
 }
 
+pub struct ForwardIndex<'a> {
+    it: Forward<'a>,
+}
+
 pub struct Backward<'a> {
     buffer: &'a Buffer,
     pos: usize,
+}
+
+pub struct BackwardIndex<'a> {
+    it: Backward<'a>,
 }
 
 impl Buffer {
@@ -289,6 +297,12 @@ impl Buffer {
     }
 }
 
+impl<'a> Forward<'a> {
+    pub fn index(self) -> ForwardIndex<'a> {
+        ForwardIndex { it: self }
+    }
+}
+
 impl Iterator for Forward<'_> {
     type Item = char;
 
@@ -303,6 +317,23 @@ impl Iterator for Forward<'_> {
     }
 }
 
+impl Iterator for ForwardIndex<'_> {
+    type Item = (usize, char);
+
+    fn next(&mut self) -> Option<(usize, char)> {
+        match self.it.next() {
+            Some(c) => Some((self.it.pos - 1, c)),
+            None => None,
+        }
+    }
+}
+
+impl<'a> Backward<'a> {
+    pub fn index(self) -> BackwardIndex<'a> {
+        BackwardIndex { it: self }
+    }
+}
+
 impl Iterator for Backward<'_> {
     type Item = char;
 
@@ -313,6 +344,17 @@ impl Iterator for Backward<'_> {
             Some(c)
         } else {
             None
+        }
+    }
+}
+
+impl Iterator for BackwardIndex<'_> {
+    type Item = (usize, char);
+
+    fn next(&mut self) -> Option<(usize, char)> {
+        match self.it.next() {
+            Some(c) => Some((self.it.pos, c)),
+            None => None,
         }
     }
 }
@@ -475,7 +517,7 @@ mod tests {
     }
 
     #[test]
-    fn forward_iteration() {
+    fn forward_iter() {
         const TEXT: &str = "Lorem ipsum dolor sit amet, consectetur porttitor";
 
         let mut buf = Buffer::new().unwrap();
@@ -491,7 +533,21 @@ mod tests {
     }
 
     #[test]
-    fn backward_iteration() {
+    fn forward_iter_with_index() {
+        const TEXT: &str = "Lorem ipsum dolor sit amet, consectetur porttitor";
+
+        let mut buf = Buffer::new().unwrap();
+        let cs = TEXT.chars().collect();
+        let _ = buf.insert_chars(&cs).unwrap();
+
+        for ((a_pos, a), (b_pos, b)) in zip(buf.forward_iter(0).index(), zip(0..cs.len(), cs)) {
+            assert_eq!(a_pos, b_pos);
+            assert_eq!(a, b);
+        }
+    }
+
+    #[test]
+    fn backward_iter() {
         const TEXT: &str = "Lorem ipsum dolor sit amet, consectetur porttitor";
 
         let mut buf = Buffer::new().unwrap();
@@ -502,6 +558,23 @@ mod tests {
         assert_eq!(cs.len(), n);
 
         for (a, b) in zip(buf.backward_iter(buf.size()), cs.into_iter().rev()) {
+            assert_eq!(a, b);
+        }
+    }
+
+    #[test]
+    fn backward_iter_with_index() {
+        const TEXT: &str = "Lorem ipsum dolor sit amet, consectetur porttitor";
+
+        let mut buf = Buffer::new().unwrap();
+        let cs = TEXT.chars().collect();
+        let _ = buf.insert_chars(&cs).unwrap();
+
+        for ((a_pos, a), (b_pos, b)) in zip(
+            buf.backward_iter(buf.size()).index(),
+            zip((0..cs.len()).rev(), cs.into_iter().rev()),
+        ) {
+            assert_eq!(a_pos, b_pos);
             assert_eq!(a, b);
         }
     }
