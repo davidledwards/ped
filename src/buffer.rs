@@ -364,6 +364,86 @@ mod tests {
     }
 
     #[test]
+    fn insert() {
+        let mut buf = Buffer::new().unwrap();
+        let pos = buf.insert('a').unwrap();
+        assert_eq!(pos, 1);
+        assert_eq!(buf.get(0), Some('a'));
+        assert_eq!(buf.size(), 1);
+
+        let pos = buf.insert('b').unwrap();
+        assert_eq!(pos, 2);
+        assert_eq!(buf.get(1), Some('b'));
+        assert_eq!(buf.size(), 2);
+
+        let pos = buf.set_pos(1);
+        assert_eq!(pos, 1);
+        let pos = buf.insert('c').unwrap();
+        assert_eq!(pos, 2);
+        assert_eq!(buf.get(0), Some('a'));
+        assert_eq!(buf.get(1), Some('c'));
+        assert_eq!(buf.get(2), Some('b'));
+        assert_eq!(buf.size(), 3);
+    }
+
+    #[test]
+    fn insert_chars() {
+        let mut buf = Buffer::new().unwrap();
+        let pos = buf.insert_chars(&vec!['a', 'b', 'c']).unwrap();
+        assert_eq!(pos, 3);
+        assert_eq!(buf.get(0), Some('a'));
+        assert_eq!(buf.get(1), Some('b'));
+        assert_eq!(buf.get(2), Some('c'));
+        assert_eq!(buf.size(), 3);
+
+        let pos = buf.set_pos(1);
+        assert_eq!(pos, 1);
+        let pos = buf.insert_chars(&vec!['d', 'e', 'f']).unwrap();
+        assert_eq!(pos, 4);
+        assert_eq!(buf.get(0), Some('a'));
+        assert_eq!(buf.get(1), Some('d'));
+        assert_eq!(buf.get(2), Some('e'));
+        assert_eq!(buf.get(3), Some('f'));
+        assert_eq!(buf.get(4), Some('b'));
+        assert_eq!(buf.get(5), Some('c'));
+        assert_eq!(buf.size(), 6);
+    }
+
+    #[test]
+    fn delete() {
+        const TEXT: &str = "abcdef";
+
+        let mut buf = Buffer::new().unwrap();
+        let cs = TEXT.chars().collect();
+        let _ = buf.insert_chars(&cs).unwrap();
+        assert_eq!(buf.size(), cs.len());
+
+        let pos = buf.set_pos(1);
+        assert_eq!(pos, 1);
+        let c = buf.delete();
+        assert_eq!(c, Some('b'));
+        assert_eq!(buf.get(1), Some('c'));
+        assert_eq!(buf.size(), cs.len() - 1);
+    }
+
+    #[test]
+    fn delete_chars() {
+        const TEXT: &str = "abcxyzdef";
+
+        let mut buf = Buffer::new().unwrap();
+        let text = TEXT.chars().collect();
+        let _ = buf.insert_chars(&text).unwrap();
+        assert_eq!(buf.size(), text.len());
+
+        let pos = buf.set_pos(3);
+        assert_eq!(pos, 3);
+        let cs = buf.delete_chars(3);
+        assert_eq!(cs, Some(vec!['x', 'y', 'z']));
+        assert_eq!(buf.get(3), Some('d'));
+        assert_eq!(buf.size(), text.len() - 3);
+    }
+
+    #[test]
     fn read_into_buffer() {
         const TEXT: &str = "ƿŠɎĊȹ·ĽĖ]ɄɁɈǍȶĸĔȚì.İĈËĩ·øǮƩŒƆŉȡȅǫĈǞǿDǶǳȦǧž¬Ǿ3ÙģDíĎȪƐŖUƝËǻ";
 
@@ -390,6 +470,38 @@ mod tests {
         assert_eq!(n, TEXT.len());
 
         for (a, b) in zip(writer.into_inner(), TEXT.bytes()) {
+            assert_eq!(a, b);
+        }
+    }
+
+    #[test]
+    fn forward_iteration() {
+        const TEXT: &str = "Lorem ipsum dolor sit amet, consectetur porttitor";
+
+        let mut buf = Buffer::new().unwrap();
+        assert_eq!(buf.forward_iter(0).next(), None);
+
+        let cs = TEXT.chars().collect();
+        let n = buf.insert_chars(&cs).unwrap();
+        assert_eq!(cs.len(), n);
+
+        for (a, b) in zip(buf.forward_iter(0), cs) {
+            assert_eq!(a, b);
+        }
+    }
+
+    #[test]
+    fn backward_iteration() {
+        const TEXT: &str = "Lorem ipsum dolor sit amet, consectetur porttitor";
+
+        let mut buf = Buffer::new().unwrap();
+        assert_eq!(buf.backward_iter(buf.size()).next(), None);
+
+        let cs = TEXT.chars().collect();
+        let n = buf.insert_chars(&cs).unwrap();
+        assert_eq!(cs.len(), n);
+
+        for (a, b) in zip(buf.backward_iter(buf.size()), cs.into_iter().rev()) {
             assert_eq!(a, b);
         }
     }

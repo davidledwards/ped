@@ -87,6 +87,18 @@ pub struct Window {
 //   call: window.remove(n, 1). if a block of size m is deleted at position n, then
 //   call: window.remove(n, m). the hint will allow the window to optimize its work.
 //
+// initializing window:
+// - create the window with origin and size information, as well as the buffer.
+// - the window should be drawn; since this is the first time, it is a full repaint.
+// - question: where is the cursor? and where is the buffer position?
+// - the buffer position may actually dictate how the window is drawn. for example,
+//   if the pos is 0 (top of buffer), then the window must place the cursor at the
+//   top-right of the window and draw from pos 0 at the origin. suppose the pos is
+//   at the end of the buffer, say a very large file with thousands of lines. the
+//   window will display the last page of the buffer, but it needs to backtrack
+//   from the pos to determine where to start.
+//     for (pos, c) in buf.backward_iter(pos) { ... }
+//
 
 impl Window {
     pub fn new(rows: usize, cols: usize, buffer: Rc<RefCell<Buffer>>) -> Window {
