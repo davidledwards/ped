@@ -210,14 +210,28 @@ impl Buffer {
         Ok(count)
     }
 
-    pub fn forward_iter(&self, pos: usize) -> Forward<'_> {
+    pub fn forward(&self) -> Forward<'_> {
+        Forward {
+            buffer: &self,
+            pos: self.get_pos(),
+        }
+    }
+
+    pub fn forward_from(&self, pos: usize) -> Forward<'_> {
         Forward {
             buffer: &self,
             pos: cmp::min(pos, self.size),
         }
     }
 
-    pub fn backward_iter(&self, pos: usize) -> Backward<'_> {
+    pub fn backward(&self) -> Backward<'_> {
+        Backward {
+            buffer: &self,
+            pos: self.get_pos(),
+        }
+    }
+
+    pub fn backward_from(&self, pos: usize) -> Backward<'_> {
         Backward {
             buffer: &self,
             pos: cmp::min(pos, self.size),
@@ -495,7 +509,7 @@ mod tests {
         let n = buf.read(&mut reader).unwrap();
         assert_eq!(n, TEXT.chars().count());
 
-        for (a, b) in zip(buf.forward_iter(0), TEXT.chars()) {
+        for (a, b) in zip(buf.forward_from(0), TEXT.chars()) {
             assert_eq!(a, b);
         }
     }
@@ -517,53 +531,63 @@ mod tests {
     }
 
     #[test]
-    fn forward_iter() {
+    fn forward() {
         const TEXT: &str = "Lorem ipsum dolor sit amet, consectetur porttitor";
 
         let mut buf = Buffer::new().unwrap();
-        assert_eq!(buf.forward_iter(0).next(), None);
+        assert_eq!(buf.forward_from(0).next(), None);
 
         let cs = TEXT.chars().collect();
         let n = buf.insert_chars(&cs).unwrap();
         assert_eq!(cs.len(), n);
 
-        for (a, b) in zip(buf.forward_iter(0), cs) {
-            assert_eq!(a, b);
+        for (a, b) in zip(buf.forward_from(0), cs.iter()) {
+            assert_eq!(a, *b);
+        }
+
+        let pos = buf.set_pos(buf.size() / 2);
+        for (a, b) in zip(buf.forward(), cs[pos..].iter()) {
+            assert_eq!(a, *b);
         }
     }
 
     #[test]
-    fn forward_iter_with_index() {
+    fn forward_with_index() {
         const TEXT: &str = "Lorem ipsum dolor sit amet, consectetur porttitor";
 
         let mut buf = Buffer::new().unwrap();
         let cs = TEXT.chars().collect();
         let _ = buf.insert_chars(&cs).unwrap();
 
-        for ((a_pos, a), (b_pos, b)) in zip(buf.forward_iter(0).index(), zip(0..cs.len(), cs)) {
+        for ((a_pos, a), (b_pos, b)) in zip(buf.forward_from(0).index(), zip(0..cs.len(), cs)) {
             assert_eq!(a_pos, b_pos);
             assert_eq!(a, b);
         }
     }
 
     #[test]
-    fn backward_iter() {
+    fn backward() {
         const TEXT: &str = "Lorem ipsum dolor sit amet, consectetur porttitor";
 
         let mut buf = Buffer::new().unwrap();
-        assert_eq!(buf.backward_iter(buf.size()).next(), None);
+        assert_eq!(buf.backward_from(buf.size()).next(), None);
 
         let cs = TEXT.chars().collect();
         let n = buf.insert_chars(&cs).unwrap();
         assert_eq!(cs.len(), n);
 
-        for (a, b) in zip(buf.backward_iter(buf.size()), cs.into_iter().rev()) {
-            assert_eq!(a, b);
+        for (a, b) in zip(buf.backward_from(buf.size()), cs.iter().rev()) {
+            assert_eq!(a, *b);
+        }
+
+        let pos = buf.set_pos(buf.size() / 2);
+        for (a, b) in zip(buf.backward(), cs[0..pos].iter().rev()) {
+            assert_eq!(a, *b);
         }
     }
 
     #[test]
-    fn backward_iter_with_index() {
+    fn backward_with_index() {
         const TEXT: &str = "Lorem ipsum dolor sit amet, consectetur porttitor";
 
         let mut buf = Buffer::new().unwrap();
@@ -571,7 +595,7 @@ mod tests {
         let _ = buf.insert_chars(&cs).unwrap();
 
         for ((a_pos, a), (b_pos, b)) in zip(
-            buf.backward_iter(buf.size()).index(),
+            buf.backward_from(buf.size()).index(),
             zip((0..cs.len()).rev(), cs.into_iter().rev()),
         ) {
             assert_eq!(a_pos, b_pos);

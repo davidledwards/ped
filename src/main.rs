@@ -22,6 +22,42 @@ fn main() -> Result<(), Error> {
     print_buffer(&buf);
     println!("read {} characters", n);
 
+    println!("---");
+    buf.set_pos(9866);
+    for c in buf.forward() {
+        print!("{}", c);
+    }
+    println!("---");
+    buf.set_pos(951);
+    for c in buf.backward() {
+        print!("{}", c);
+    }
+    println!("---");
+
+/*
+    let mut lines = vec![0];
+    for (pos, c) in buf.forward_from(0).index() {
+        if c == '\n' {
+            lines.push(pos + 1);
+        }
+    }
+    println!("lines: {}", lines.len());
+    for (l, pos) in lines.iter().enumerate() {
+        println!("[{}] -> {}", l, pos);
+    }
+
+    // found: pos is beg of line: Ok(i): line # = i + 1
+    let r = lines.binary_search(&9438);
+    print!("search(9438): {:?}: line: ", r);
+    println!("{}", r.unwrap() + 1);
+    // not found: pos is not beg of line: Err(i): line # = i
+    let r = lines.binary_search(&8900);
+    print!("search(8900): {:?}: line: ", r);
+    println!("{}", r.unwrap_err());
+*/
+    return Ok(());
+
+
     let (rows, cols) = term::size()?;
     println!("rows: {}, cols: {}", rows, cols);
 
@@ -84,7 +120,7 @@ fn main() -> Result<(), Error> {
 
 fn print_buffer(buf: &Buffer) {
     println!("--- {:?} ---", buf);
-    for c in buf.forward_iter(0) {
+    for c in buf.forward_from(0) {
         print!("{}", c);
     }
     println!("\n---");

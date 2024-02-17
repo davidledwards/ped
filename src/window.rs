@@ -116,6 +116,15 @@ impl Window {
         }
     }
 
+    pub fn set_focus(&mut self, row: usize) {
+        // objective: align cursor to buffer position
+        // - the row is more of a hint, it could be adjusted by this function
+
+        // find buffer pos that aligns to (0,0), which allows us to scan forward
+        // from there and write to the back canvas.
+        // let mut it = buf.backward_iter(buf.get_pos()).index();
+    }
+
     // TODO: temp function
     pub fn debug_init(&mut self) {
         self.back.fill(Cell::new('-', 5, 232));
