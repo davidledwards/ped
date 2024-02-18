@@ -1,16 +1,25 @@
 //! Represents visible content of buffers.
 
 use crate::color::Color;
+use std::ops::Add;
 
 #[derive(Copy, Clone, Debug)]
 pub struct Point {
-    pub row: usize,
-    pub col: usize,
+    pub row: u32,
+    pub col: u32,
 }
 
 impl Point {
-    pub fn new(row: usize, col: usize) -> Point {
+    pub fn new(row: u32, col: u32) -> Point {
         Point { row, col }
+    }
+}
+
+impl Add for Point {
+    type Output = Point;
+
+    fn add(self, rhs: Point) -> Point {
+        Point::new(self.row + rhs.row, self.col + rhs.col)
     }
 }
 
@@ -39,40 +48,40 @@ impl Default for Cell {
 
 #[derive(Debug)]
 pub struct Canvas {
-    rows: usize,
-    cols: usize,
+    rows: u32,
+    cols: u32,
     content: Vec<Cell>,
 }
 
 impl Canvas {
-    pub fn new(rows: usize, cols: usize) -> Canvas {
+    pub fn new(rows: u32, cols: u32) -> Canvas {
         assert!(rows > 0);
         assert!(cols > 0);
         Canvas {
             rows,
             cols,
-            content: vec![Cell::EMPTY; rows * cols],
+            content: vec![Cell::EMPTY; (rows * cols) as usize],
         }
     }
 
-    pub fn row(&self, row: usize) -> &[Cell] {
+    pub fn row(&self, row: u32) -> &[Cell] {
         assert!(row < self.rows);
         let start = row * self.cols;
         let end = start + self.cols;
-        &self.content[start..end]
+        &self.content[(start as usize)..(end as usize)]
     }
 
-    pub fn row_mut(&mut self, row: usize) -> &mut [Cell] {
+    pub fn row_mut(&mut self, row: u32) -> &mut [Cell] {
         assert!(row < self.rows);
         let start = row * self.cols;
         let end = start + self.cols;
-        &mut self.content[start..end]
+        &mut self.content[(start as usize)..(end as usize)]
     }
 
-    pub fn put(&mut self, row: usize, col: usize, cell: Cell) {
+    pub fn put(&mut self, row: u32, col: u32, cell: Cell) {
         assert!(row < self.rows);
         assert!(col < self.cols);
-        self.content[row * self.cols + col] = cell;
+        self.content[(row * self.cols + col) as usize] = cell;
     }
 
     // Apply differences in other with respect to this canvas and return a vector of
@@ -87,7 +96,7 @@ impl Canvas {
         for i in 0..self.content.len() {
             if self.content[i] != other.content[i] {
                 changes.push((
-                    Point::new(i / self.cols, i % self.cols),
+                    Point::new((i as u32) / self.cols, (i as u32) % self.cols),
                     other.content[i],
                 ));
                 self.content[i] = other.content[i];
@@ -115,17 +124,17 @@ impl Canvas {
 
 pub struct RowIter<'a> {
     canvas: &'a Canvas,
-    row: usize,
+    row: u32,
 }
 
 pub struct ColIter<'a> {
     canvas: &'a Canvas,
     row_start: usize,
-    col: usize,
+    col: u32,
 }
 
 impl<'a> Iterator for RowIter<'a> {
-    type Item = (usize, ColIter<'a>);
+    type Item = (u32, ColIter<'a>);
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.row < self.canvas.rows {
@@ -135,7 +144,7 @@ impl<'a> Iterator for RowIter<'a> {
                 row,
                 ColIter {
                     canvas: &self.canvas,
-                    row_start: row * self.canvas.cols,
+                    row_start: (row * self.canvas.cols) as usize,
                     col: 0,
                 },
             ))
@@ -146,13 +155,13 @@ impl<'a> Iterator for RowIter<'a> {
 }
 
 impl<'a> Iterator for ColIter<'a> {
-    type Item = (usize, Cell);
+    type Item = (u32, Cell);
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.col < self.canvas.cols {
             let col = self.col;
             self.col += 1;
-            Some((col, self.canvas.content[self.row_start + col]))
+            Some((col, self.canvas.content[self.row_start + (col as usize)]))
         } else {
             None
         }
@@ -161,8 +170,8 @@ impl<'a> Iterator for ColIter<'a> {
 
 pub struct Iter<'a> {
     canvas: &'a Canvas,
-    row: usize,
-    col: usize,
+    row: u32,
+    col: u32,
     index: usize,
 }
 

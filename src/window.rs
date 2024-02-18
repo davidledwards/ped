@@ -44,19 +44,19 @@ use std::rc::Rc;
 //
 
 pub struct Window {
-    rows: usize,
-    cols: usize,
-    color: Color, // default color
-    origin: Point, // relative to terminal; these are physical coordinates
-    cursor: Point, // relative to origin
+    rows: u32,
+    cols: u32,
+    color: Color,
+    origin: Point,
+    cursor: Point,
     buffer: Rc<RefCell<Buffer>>,
-    back: Canvas, // characters are written to this canvas
-    front: Canvas, // reflection of what is displayed to user
+    back: Canvas,
+    front: Canvas,
 }
 
 pub enum Focus {
     Auto,
-    Row(usize),
+    Row(u32),
 }
 
 // consider using builder pattern due to number of variations in configuration
@@ -110,7 +110,13 @@ pub enum Focus {
 //
 
 impl Window {
-    pub fn new(rows: usize, cols: usize, color: Color, origin: Point, buffer: Rc<RefCell<Buffer>>) -> Window {
+    pub fn new(
+        rows: u32,
+        cols: u32,
+        color: Color,
+        origin: Point,
+        buffer: Rc<RefCell<Buffer>>,
+    ) -> Window {
         assert!(rows > 0);
         assert!(cols > 0);
 
@@ -152,14 +158,14 @@ impl Window {
             // Buffer position is decremented only as much as number of columns managed by
             // window, essentially accounting for long lines.
             buf_pos -= {
-                if pos_diff < self.cols {
+                if pos_diff < self.cols as usize {
                     pos_diff
                 } else {
-                    let n = pos_diff % self.cols;
+                    let n = pos_diff % (self.cols as usize);
                     if n > 0 {
                         n
                     } else {
-                        self.cols
+                        self.cols as usize
                     }
                 }
             };
@@ -194,7 +200,7 @@ impl Window {
             }
             if c == '\n' {
                 let cells = self.back.row_mut(row);
-                cells[col..self.cols].fill(Cell::new(' ', self.color));
+                cells[(col as usize)..(self.cols as usize)].fill(Cell::new(' ', self.color));
                 col = self.cols;
             } else {
                 self.back.put(row, col, Cell::new(c, self.color));
@@ -219,7 +225,7 @@ impl Window {
         // processed.
         if row < self.rows {
             let cells = self.back.row_mut(row);
-            cells[col..self.cols].fill(Cell::new(' ', self.color));
+            cells[(col as usize)..(self.cols as usize)].fill(Cell::new(' ', self.color));
             row += 1;
         }
         while row < self.rows {
@@ -239,11 +245,9 @@ impl Window {
             let mut prev_cell: Option<Cell> = None;
             for (p, cell) in changes {
                 let seq = match prev_p {
-                    None => {
-                        Some(ansi::set_cursor(self.origin.row + p.row, self.origin.col + p.col))
-                    }
+                    None => Some(ansi::set_cursor(self.origin + p)),
                     Some(prev_p) if p.row != prev_p.row || p.col != prev_p.col + 1 => {
-                        Some(ansi::set_cursor(self.origin.row + p.row, self.origin.col + p.col))
+                        Some(ansi::set_cursor(self.origin + p))
                     }
                     _ => None,
                 };
@@ -252,11 +256,9 @@ impl Window {
                 }
 
                 let seq = match prev_cell {
-                    None => {
-                        Some(ansi::set_color(cell.color.fg, cell.color.bg))
-                    }
+                    None => Some(ansi::set_color(cell.color)),
                     Some(prev_cell) if cell.color != prev_cell.color => {
-                        Some(ansi::set_color(cell.color.fg, cell.color.bg))
+                        Some(ansi::set_color(cell.color))
                     }
                     _ => None,
                 };
@@ -268,11 +270,9 @@ impl Window {
                 prev_p = Some(p);
                 prev_cell = Some(cell);
             }
-            output.push_str(ansi::set_cursor(
-                self.origin.row + self.cursor.row, self.origin.col + self.cursor.col).as_str());
+            output.push_str(ansi::set_cursor(self.origin + self.cursor).as_str());
             print!("{}", output);
-            //println!("refresh: {:?}", output);
-            io::stdout().flush();
+            let _ = io::stdout().flush();
         }
     }
 
@@ -284,18 +284,18 @@ impl Window {
     pub fn redraw(&self) {
         let mut output = String::new();
         for (row, cols) in self.front.row_iter() {
-            output.push_str(ansi::set_cursor(self.origin.row + row, self.origin.col).as_str());
+            output.push_str(ansi::set_cursor(self.origin + Point::new(row, 0)).as_str());
             let mut prev_cell = Cell::EMPTY;
             for (col, cell) in cols {
                 if col == 0 || cell.color != prev_cell.color {
-                    output.push_str(ansi::set_color(cell.color.fg, cell.color.bg).as_str());
+                    output.push_str(ansi::set_color(cell.color).as_str());
                 }
                 prev_cell = cell;
                 output.push(cell.value);
             }
         }
-        print!("{:?}", output);
-        io::stdout().flush();
+        print!("{}", output);
+        let _ = io::stdout().flush();
     }
 }
 
