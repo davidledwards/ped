@@ -54,7 +54,7 @@ pub struct Window {
     front: Canvas, // reflection of what is displayed to user
 }
 
-enum Focus {
+pub enum Focus {
     Auto,
     Row(usize),
 }
@@ -142,7 +142,7 @@ impl Window {
         let buf = self.buffer.borrow();
         let mut it = buf.backward().index();
         let mut buf_pos = buf.get_pos();
-        let mut bol_pos = Window::find_bol(&mut it);
+        let mut bol_pos = find_bol(&mut it);
 
         let pos = loop {
             // Remaining distance between current buffer position and position of closest
@@ -178,7 +178,7 @@ impl Window {
                 // Current buffer position points to first character of line, but calculation
                 // is based on pointing to '\n', so just subtract 1.
                 buf_pos -= 1;
-                bol_pos = Window::find_bol(&mut it);
+                bol_pos = find_bol(&mut it);
             }
         };
 
@@ -193,7 +193,7 @@ impl Window {
                 self.cursor = Point::new(row, col);
             }
             if c == '\n' {
-                let mut cells = self.back.row_mut(row);
+                let cells = self.back.row_mut(row);
                 cells[col..self.cols].fill(Cell::new(' ', self.color));
                 col = self.cols;
             } else {
@@ -218,23 +218,14 @@ impl Window {
         // Blanks out any remaining cells if end of buffer is reached for all rows are
         // processed.
         if row < self.rows {
-            let mut cells = self.back.row_mut(row);
+            let cells = self.back.row_mut(row);
             cells[col..self.cols].fill(Cell::new(' ', self.color));
             row += 1;
         }
         while row < self.rows {
-            let mut cells = self.back.row_mut(row);
+            let cells = self.back.row_mut(row);
             cells.fill(Cell::new(' ', self.color));
             row += 1;
-        }
-    }
-
-    // Scans backwards until next '\n' character is found and returns buffer position
-    // of character that follows, or returns 0 if beginning of buffer is reached.
-    fn find_bol(it: &mut BackwardIndex) -> usize {
-        match it.find(|&(_, c)| c == '\n') {
-            Some((pos, _)) => pos + 1,
-            None => 0,
         }
     }
 
@@ -294,7 +285,7 @@ impl Window {
         let mut output = String::new();
         for (row, cols) in self.front.row_iter() {
             output.push_str(ansi::set_cursor(self.origin.row + row, self.origin.col).as_str());
-            let mut prev_cell = &Cell::empty();
+            let mut prev_cell = Cell::EMPTY;
             for (col, cell) in cols {
                 if col == 0 || cell.color != prev_cell.color {
                     output.push_str(ansi::set_color(cell.color.fg, cell.color.bg).as_str());
@@ -305,5 +296,14 @@ impl Window {
         }
         print!("{:?}", output);
         io::stdout().flush();
+    }
+}
+
+// Scans backwards until next '\n' character is found and returns buffer position
+// of character that follows, or returns 0 if beginning of buffer is reached.
+fn find_bol(it: &mut BackwardIndex) -> usize {
+    match it.find(|&(_, c)| c == '\n') {
+        Some((pos, _)) => pos + 1,
+        None => 0,
     }
 }

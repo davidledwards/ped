@@ -1,9 +1,8 @@
 //! Represents visible content of buffers.
 
 use crate::color::Color;
-use std::ops::{Deref, DerefMut};
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct Point {
     pub row: usize,
     pub col: usize,
@@ -15,25 +14,26 @@ impl Point {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct Cell {
     pub value: char,
     pub color: Color,
 }
 
 impl Cell {
+    pub const EMPTY: Cell = Cell {
+        value: '\0',
+        color: Color::ZERO,
+    };
+
     pub fn new(value: char, color: Color) -> Cell {
         Cell { value, color }
-    }
-
-    pub fn empty() -> Cell {
-        Cell::new('\0', Color::default())
     }
 }
 
 impl Default for Cell {
     fn default() -> Cell {
-        Cell::empty()
+        Cell::EMPTY
     }
 }
 
@@ -44,37 +44,6 @@ pub struct Canvas {
     content: Vec<Cell>,
 }
 
-// experimental
-impl Deref for Canvas {
-    type Target = [Cell];
-
-    fn deref(&self) -> &[Cell] {
-        &self.content
-    }
-}
-
-// experimental
-impl DerefMut for Canvas {
-    fn deref_mut(&mut self) -> &mut [Cell] {
-        &mut self.content
-    }
-}
-
-// operations on the canvas:
-// - the window type will be managing the front and back canvas objects.
-// - will become more clear when implementing window type.
-// - window will write to the back canvas, then diff with the front canvas to determine ANSI
-//   commands that should be sent to the terminal.
-//
-//   fn diff(&self, other: &Canvas) -> Vec<(Point, Cell)>
-//   - returns every cell that changed
-//   - implement efficient diff as opposed to using iterators
-//   - invariant: canvases must have identical dimensions
-//
-//   window type would then take that diff vector and generate most efficient ANSI sequence,
-//   e.g. if two adjacent points in the diff are adjacent on the terminal, then a cursor
-//   positioning sequence need not be sent.
-//
 impl Canvas {
     pub fn new(rows: usize, cols: usize) -> Canvas {
         assert!(rows > 0);
@@ -82,14 +51,8 @@ impl Canvas {
         Canvas {
             rows,
             cols,
-            content: vec![Cell::empty(); rows * cols],
+            content: vec![Cell::EMPTY; rows * cols],
         }
-    }
-
-    pub fn get_cell(&self, p: &Point) -> &Cell {
-        assert!(p.row < self.rows);
-        assert!(p.col < self.cols);
-        &self.content[p.row * self.cols + p.col]
     }
 
     pub fn row(&self, row: usize) -> &[Cell] {
@@ -119,14 +82,15 @@ impl Canvas {
     pub fn reconcile(&mut self, other: &Canvas) -> Vec<(Point, Cell)> {
         assert!(self.rows == other.rows);
         assert!(self.cols == other.cols);
+
         let mut changes = Vec::new();
-        for i in 0..(self.rows * self.cols) {
+        for i in 0..self.content.len() {
             if self.content[i] != other.content[i] {
                 changes.push((
                     Point::new(i / self.cols, i % self.cols),
-                    other.content[i].clone(),
+                    other.content[i],
                 ));
-                self.content[i] = other.content[i].clone();
+                self.content[i] = other.content[i];
             }
         }
         changes
@@ -182,13 +146,13 @@ impl<'a> Iterator for RowIter<'a> {
 }
 
 impl<'a> Iterator for ColIter<'a> {
-    type Item = (usize, &'a Cell);
+    type Item = (usize, Cell);
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.col < self.canvas.cols {
             let col = self.col;
             self.col += 1;
-            Some((col, &self.canvas.content[self.row_start + col]))
+            Some((col, self.canvas.content[self.row_start + col]))
         } else {
             None
         }
@@ -203,13 +167,13 @@ pub struct Iter<'a> {
 }
 
 impl<'a> Iterator for Iter<'a> {
-    type Item = (Point, &'a Cell);
+    type Item = (Point, Cell);
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.row < self.canvas.rows {
             let item = Some((
                 Point::new(self.row, self.col),
-                &self.canvas.content[self.index],
+                self.canvas.content[self.index],
             ));
             self.col += 1;
             if self.col == self.canvas.cols {
