@@ -55,8 +55,16 @@ fn main() -> Result<(), Error> {
     print!("search(8900): {:?}: line: ", r);
     println!("{}", r.unwrap_err());
 */
-    return Ok(());
 
+    //let pos = buf.size() / 2;
+    let pos = 50;
+    println!("setting pos: {}", pos);
+    buf.set_pos(pos);
+    println!("[{}]: {:?}", pos, buf.get(pos).unwrap());
+    let buffer = Rc::new(RefCell::new(buf));
+    let mut win = Window::new(20, 40, buffer.clone());
+    win.set_focus(10);
+    return Ok(());
 
     let (rows, cols) = term::size()?;
     println!("rows: {}, cols: {}", rows, cols);

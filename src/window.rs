@@ -122,7 +122,60 @@ impl Window {
 
         // find buffer pos that aligns to (0,0), which allows us to scan forward
         // from there and write to the back canvas.
-        // let mut it = buf.backward_iter(buf.get_pos()).index();
+        let mut row = row;
+
+        // finds the pos corresponding to the beg of line by scanning backwards for
+        // the first newline or beg of buffer. this allows us to calculate which the
+        // col position in the window.
+        let buf = self.buffer.borrow();
+
+        let mut buf_pos = buf.get_pos();
+        let mut it = buf.backward().index();
+
+        // prime the loop with the first scan for bol
+        let mut bol_pos = match it.find(|&(_, c)| c == '\n') {
+            Some((pos, _)) => pos + 1,
+            None => 0,
+        };
+
+        let pos = loop {
+            let pos_diff = buf_pos - bol_pos;
+
+            buf_pos -= {
+                if pos_diff < self.cols {
+                    pos_diff
+                } else {
+                    let n = pos_diff % self.cols;
+                    if n > 0 {
+                        n
+                    } else {
+                        self.cols
+                    }
+                }
+            };
+
+            if row == 0 || buf_pos == 0 {
+                // this should be the buffer pos for (0,0)
+                // row may be > 1 if beg of buffer reached first
+                break buf_pos;
+            } else {
+                row -= 1;
+            }
+
+            if buf_pos == bol_pos {
+                // we know buf_pos > 0
+                // since buf_pos points to the bol, we need it on the prior newline
+                buf_pos -= 1;
+
+                bol_pos = match it.find(|&(_, c)| c == '\n') {
+                    Some((pos, _)) => pos + 1,
+                    None => 0,
+                };
+            }
+        };
+
+        println!("(0,0) pos: {}, last row: {}", pos, row);
+        println!("[{}]: {}", pos, buf.forward_from(pos).take(100).collect::<String>());
     }
 
     // TODO: temp function
