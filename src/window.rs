@@ -1,9 +1,12 @@
 //! Window management.
 
 use crate::ansi;
-use crate::buffer::Buffer;
+use crate::buffer::{BackwardIndex, Buffer};
 use crate::canvas::{Canvas, Cell, Point};
+use crate::color::Color;
 use std::cell::RefCell;
+use std::cmp;
+use std::io::{self, Write};
 use std::rc::Rc;
 
 //
@@ -43,11 +46,17 @@ use std::rc::Rc;
 pub struct Window {
     rows: usize,
     cols: usize,
+    color: Color, // default color
     origin: Point, // relative to terminal; these are physical coordinates
     cursor: Point, // relative to origin
     buffer: Rc<RefCell<Buffer>>,
     back: Canvas, // characters are written to this canvas
     front: Canvas, // reflection of what is displayed to user
+}
+
+enum Focus {
+    Auto,
+    Row(usize),
 }
 
 // consider using builder pattern due to number of variations in configuration
@@ -101,46 +110,47 @@ pub struct Window {
 //
 
 impl Window {
-    pub fn new(rows: usize, cols: usize, buffer: Rc<RefCell<Buffer>>) -> Window {
+    pub fn new(rows: usize, cols: usize, color: Color, origin: Point, buffer: Rc<RefCell<Buffer>>) -> Window {
         assert!(rows > 0);
         assert!(cols > 0);
 
-        Window {
+        let mut win = Window {
             rows,
             cols,
-            origin: Point::new(0, 0),
+            color,
+            origin,
             cursor: Point::new(0, 0),
             buffer,
             back: Canvas::new(rows, cols),
             front: Canvas::new(rows, cols),
-        }
-    }
-
-    pub fn set_focus(&mut self, row: usize) {
-        // objective: align cursor to buffer position
-        // - the row is more of a hint, it could be adjusted by this function
-
-        // find buffer pos that aligns to (0,0), which allows us to scan forward
-        // from there and write to the back canvas.
-        let mut row = row;
-
-        // finds the pos corresponding to the beg of line by scanning backwards for
-        // the first newline or beg of buffer. this allows us to calculate which the
-        // col position in the window.
-        let buf = self.buffer.borrow();
-
-        let mut buf_pos = buf.get_pos();
-        let mut it = buf.backward().index();
-
-        // prime the loop with the first scan for bol
-        let mut bol_pos = match it.find(|&(_, c)| c == '\n') {
-            Some((pos, _)) => pos + 1,
-            None => 0,
         };
 
+        win.render(Focus::Auto);
+        win
+    }
+
+    pub fn render(&mut self, focus: Focus) {
+        // Determine ideal row where cursor would like to be focused, though this should
+        // only be interpreted as a hint.
+        let mut row = match focus {
+            Focus::Auto => self.rows / 2,
+            Focus::Row(row) => cmp::min(row, self.rows - 1),
+        };
+
+        // Objective of this loop is to find buffer position corresponding to (0, 0)
+        // point in window, taking into account line wrapping.
+        let buf = self.buffer.borrow();
+        let mut it = buf.backward().index();
+        let mut buf_pos = buf.get_pos();
+        let mut bol_pos = Window::find_bol(&mut it);
+
         let pos = loop {
+            // Remaining distance between current buffer position and position of closest
+            // beginning of line.
             let pos_diff = buf_pos - bol_pos;
 
+            // Buffer position is decremented only as much as number of columns managed by
+            // window, essentially accounting for long lines.
             buf_pos -= {
                 if pos_diff < self.cols {
                     pos_diff
@@ -154,57 +164,83 @@ impl Window {
                 }
             };
 
+            // Once number of ideal rows has been processed or beginning of buffer is
+            // reached, current buffer positon corresponds to (0, 0) point in window.
             if row == 0 || buf_pos == 0 {
-                // this should be the buffer pos for (0,0)
-                // row may be > 1 if beg of buffer reached first
                 break buf_pos;
             } else {
                 row -= 1;
             }
 
+            // Once current buffer position has reached beginning of line, scan backwards
+            // to find next beginning of line.
             if buf_pos == bol_pos {
-                // we know buf_pos > 0
-                // since buf_pos points to the bol, we need it on the prior newline
+                // Current buffer position points to first character of line, but calculation
+                // is based on pointing to '\n', so just subtract 1.
                 buf_pos -= 1;
-
-                bol_pos = match it.find(|&(_, c)| c == '\n') {
-                    Some((pos, _)) => pos + 1,
-                    None => 0,
-                };
+                bol_pos = Window::find_bol(&mut it);
             }
         };
 
-        println!("(0,0) pos: {}, last row: {}", pos, row);
-        println!("[{}]: {}", pos, buf.forward_from(pos).take(100).collect::<String>());
+        // Objective of this loop is to populate back canvas and set cursor by scanning from
+        // buffer position that corresponds to point (0, 0).
+        let buf_pos = buf.get_pos();
+        let mut row = 0;
+        let mut col = 0;
+
+        for (pos, c) in buf.forward_from(pos).index() {
+            if pos == buf_pos {
+                self.cursor = Point::new(row, col);
+            }
+            if c == '\n' {
+                let mut cells = self.back.row_mut(row);
+                cells[col..self.cols].fill(Cell::new(' ', self.color));
+                col = self.cols;
+            } else {
+                self.back.put(row, col, Cell::new(c, self.color));
+                col += 1;
+            }
+            if col == self.cols {
+                row += 1;
+                col = 0;
+            }
+            if row == self.rows {
+                break;
+            }
+        }
+
+        // Handles edge case of setting cursor when buffer position happens to end of
+        // buffer, since above iteration will never have opportunity to set cursor.
+        if buf_pos == buf.size() {
+            self.cursor = Point::new(row, col);
+        }
+
+        // Blanks out any remaining cells if end of buffer is reached for all rows are
+        // processed.
+        if row < self.rows {
+            let mut cells = self.back.row_mut(row);
+            cells[col..self.cols].fill(Cell::new(' ', self.color));
+            row += 1;
+        }
+        while row < self.rows {
+            let mut cells = self.back.row_mut(row);
+            cells.fill(Cell::new(' ', self.color));
+            row += 1;
+        }
     }
 
-    // TODO: temp function
-    pub fn debug_init(&mut self) {
-        self.back.fill(Cell::new('-', 5, 232));
-        self.front.fill(Cell::new('-', 5, 232));
+    // Scans backwards until next '\n' character is found and returns buffer position
+    // of character that follows, or returns 0 if beginning of buffer is reached.
+    fn find_bol(it: &mut BackwardIndex) -> usize {
+        match it.find(|&(_, c)| c == '\n') {
+            Some((pos, _)) => pos + 1,
+            None => 0,
+        }
     }
-
-    // TODO: temp function
-    pub fn debug_change_0(&mut self) {
-        self.back.fill(Cell::new('^', 5, 232));
-    }
-
-    // TODO: temp function
-    pub fn debug_change_1(&mut self) {
-        let row = self.rows / 2;
-        let col = self.cols / 2;
-        self.back.put(row, col, Cell::new('*', 5, 232));
-        self.back.put(row, col + 1, Cell::new('%', 5, 233));
-        self.back.put(row + 1, col, Cell::new('^', 3, 232));
-    }
-
-    //    pub fn fill(&mut self) {
-    //        self.front.fill(Cell { value: 'a', fg: 4, bg: 16 });
-    //    }
 
     // reconciles changes from back canvas to front canvas
     // generates ANSI display sequence to send to terminal output
-    pub fn refresh(&mut self) {
+    pub fn draw(&mut self) {
         let changes = self.front.reconcile(&self.back);
         if changes.len() > 0 {
             let mut output = String::new();
@@ -226,10 +262,10 @@ impl Window {
 
                 let seq = match prev_cell {
                     None => {
-                        Some(ansi::set_color(cell.fg, cell.bg))
+                        Some(ansi::set_color(cell.color.fg, cell.color.bg))
                     }
-                    Some(prev_cell) if cell.fg != prev_cell.fg || cell.bg != prev_cell.bg => {
-                        Some(ansi::set_color(cell.fg, cell.bg))
+                    Some(prev_cell) if cell.color != prev_cell.color => {
+                        Some(ansi::set_color(cell.color.fg, cell.color.bg))
                     }
                     _ => None,
                 };
@@ -241,8 +277,11 @@ impl Window {
                 prev_p = Some(p);
                 prev_cell = Some(cell);
             }
-            //println!("{}", output);
-            println!("refresh: {:?}", output);
+            output.push_str(ansi::set_cursor(
+                self.origin.row + self.cursor.row, self.origin.col + self.cursor.col).as_str());
+            print!("{}", output);
+            //println!("refresh: {:?}", output);
+            io::stdout().flush();
         }
     }
 
@@ -251,19 +290,20 @@ impl Window {
     // in theory, a repaint could simply use the refresh() function after clearing the front
     // canvas, effectively causing each cell to be redisplayed. however, the operation can
     // be optimized because we know the front canvas needs to be entirely refreshed.
-    pub fn draw(&self) {
+    pub fn redraw(&self) {
         let mut output = String::new();
         for (row, cols) in self.front.row_iter() {
             output.push_str(ansi::set_cursor(self.origin.row + row, self.origin.col).as_str());
             let mut prev_cell = &Cell::empty();
             for (col, cell) in cols {
-                if col == 0 || cell.fg != prev_cell.fg || cell.bg != prev_cell.bg {
-                    output.push_str(ansi::set_color(cell.fg, cell.bg).as_str());
+                if col == 0 || cell.color != prev_cell.color {
+                    output.push_str(ansi::set_color(cell.color.fg, cell.color.bg).as_str());
                 }
                 prev_cell = cell;
                 output.push(cell.value);
             }
         }
-        println!("{}", output);
+        print!("{:?}", output);
+        io::stdout().flush();
     }
 }

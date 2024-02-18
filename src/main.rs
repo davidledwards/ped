@@ -1,6 +1,7 @@
 mod ansi;
 mod buffer;
 mod canvas;
+mod color;
 mod error;
 mod io;
 mod key;
@@ -9,11 +10,13 @@ mod window;
 
 use crate::window::Window;
 use buffer::Buffer;
-use canvas::{Canvas, Cell};
+use canvas::{Canvas, Cell, Point};
+use color::Color;
 use error::Error;
 use key::{Key, Keyboard};
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::mem;
 use term::Terminal;
 
 fn main() -> Result<(), Error> {
@@ -33,6 +36,11 @@ fn main() -> Result<(), Error> {
         print!("{}", c);
     }
     println!("---");
+
+//    println!("size Color: {}", mem::size_of::<Color>());
+//    println!("size Point: {}", mem::size_of::<Point>());
+//    println!("size Cell: {}", mem::size_of::<Cell>());
+//    return Ok(());
 
 /*
     let mut lines = vec![0];
@@ -56,55 +64,24 @@ fn main() -> Result<(), Error> {
     println!("{}", r.unwrap_err());
 */
 
-    //let pos = buf.size() / 2;
-    let pos = 50;
+    let pos = buf.size() / 2;
+    //let pos = 8488;
+    //let pos = buf.size();
     println!("setting pos: {}", pos);
     buf.set_pos(pos);
-    println!("[{}]: {:?}", pos, buf.get(pos).unwrap());
+    println!("[{}]: {:?}", pos, buf.get(pos));
     let buffer = Rc::new(RefCell::new(buf));
-    let mut win = Window::new(20, 40, buffer.clone());
-    win.set_focus(10);
-    return Ok(());
+    let mut win = Window::new(
+        40,
+        80,
+        Color::new(color::BLACK, color::BLUE),
+        Point::new(5, 10),
+        buffer.clone());
+    println!("{}2J", ansi::CSI);
+    win.draw();
 
     let (rows, cols) = term::size()?;
-    println!("rows: {}, cols: {}", rows, cols);
-
-    let mut canvas = Canvas::new(4, 8);
-
-    // experiment
-    let mut c = b'a';
-    canvas.fill_with(|| {
-        let r = c;
-        if c == b'z' {
-            c = b'a';
-        } else {
-            c += 1;
-        }
-        Cell {
-            value: r as char,
-            fg: 3,
-            bg: 0,
-        }
-    });
-    //    canvas.fill(Cell { value: 'a', fg: 3, bg: 0 });
-    for (p, c) in canvas.iter() {
-        println!("{:?} = {:?}", p, c);
-    }
-
-    let mut front = Canvas::new(4, 8);
-    let mut back = Canvas::new(4, 8);
-    back.put(2, 2, Cell::new('k', 1, 2));
-    let changes = front.reconcile(&back);
-    println!("changes: {:?}", changes);
-
-    let buffer = Rc::new(RefCell::new(buf));
-    let mut window = Window::new(10, 20, buffer.clone());
-    window.debug_init();
-    window.debug_change_0();
-    window.refresh();
-    window.debug_change_1();
-    window.refresh();
-    //    window.repaint();
+//    println!("rows: {}, cols: {}", rows, cols);
 
     let term = Terminal::new()?;
     let mut keyb = Keyboard::new(term);

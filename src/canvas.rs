@@ -1,5 +1,6 @@
 //! Represents visible content of buffers.
 
+use crate::color::Color;
 use std::ops::{Deref, DerefMut};
 
 #[derive(Debug)]
@@ -17,21 +18,16 @@ impl Point {
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Cell {
     pub value: char,
-    pub fg: u8,
-    pub bg: u8,
+    pub color: Color,
 }
 
 impl Cell {
-    pub fn new(value: char, fg: u8, bg: u8) -> Cell {
-        Cell { value, fg, bg }
+    pub fn new(value: char, color: Color) -> Cell {
+        Cell { value, color }
     }
 
     pub fn empty() -> Cell {
-        Cell {
-            value: '\0',
-            fg: 0,
-            bg: 0,
-        }
+        Cell::new('\0', Color::default())
     }
 }
 
@@ -41,6 +37,7 @@ impl Default for Cell {
     }
 }
 
+#[derive(Debug)]
 pub struct Canvas {
     rows: usize,
     cols: usize,
@@ -89,10 +86,6 @@ impl Canvas {
         }
     }
 
-    pub fn content(&self, row: usize) -> &[Cell] {
-        &self.content
-    }
-
     pub fn get_cell(&self, p: &Point) -> &Cell {
         assert!(p.row < self.rows);
         assert!(p.col < self.cols);
@@ -100,12 +93,14 @@ impl Canvas {
     }
 
     pub fn row(&self, row: usize) -> &[Cell] {
+        assert!(row < self.rows);
         let start = row * self.cols;
         let end = start + self.cols;
         &self.content[start..end]
     }
 
     pub fn row_mut(&mut self, row: usize) -> &mut [Cell] {
+        assert!(row < self.rows);
         let start = row * self.cols;
         let end = start + self.cols;
         &mut self.content[start..end]
