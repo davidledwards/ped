@@ -275,7 +275,14 @@ impl Window {
         out.push(cell.value);
     }
 
-    fn emit_cell_optimized(&self, p: Point, cell: Cell, prev_p: Point, prev_cell: Cell, out: &mut String) {
+    fn emit_cell_optimized(
+        &self,
+        p: Point,
+        cell: Cell,
+        prev_p: Point,
+        prev_cell: Cell,
+        out: &mut String,
+    ) {
         if p.row != prev_p.row || p.col != prev_p.col + 1 {
             out.push_str(ansi::set_cursor(self.origin + p).as_str());
         }
