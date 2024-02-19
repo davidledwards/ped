@@ -84,6 +84,10 @@ impl Canvas {
         self.content[(row * self.cols + col) as usize] = cell;
     }
 
+    pub fn clear(&mut self) {
+        self.content.fill(Cell::EMPTY);
+    }
+
     // Apply differences in other with respect to this canvas and return a vector of
     // those differences.
     //

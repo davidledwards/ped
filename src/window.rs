@@ -235,67 +235,58 @@ impl Window {
         }
     }
 
-    // reconciles changes from back canvas to front canvas
-    // generates ANSI display sequence to send to terminal output
     pub fn draw(&mut self) {
+        // Determine which cells changed in back canvas, if any, which then results in
+        // constructing series of ANSI commands to update display.
         let changes = self.front.reconcile(&self.back);
         if changes.len() > 0 {
-            let mut output = String::new();
-            let mut prev_p: Option<Point> = None;
-            let mut prev_cell: Option<Cell> = None;
-            for (p, cell) in changes {
-                let seq = match prev_p {
-                    None => Some(ansi::set_cursor(self.origin + p)),
-                    Some(prev_p) if p.row != prev_p.row || p.col != prev_p.col + 1 => {
-                        Some(ansi::set_cursor(self.origin + p))
-                    }
-                    _ => None,
-                };
-                if let Some(seq) = seq {
-                    output.push_str(seq.as_str());
-                }
+            let mut out = String::new();
 
-                let seq = match prev_cell {
-                    None => Some(ansi::set_color(cell.color)),
-                    Some(prev_cell) if cell.color != prev_cell.color => {
-                        Some(ansi::set_color(cell.color))
-                    }
-                    _ => None,
-                };
-                if let Some(seq) = seq {
-                    output.push_str(seq.as_str());
-                }
+            // First cell always requires unoptimized ANSI command because there is no
+            // prior command to leverage.
+            let (p, cell) = changes[0];
+            self.emit_cell(p, cell, &mut out);
 
-                output.push(cell.value);
-                prev_p = Some(p);
-                prev_cell = Some(cell);
+            // Remaining iteration over changes tries to minimize ANSI commands based on
+            // adjacency of cells that changed.
+            let mut prev_p = p;
+            let mut prev_cell = cell;
+
+            for (p, cell) in changes.into_iter().skip(1) {
+                self.emit_cell_optimized(p, cell, prev_p, prev_cell, &mut out);
+                prev_p = p;
+                prev_cell = cell;
             }
-            output.push_str(ansi::set_cursor(self.origin + self.cursor).as_str());
-            print!("{}", output);
+
+            self.emit_cursor(&mut out);
+            print!("{}", out);
             let _ = io::stdout().flush();
         }
     }
 
-    // repaints the entire window
-    //
-    // in theory, a repaint could simply use the refresh() function after clearing the front
-    // canvas, effectively causing each cell to be redisplayed. however, the operation can
-    // be optimized because we know the front canvas needs to be entirely refreshed.
-    pub fn redraw(&self) {
-        let mut output = String::new();
-        for (row, cols) in self.front.row_iter() {
-            output.push_str(ansi::set_cursor(self.origin + Point::new(row, 0)).as_str());
-            let mut prev_cell = Cell::EMPTY;
-            for (col, cell) in cols {
-                if col == 0 || cell.color != prev_cell.color {
-                    output.push_str(ansi::set_color(cell.color).as_str());
-                }
-                prev_cell = cell;
-                output.push(cell.value);
-            }
+    pub fn redraw(&mut self) {
+        self.front.clear();
+        self.draw();
+    }
+
+    fn emit_cell(&self, p: Point, cell: Cell, out: &mut String) {
+        out.push_str(ansi::set_cursor(self.origin + p).as_str());
+        out.push_str(ansi::set_color(cell.color).as_str());
+        out.push(cell.value);
+    }
+
+    fn emit_cell_optimized(&self, p: Point, cell: Cell, prev_p: Point, prev_cell: Cell, out: &mut String) {
+        if p.row != prev_p.row || p.col != prev_p.col + 1 {
+            out.push_str(ansi::set_cursor(self.origin + p).as_str());
         }
-        print!("{}", output);
-        let _ = io::stdout().flush();
+        if cell.color != prev_cell.color {
+            out.push_str(ansi::set_color(cell.color).as_str());
+        }
+        out.push(cell.value);
+    }
+
+    fn emit_cursor(&self, out: &mut String) {
+        out.push_str(ansi::set_cursor(self.origin + self.cursor).as_str());
     }
 }
 
