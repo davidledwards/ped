@@ -109,6 +109,18 @@ impl Canvas {
         changes
     }
 
+    pub fn shift_down(&mut self, rows: u32) {
+        assert!(rows <= self.rows);
+
+        if rows < self.rows {
+            self.content.copy_within(
+                0..((self.rows - rows) * self.cols) as usize,
+                (rows * self.cols) as usize
+            );
+        }
+        self.content[0..(rows * self.cols) as usize].fill(Cell::EMPTY);
+    }
+
     pub fn iter(&self) -> Iter<'_> {
         Iter {
             canvas: &self,

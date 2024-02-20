@@ -8,7 +8,7 @@ mod key;
 mod term;
 mod window;
 
-use crate::window::Window;
+use window::{Window, Direction};
 use buffer::Buffer;
 use canvas::{Canvas, Cell, Point};
 use color::Color;
@@ -37,11 +37,6 @@ fn main() -> Result<(), Error> {
     }
     println!("---");
 
-//    println!("size Color: {}", mem::size_of::<Color>());
-//    println!("size Point: {}", mem::size_of::<Point>());
-//    println!("size Cell: {}", mem::size_of::<Cell>());
-//    return Ok(());
-
 /*
     let mut lines = vec![0];
     for (pos, c) in buf.forward_from(0).index() {
@@ -65,7 +60,7 @@ fn main() -> Result<(), Error> {
 */
 
     let pos = buf.size() / 2;
-    //let pos = 8488;
+    //let pos = 0;
     //let pos = buf.size();
     println!("setting pos: {}", pos);
     buf.set_pos(pos);
@@ -79,6 +74,7 @@ fn main() -> Result<(), Error> {
         buffer.clone());
     println!("{}2J", ansi::CSI);
     win.draw();
+    win.navigate(Direction::Up(50));
 
     let (rows, cols) = term::size()?;
 //    println!("rows: {}, cols: {}", rows, cols);
