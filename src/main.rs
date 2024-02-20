@@ -13,7 +13,7 @@ use buffer::Buffer;
 use canvas::{Canvas, Cell, Point};
 use color::Color;
 use error::Error;
-use key::{Key, Keyboard};
+use key::{Key, Keyboard, Modifier};
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::mem;
@@ -74,7 +74,6 @@ fn main() -> Result<(), Error> {
         buffer.clone());
     println!("{}2J", ansi::CSI);
     win.draw();
-    win.navigate(Direction::Up(50));
 
     let (rows, cols) = term::size()?;
 //    println!("rows: {}, cols: {}", rows, cols);
@@ -90,6 +89,12 @@ fn main() -> Result<(), Error> {
                     let (rows, cols) = term::size()?;
                     println!("rows: {}, cols: {}\r", rows, cols);
                 }
+            }
+            Key::Up(Modifier::None) => {
+                win.navigate(Direction::Up(1));
+            }
+            Key::Up(Modifier::Shift) => {
+                win.navigate(Direction::Up(40));
             }
             key => {
                 println!("{:?}\r", key);

@@ -184,7 +184,7 @@ impl Window {
         let (cursor_pos, _) = buf.forward_from(bor_pos).index().find(
             |&(pos, c)| pos - bor_pos == col as usize || c == '\n').unwrap();
 
-        println!("cursor: {:?}, rows: {}, cursor_pos: {}, bor_pos: {}", self.cursor, rows, cursor_pos, bor_pos);
+//        println!("cursor: {:?}, rows: {}, cursor_pos: {}, bor_pos: {}", self.cursor, rows, cursor_pos, bor_pos);
         let r = if rows > self.cursor.row {
             0
         } else {
