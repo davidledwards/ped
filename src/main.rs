@@ -2,6 +2,7 @@ mod ansi;
 mod buffer;
 mod canvas;
 mod color;
+mod display;
 mod error;
 mod io;
 mod key;
@@ -69,7 +70,7 @@ fn main() -> Result<(), Error> {
     let mut win = Window::new(
         40,
         80,
-        Color::new(color::BLACK, color::BLUE),
+        Color::new(color::BRIGHT_MAGENTA, 234),
         Point::new(5, 10),
         buffer.clone());
     println!("{}2J", ansi::CSI);
@@ -91,10 +92,10 @@ fn main() -> Result<(), Error> {
                 }
             }
             Key::Up(Modifier::None) => {
-                win.navigate(Direction::Up(1));
+                win.move_cursor(Direction::Up(1));
             }
             Key::Up(Modifier::Shift) => {
-                win.navigate(Direction::Up(40));
+                win.move_cursor(Direction::PageUp);
             }
             key => {
                 println!("{:?}\r", key);

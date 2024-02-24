@@ -4,9 +4,9 @@ use crate::ansi;
 use crate::buffer::{BackwardIndex, Buffer};
 use crate::canvas::{Canvas, Cell, Point};
 use crate::color::Color;
+use crate::display::Display;
 use std::cell::RefCell;
 use std::cmp;
-use std::io::{self, Write};
 use std::rc::Rc;
 
 //
@@ -52,6 +52,7 @@ pub struct Window {
     buffer: Rc<RefCell<Buffer>>,
     back: Canvas,
     front: Canvas,
+    display: Display,
 }
 
 pub enum Focus {
@@ -64,6 +65,8 @@ pub enum Direction {
     Down(u32),
     Left(u32),
     Right(u32),
+    PageUp,
+    PageDown,
 }
 
 // consider using builder pattern due to number of variations in configuration
@@ -136,22 +139,59 @@ impl Window {
             buffer,
             back: Canvas::new(rows, cols),
             front: Canvas::new(rows, cols),
+            display: Display::new(rows, cols, origin),
         };
 
         win.render(Focus::Auto);
         win
     }
 
-    pub fn navigate(&mut self, dir: Direction) -> usize {
+    pub fn move_cursor(&mut self, dir: Direction) -> usize {
         match dir {
-            Direction::Up(rows) => self.navigate_up(rows),
-            Direction::Down(rows) => self.navigate_down(rows),
-            Direction::Left(cols) => self.navigate_left(cols),
-            Direction::Right(cols) => self.navigate_right(cols),
+            Direction::Up(rows) => self.move_up(rows),
+            Direction::Down(rows) => self.move_down(rows),
+            Direction::Left(cols) => self.move_left(cols),
+            Direction::Right(cols) => self.move_right(cols),
+            Direction::PageUp => self.move_page_up(),
+            Direction::PageDown => 0,
         }
     }
 
-    fn navigate_up(&mut self, rows: u32) -> usize {
+    fn move_page_up(&mut self) -> usize {
+        // try moving up number of rows in buffer
+        // this tells us row of new buffer pos
+        let (bor_pos, rows) = self.find_up(self.rows);
+
+        // find position to place cursor based on current col, which may not be current col
+        // if line is shorter.
+        let (cursor_pos, col) = self.find_col(bor_pos, self.cursor.col);
+
+        // since we want cursor to stay on same row, try moving up more rows to
+        // find (0,0) point position.
+        let (top_pos, row) = if rows < self.rows {
+            // reached beg of buffer, implies bor_pos = 0 and row 0
+            (bor_pos, 0)
+        } else {
+            let (bor_pos, rows) = self.find_up_from(bor_pos, self.cursor.row);
+            (bor_pos, rows)
+        };
+
+        let mut buf = self.buffer.borrow_mut();
+        buf.set_pos(cursor_pos);
+        drop(buf);
+
+        self.render_rows(0, self.rows, top_pos);
+        self.draw();
+
+        self.cursor = Point::new(row, col);
+
+        self.display.write_cursor(self.cursor);
+        self.display.send();
+
+        cursor_pos
+    }
+
+    fn move_up(&mut self, rows: u32) -> usize {
         // handle rows == 0, return buf.get_pos()
 
         // objective is to find the beginning-of-row pos based on the number of rows
@@ -179,26 +219,36 @@ impl Window {
         // set cursor position
         // find position to place cursor based on current col, which may not be current col
         // if line is shorter.
-        let mut buf = self.buffer.borrow_mut();
-        let col = self.cursor.col;
-        let (cursor_pos, _) = buf.forward_from(bor_pos).index().find(
-            |&(pos, c)| pos - bor_pos == col as usize || c == '\n').unwrap();
+        let (cursor_pos, col) = self.find_col(bor_pos, self.cursor.col);
 
-//        println!("cursor: {:?}, rows: {}, cursor_pos: {}, bor_pos: {}", self.cursor, rows, cursor_pos, bor_pos);
         let r = if rows > self.cursor.row {
             0
         } else {
             self.cursor.row - rows
         };
         self.cursor = Point::new(r, (cursor_pos - bor_pos) as u32);
-        let mut out = String::new();
-        self.emit_cursor(&mut out);
-        print!("{}", out);
-        let _ = io::stdout().flush();
+
+        self.display.write_cursor(self.cursor);
+        self.display.send();
 
         // set new buffer position (this value is returned)
+        let mut buf = self.buffer.borrow_mut();
         buf.set_pos(cursor_pos);
         cursor_pos
+    }
+
+    // finds position of specified col or newline, whichever comes first
+    // returns (buffer pos, actual col)
+    fn find_col(&self, from_pos: usize, col: u32) -> (usize, u32) {
+        let buf = self.buffer.borrow();
+        let r = buf.forward_from(from_pos).index().find(
+            |&(pos, c)| pos - from_pos == col as usize || c == '\n'
+        );
+        let col_pos = match r {
+            Some((pos, _)) => pos,
+            None => buf.size(),
+        };
+        (col_pos, (col_pos - from_pos) as u32)
     }
 
     fn render_rows(&mut self, row: u32, rows: u32, pos: usize) {
@@ -242,15 +292,15 @@ impl Window {
         }
     }
 
-    fn navigate_down(&mut self, rows: u32) -> usize {
+    fn move_down(&mut self, rows: u32) -> usize {
         0
     }
 
-    fn navigate_left(&mut self, cols: u32) -> usize {
+    fn move_left(&mut self, cols: u32) -> usize {
         0
     }
 
-    fn navigate_right(&mut self, cols: u32) -> usize {
+    fn move_right(&mut self, cols: u32) -> usize {
         0
     }
 
@@ -265,52 +315,6 @@ impl Window {
         let (pos, _) = self.find_up(row);
 
         let buf = self.buffer.borrow();
-/*
-        // Objective of this loop is to find buffer position corresponding to (0, 0)
-        // point in window, taking into account line wrapping.
-        let buf = self.buffer.borrow();
-        let mut it = buf.backward().index();
-        let mut buf_pos = buf.get_pos();
-        let mut bol_pos = find_bol(&mut it);
-
-        let pos = loop {
-            // Remaining distance between current buffer position and position of closest
-            // beginning of line.
-            let pos_diff = buf_pos - bol_pos;
-
-            // Buffer position is decremented only as much as number of columns managed by
-            // window, essentially accounting for long lines.
-            buf_pos -= {
-                if pos_diff < self.cols as usize {
-                    pos_diff
-                } else {
-                    let n = pos_diff % (self.cols as usize);
-                    if n > 0 {
-                        n
-                    } else {
-                        self.cols as usize
-                    }
-                }
-            };
-
-            // Once number of ideal rows has been processed or beginning of buffer is
-            // reached, current buffer positon corresponds to (0, 0) point in window.
-            if row == 0 || buf_pos == 0 {
-                break buf_pos;
-            } else {
-                row -= 1;
-            }
-
-            // Once current buffer position has reached beginning of line, scan backwards
-            // to find next beginning of line.
-            if buf_pos == bol_pos {
-                // Current buffer position points to first character of line, but calculation
-                // is based on pointing to '\n', so just subtract 1.
-                buf_pos -= 1;
-                bol_pos = find_bol(&mut it);
-            }
-        };
-*/
 
         // Objective of this loop is to populate back canvas and set cursor by scanning from
         // buffer position that corresponds to point (0, 0).
@@ -359,17 +363,17 @@ impl Window {
         }
     }
 
-    fn find_up(&self, rows: u32) -> (usize, u32) {
+    fn find_up_from(&self, from_pos: usize, rows: u32) -> (usize, u32) {
         // Keep track of actual number of rows processed, which may be less than
         // requested number.
         let mut row = rows;
 
-        // Objective of this loop is to find buffer position corresponding beginning of
-        // row based on number of rows prior to current buffer position, taking into
+        // Objective of this loop is to find buffer position corresponding to beginning
+        // of row based on number of rows prior to specified buffer position, taking into
         // account line wrapping.
         let buf = self.buffer.borrow();
-        let mut it = buf.backward().index();
-        let mut buf_pos = buf.get_pos();
+        let mut it = buf.backward_from(from_pos).index();
+        let mut buf_pos = from_pos;
         let mut bol_pos = find_bol(&mut it);
 
         let bor_pos = loop {
@@ -412,65 +416,30 @@ impl Window {
         (bor_pos, rows - row)
     }
 
+    fn find_up(&self, rows: u32) -> (usize, u32) {
+        self.find_up_from(self.buffer.borrow().get_pos(), rows)
+    }
+
     pub fn draw(&mut self) {
         // Determine which cells changed in back canvas, if any, which then results in
-        // constructing series of ANSI commands to update display.
+        // constructing series of instructions to update display.
         let changes = self.front.reconcile(&self.back);
         if changes.len() > 0 {
-            let mut out = String::new();
+            let mut last = None;
 
-            // First cell always requires unoptimized ANSI command because there is no
-            // prior command to leverage.
-            let (p, cell) = changes[0];
-            self.emit_cell(p, cell, &mut out);
-
-            // Remaining iteration over changes tries to minimize ANSI commands based on
-            // adjacency of cells that changed.
-            let mut prev_p = p;
-            let mut prev_cell = cell;
-
-            for (p, cell) in changes.into_iter().skip(1) {
-                self.emit_cell_optimized(p, cell, prev_p, prev_cell, &mut out);
-                prev_p = p;
-                prev_cell = cell;
+            for (p, cell) in changes {
+                self.display.write_cell(p, cell, last);
+                last = Some((p, cell));
             }
 
-            self.emit_cursor(&mut out);
-            print!("{}", out);
-            let _ = io::stdout().flush();
+            self.display.write_cursor(self.cursor);
+            self.display.send();
         }
     }
 
     pub fn redraw(&mut self) {
         self.front.clear();
         self.draw();
-    }
-
-    fn emit_cell(&self, p: Point, cell: Cell, out: &mut String) {
-        out.push_str(ansi::set_cursor(self.origin + p).as_str());
-        out.push_str(ansi::set_color(cell.color).as_str());
-        out.push(cell.value);
-    }
-
-    fn emit_cell_optimized(
-        &self,
-        p: Point,
-        cell: Cell,
-        prev_p: Point,
-        prev_cell: Cell,
-        out: &mut String,
-    ) {
-        if p.row != prev_p.row || p.col != prev_p.col + 1 {
-            out.push_str(ansi::set_cursor(self.origin + p).as_str());
-        }
-        if cell.color != prev_cell.color {
-            out.push_str(ansi::set_color(cell.color).as_str());
-        }
-        out.push(cell.value);
-    }
-
-    fn emit_cursor(&self, out: &mut String) {
-        out.push_str(ansi::set_cursor(self.origin + self.cursor).as_str());
     }
 }
 
