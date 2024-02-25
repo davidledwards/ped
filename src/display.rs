@@ -32,12 +32,6 @@ impl Display {
         }
     }
 
-//    pub fn write_cell(&mut self, p: Point, cell: Cell) {
-//        self.write_cursor(p);
-//        self.out.push_str(ansi::set_color(cell.color).as_str());
-//        self.out.push(cell.value);
-//    }
-
     pub fn write_cell(&mut self, p: Point, cell: Cell, last: Option<(Point, Cell)>) {
         match last {
             Some((prev_p, prev_cell)) => {
@@ -55,16 +49,6 @@ impl Display {
         }
         self.out.push(cell.value);
     }
-
-//    pub fn write_cell_optimized(&mut self, p: Point, cell: Cell, prev_p: Point, prev_cell: Cell) {
-//        if p.row != prev_p.row || p.col != prev_p.col + 1 {
-//            self.write_cursor(p);
-//        }
-//        if cell.color != prev_cell.color {
-//            self.out.push_str(ansi::set_color(cell.color).as_str());
-//        }
-//        self.out.push(cell.value);
-//    }
 
     pub fn write_cursor(&mut self, cursor: Point) {
         self.out.push_str(ansi::set_cursor(self.origin + cursor).as_str());
