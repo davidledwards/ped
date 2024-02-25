@@ -47,7 +47,6 @@ pub struct Window {
     rows: u32,
     cols: u32,
     color: Color,
-    origin: Point,
     cursor: Point,
     buffer: Rc<RefCell<Buffer>>,
     back: Canvas,
@@ -61,10 +60,10 @@ pub enum Focus {
 }
 
 pub enum Direction {
-    Up(u32),
-    Down(u32),
-    Left(u32),
-    Right(u32),
+    Up,
+    Down,
+    Left,
+    Right,
     PageUp,
     PageDown,
 }
@@ -134,7 +133,6 @@ impl Window {
             rows,
             cols,
             color,
-            origin,
             cursor: Point::new(0, 0),
             buffer,
             back: Canvas::new(rows, cols),
@@ -142,99 +140,117 @@ impl Window {
             display: Display::new(rows, cols, origin),
         };
 
-        win.render(Focus::Auto);
+        win.align_cursor(Focus::Auto);
         win
+    }
+
+    pub fn align_cursor(&mut self, focus: Focus) {
+        // Determine ideal row where cursor would like to be focused, though this should
+        // be considered a hint.
+        let row = match focus {
+            Focus::Auto => self.rows / 2,
+            Focus::Row(row) => cmp::min(row, self.rows - 1),
+        };
+
+        // Tries to position cursor on target row, but no guarantee depending on proximity
+        // of row to top of buffer.
+        let (row_pos, _) = self.find_up(0);
+        let (origin_pos, rows) = self.find_up(row);
+        let col = (self.buffer.borrow().get_pos() - row_pos) as u32;
+
+        // Renders the entire back canvas before drawing.
+        self.render_rows(0, self.rows, origin_pos);
+        self.draw();
+
+        // Set cursor position on display.
+        self.cursor = Point::new(rows, col);
+        self.display.write_cursor(self.cursor);
+        self.display.send();
     }
 
     pub fn move_cursor(&mut self, dir: Direction) -> usize {
         match dir {
-            Direction::Up(rows) => self.move_up(rows),
-            Direction::Down(rows) => self.move_down(rows),
-            Direction::Left(cols) => self.move_left(cols),
-            Direction::Right(cols) => self.move_right(cols),
+            Direction::Up => self.move_up(),
+            Direction::Down => self.move_down(),
+            Direction::Left => self.move_left(),
+            Direction::Right => self.move_right(),
             Direction::PageUp => self.move_page_up(),
-            Direction::PageDown => 0,
+            Direction::PageDown => self.move_page_down(),
+        }
+    }
+
+    fn move_up(&mut self) -> usize {
+        // Tries to move cursor up by 1 row, though it may already be at top of buffer.
+        let (row_pos, rows) = self.find_up(1);
+        if rows > 0 {
+            let (cursor_pos, col) = self.find_col(row_pos, self.cursor.col);
+
+            // Changes to canvas only occur when cursor is already at top row of window,
+            // otherwise just position of cursor on display changes.
+            let row = if self.cursor.row > 0 {
+                self.cursor.row - 1
+            } else {
+                self.back.shift_down(1);
+                self.render_rows(0, 1, row_pos);
+                0
+            };
+            self.draw();
+
+            // Set cursor position on display.
+            self.cursor = Point::new(row, col);
+            self.display.write_cursor(self.cursor);
+            self.display.send();
+
+            // Set cursor position in buffer.
+            self.buffer.borrow_mut().set_pos(cursor_pos)
+        } else {
+            // Already at top of buffer.
+            self.buffer.borrow().get_pos()
         }
     }
 
     fn move_page_up(&mut self) -> usize {
-        // try moving up number of rows in buffer
-        // this tells us row of new buffer pos
-        let (bor_pos, rows) = self.find_up(self.rows);
+        // Tries to move cursor up by number of rows equal to size of window, though top of
+        // buffer could be reached first.
+        let (row_pos, rows) = self.find_up(self.rows);
+        if rows > 0 {
+            // Tries to maintain current location of cursor on display by moving up
+            // additional rows, though again, top of buffer could be reached first.
+            let (cursor_pos, col) = self.find_col(row_pos, self.cursor.col);
+            let (origin_pos, row) = self.find_up_from(row_pos, self.cursor.row);
 
-        // find position to place cursor based on current col, which may not be current col
-        // if line is shorter.
-        let (cursor_pos, col) = self.find_col(bor_pos, self.cursor.col);
+            // Since entire display likely changed in most cases, perform full rendering of
+            // canvas before drawing.
+            self.render_rows(0, self.rows, origin_pos);
+            self.draw();
 
-        // since we want cursor to stay on same row, try moving up more rows to
-        // find (0,0) point position.
-        let (top_pos, row) = if rows < self.rows {
-            // reached beg of buffer, implies bor_pos = 0 and row 0
-            (bor_pos, 0)
+            // Set cursor position on display.
+            self.cursor = Point::new(row, col);
+            self.display.write_cursor(self.cursor);
+            self.display.send();
+
+            // Set cursor position in buffer.
+            self.buffer.borrow_mut().set_pos(cursor_pos)
         } else {
-            let (bor_pos, rows) = self.find_up_from(bor_pos, self.cursor.row);
-            (bor_pos, rows)
-        };
-
-        let mut buf = self.buffer.borrow_mut();
-        buf.set_pos(cursor_pos);
-        drop(buf);
-
-        self.render_rows(0, self.rows, top_pos);
-        self.draw();
-
-        self.cursor = Point::new(row, col);
-
-        self.display.write_cursor(self.cursor);
-        self.display.send();
-
-        cursor_pos
+            // Already at top of buffer.
+            self.buffer.borrow().get_pos()
+        }
     }
 
-    fn move_up(&mut self, rows: u32) -> usize {
-        // handle rows == 0, return buf.get_pos()
+    fn move_down(&mut self) -> usize {
+        0
+    }
 
-        // objective is to find the beginning-of-row pos based on the number of rows
-        // requested. the col on that row can be determined once we know the row.
+    fn move_left(&mut self) -> usize {
+        0
+    }
 
-        let (bor_pos, rows) = self.find_up(rows);
+    fn move_right(&mut self) -> usize {
+        0
+    }
 
-        if rows > self.cursor.row {
-            let shift_rows = cmp::min(rows - self.cursor.row, self.rows);
-
-            // shift contents of back canvas down but only if shift_rows < self.rows,
-            // otherwise just update the entire canvas.
-            if shift_rows < self.rows {
-                self.back.shift_down(shift_rows);
-            }
-
-            // render top X rows
-            // - since we are shifting rows, this implies that bor_pos should be (0, 0) point
-            self.render_rows(0, shift_rows, bor_pos);
-        }
-
-        // draw canvas
-        self.draw();
-
-        // set cursor position
-        // find position to place cursor based on current col, which may not be current col
-        // if line is shorter.
-        let (cursor_pos, col) = self.find_col(bor_pos, self.cursor.col);
-
-        let r = if rows > self.cursor.row {
-            0
-        } else {
-            self.cursor.row - rows
-        };
-        self.cursor = Point::new(r, (cursor_pos - bor_pos) as u32);
-
-        self.display.write_cursor(self.cursor);
-        self.display.send();
-
-        // set new buffer position (this value is returned)
-        let mut buf = self.buffer.borrow_mut();
-        buf.set_pos(cursor_pos);
-        cursor_pos
+    fn move_page_down(&mut self) -> usize {
+        0
     }
 
     // finds position of specified col or newline, whichever comes first
@@ -251,19 +267,20 @@ impl Window {
         (col_pos, (col_pos - from_pos) as u32)
     }
 
-    fn render_rows(&mut self, row: u32, rows: u32, pos: usize) {
+    fn render_rows(&mut self, row: u32, rows: u32, row_pos: usize) {
         assert!(row < self.rows);
         assert!(rows <= self.rows);
         assert!(row + rows <= self.rows);
 
-        let buf = self.buffer.borrow();
+        // Objective of this loop is to write specified range of rows to back canvas.
         let mut row = row;
         let mut col = 0;
+        let blank_cell = Cell::new(' ', self.color);
 
-        for (pos, c) in buf.forward_from(pos).index() {
+        for (pos, c) in self.buffer.borrow().forward_from(row_pos).index() {
             if c == '\n' {
                 let cells = self.back.row_mut(row);
-                cells[(col as usize)..(self.cols as usize)].fill(Cell::new(' ', self.color));
+                cells[(col as usize)..(self.cols as usize)].fill(blank_cell);
                 col = self.cols;
             } else {
                 self.back.put(row, col, Cell::new(c, self.color));
@@ -278,87 +295,16 @@ impl Window {
             }
         }
 
-        // Blanks out any remaining cells if end of buffer is reached for all rows are
+        // Blanks out any remaining cells if end of buffer is reached for all rows not yet
         // processed.
         if row < rows {
             let cells = self.back.row_mut(row);
-            cells[(col as usize)..(self.cols as usize)].fill(Cell::new(' ', self.color));
+            cells[(col as usize)..(self.cols as usize)].fill(blank_cell);
             row += 1;
         }
         while row < rows {
             let cells = self.back.row_mut(row);
-            cells.fill(Cell::new(' ', self.color));
-            row += 1;
-        }
-    }
-
-    fn move_down(&mut self, rows: u32) -> usize {
-        0
-    }
-
-    fn move_left(&mut self, cols: u32) -> usize {
-        0
-    }
-
-    fn move_right(&mut self, cols: u32) -> usize {
-        0
-    }
-
-    pub fn render(&mut self, focus: Focus) {
-        // Determine ideal row where cursor would like to be focused, though this should
-        // only be interpreted as a hint.
-        let mut row = match focus {
-            Focus::Auto => self.rows / 2,
-            Focus::Row(row) => cmp::min(row, self.rows - 1),
-        };
-
-        let (pos, _) = self.find_up(row);
-
-        let buf = self.buffer.borrow();
-
-        // Objective of this loop is to populate back canvas and set cursor by scanning from
-        // buffer position that corresponds to point (0, 0).
-        let buf_pos = buf.get_pos();
-        let mut row = 0;
-        let mut col = 0;
-
-        for (pos, c) in buf.forward_from(pos).index() {
-            if pos == buf_pos {
-                self.cursor = Point::new(row, col);
-            }
-            if c == '\n' {
-                let cells = self.back.row_mut(row);
-                cells[(col as usize)..(self.cols as usize)].fill(Cell::new(' ', self.color));
-                col = self.cols;
-            } else {
-                self.back.put(row, col, Cell::new(c, self.color));
-                col += 1;
-            }
-            if col == self.cols {
-                row += 1;
-                col = 0;
-            }
-            if row == self.rows {
-                break;
-            }
-        }
-
-        // Handles edge case of setting cursor when buffer position happens to end of
-        // buffer, since above iteration will never have opportunity to set cursor.
-        if buf_pos == buf.size() {
-            self.cursor = Point::new(row, col);
-        }
-
-        // Blanks out any remaining cells if end of buffer is reached for all rows are
-        // processed.
-        if row < self.rows {
-            let cells = self.back.row_mut(row);
-            cells[(col as usize)..(self.cols as usize)].fill(Cell::new(' ', self.color));
-            row += 1;
-        }
-        while row < self.rows {
-            let cells = self.back.row_mut(row);
-            cells.fill(Cell::new(' ', self.color));
+            cells.fill(blank_cell);
             row += 1;
         }
     }

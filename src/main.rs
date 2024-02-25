@@ -9,76 +9,31 @@ mod key;
 mod term;
 mod window;
 
-use window::{Window, Direction};
+use window::{Window, Direction, Focus};
 use buffer::Buffer;
-use canvas::{Canvas, Cell, Point};
+use canvas::Point;
 use color::Color;
 use error::Error;
 use key::{Key, Keyboard, Modifier};
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::mem;
 use term::Terminal;
 
 fn main() -> Result<(), Error> {
-    let mut buf = Buffer::new()?;
-    let n = io::read_file("LICENSE", &mut buf)?;
-    print_buffer(&buf);
-    println!("read {} characters", n);
+    let mut buffer = Buffer::new()?;
+    let _ = io::read_file("LICENSE", &mut buffer)?;
+    let pos = buffer.size() / 2;
+    buffer.set_pos(pos);
+    let buf = Rc::new(RefCell::new(buffer));
 
-    println!("---");
-    buf.set_pos(9866);
-    for c in buf.forward() {
-        print!("{}", c);
-    }
-    println!("---");
-    buf.set_pos(951);
-    for c in buf.backward() {
-        print!("{}", c);
-    }
-    println!("---");
-
-/*
-    let mut lines = vec![0];
-    for (pos, c) in buf.forward_from(0).index() {
-        if c == '\n' {
-            lines.push(pos + 1);
-        }
-    }
-    println!("lines: {}", lines.len());
-    for (l, pos) in lines.iter().enumerate() {
-        println!("[{}] -> {}", l, pos);
-    }
-
-    // found: pos is beg of line: Ok(i): line # = i + 1
-    let r = lines.binary_search(&9438);
-    print!("search(9438): {:?}: line: ", r);
-    println!("{}", r.unwrap() + 1);
-    // not found: pos is not beg of line: Err(i): line # = i
-    let r = lines.binary_search(&8900);
-    print!("search(8900): {:?}: line: ", r);
-    println!("{}", r.unwrap_err());
-*/
-
-    let pos = buf.size() / 2;
-    //let pos = 0;
-    //let pos = buf.size();
-    println!("setting pos: {}", pos);
-    buf.set_pos(pos);
-    println!("[{}]: {:?}", pos, buf.get(pos));
-    let buffer = Rc::new(RefCell::new(buf));
     let mut win = Window::new(
         40,
         80,
         Color::new(color::BRIGHT_MAGENTA, 234),
         Point::new(5, 10),
-        buffer.clone());
-    println!("{}2J", ansi::CSI);
-    win.draw();
+        buf.clone());
 
     let (rows, cols) = term::size()?;
-//    println!("rows: {}, cols: {}", rows, cols);
-
     let term = Terminal::new()?;
     let mut keyb = Keyboard::new(term);
 
@@ -92,10 +47,26 @@ fn main() -> Result<(), Error> {
                 }
             }
             Key::Up(Modifier::None) => {
-                win.move_cursor(Direction::Up(1));
+                win.move_cursor(Direction::Up);
             }
             Key::Up(Modifier::Shift) => {
                 win.move_cursor(Direction::PageUp);
+            }
+            Key::Down(Modifier::None) => {
+                win.move_cursor(Direction::Down);
+            }
+            Key::Down(Modifier::Shift) => {
+                win.move_cursor(Direction::PageDown);
+            }
+            Key::Left(Modifier::None) => {
+                win.move_cursor(Direction::Left);
+            }
+            Key::Right(Modifier::None) => {
+                win.move_cursor(Direction::Right);
+            }
+            Key::Control(12) => {
+                win.align_cursor(Focus::Auto);
+                win.redraw();
             }
             key => {
                 println!("{:?}\r", key);
@@ -103,12 +74,4 @@ fn main() -> Result<(), Error> {
         }
     }
     Ok(())
-}
-
-fn print_buffer(buf: &Buffer) {
-    println!("--- {:?} ---", buf);
-    for c in buf.forward_from(0) {
-        print!("{}", c);
-    }
-    println!("\n---");
 }
