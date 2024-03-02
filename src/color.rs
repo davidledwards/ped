@@ -10,10 +10,7 @@ pub struct Color {
 }
 
 impl Color {
-    pub const ZERO: Color = Color {
-        fg: 0,
-        bg: 0,
-    };
+    pub const ZERO: Color = Color { fg: 0, bg: 0 };
 
     pub fn new(fg: u8, bg: u8) -> Color {
         Color { fg, bg }

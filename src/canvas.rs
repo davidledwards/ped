@@ -109,16 +109,38 @@ impl Canvas {
         changes
     }
 
+    pub fn shift_up(&mut self, rows: u32) {
+        assert!(rows <= self.rows);
+
+        // Move cells that remain on canvas after shift operation.
+        if rows < self.rows {
+            let start = (rows * self.cols) as usize;
+            let end = start + ((self.rows - rows) * self.cols) as usize;
+            let dest = 0;
+            self.content.copy_within(start..end, dest);
+        }
+
+        // Empty cells previously occupied before shift operation.
+        let start = ((self.rows - rows) * self.cols) as usize;
+        let end = (self.rows * self.cols) as usize;
+        self.content[start..end].fill(Cell::EMPTY);
+    }
+
     pub fn shift_down(&mut self, rows: u32) {
         assert!(rows <= self.rows);
 
+        // Move cells that remain on canvas after shift operation.
         if rows < self.rows {
-            self.content.copy_within(
-                0..((self.rows - rows) * self.cols) as usize,
-                (rows * self.cols) as usize
-            );
+            let start = 0;
+            let end = ((self.rows - rows) * self.cols) as usize;
+            let dest = (rows * self.cols) as usize;
+            self.content.copy_within(start..end, dest);
         }
-        self.content[0..(rows * self.cols) as usize].fill(Cell::EMPTY);
+
+        // Empty cells previously occupied before shift operation.
+        let start = 0;
+        let end = (rows * self.cols) as usize;
+        self.content[start..end].fill(Cell::EMPTY);
     }
 
     pub fn iter(&self) -> Iter<'_> {
