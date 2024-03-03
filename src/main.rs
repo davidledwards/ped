@@ -21,14 +21,14 @@ use term::Terminal;
 
 fn main() -> Result<(), Error> {
     let mut buffer = Buffer::new()?;
-    let _ = io::read_file("LICENSE", &mut buffer)?;
+    let _ = io::read_file("TEST", &mut buffer)?;
     let pos = buffer.size() / 2;
     buffer.set_pos(pos);
     let buf = Rc::new(RefCell::new(buffer));
 
     let mut win = Window::new(
         40,
-        80,
+        70,
         Color::new(color::BRIGHT_MAGENTA, 234),
         Point::new(5, 10),
         buf.clone());

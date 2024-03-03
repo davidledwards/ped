@@ -145,9 +145,9 @@ impl Window {
             } else {
                 self.back.shift_down(1);
                 self.render_rows(0, 1, row_pos);
+                self.draw();
                 0
             };
-            self.draw();
 
             // Set cursor position on display.
             self.cursor = Point::new(row, col);
@@ -203,9 +203,9 @@ impl Window {
             } else {
                 self.back.shift_up(1);
                 self.render_rows(self.cursor.row, 1, row_pos);
+                self.draw();
                 self.cursor.row
             };
-            self.draw();
 
             // Set cursor position on display.
             self.cursor = Point::new(row, col);
@@ -248,7 +248,54 @@ impl Window {
     }
 
     fn move_left(&mut self) -> usize {
-        0
+        // Tries to move buffer position left by 1 character, though it may already be
+        // at beginning of buffer.
+        let left = self.buffer.borrow().backward().index().next();
+
+        if let Some((cursor_pos, c)) = left {
+            let (row, col) = if self.cursor.col > 0 {
+                // Cursor not at left edge of window, so just a simple cursor move.
+                (self.cursor.row, self.cursor.col - 1)
+            } else {
+                // Cursor at left edge of window, so determine position of prior row
+                // and column number.
+                let (row_pos, col) = if c == '\n' {
+                    // Note that position of current row can be derived from new cursor
+                    // position.
+                    let (row_pos, _) = self.find_up_from(cursor_pos + 1, 1);
+                    println!("\x1b[50;1Hrow_pos: {}, cursor_pos: {}", row_pos, cursor_pos);
+                    (row_pos, (cursor_pos - row_pos) as u32)
+                } else {
+                    // Prior row must be at least as long as window width because
+                    // character before cursor is not \n, which means prior row must
+                    // have soft wrapped.
+                    (cursor_pos + 1 - self.cols as usize, self.cols - 1)
+                };
+
+                // Changes to canvas only occur when cursor is already at top row of
+                // window, otherwise just calculate new row number.
+                let row = if self.cursor.row > 0 {
+                    self.cursor.row - 1
+                } else {
+                    self.back.shift_down(1);
+                    self.render_rows(0, 1, row_pos);
+                    self.draw();
+                    0
+                };
+                (row, col)
+            };
+
+            // Set cursor position on display.
+            self.cursor = Point::new(row, col);
+            self.display.write_cursor(self.cursor);
+            self.display.send();
+
+            // Set cursor position in buffer.
+            self.buffer.borrow_mut().set_pos(cursor_pos)
+        } else {
+            // Already at beginning of buffer.
+            self.buffer.borrow().get_pos()
+        }
     }
 
     fn move_right(&mut self) -> usize {
@@ -368,24 +415,29 @@ impl Window {
     // returns None if current row is already at top.
     fn find_prev_row(&self, row_pos: usize) -> Option<usize> {
         if row_pos > 0 {
-            // Scan backward until \n encountered or number of characters not to exceed
-            // width of window. Note that first charatcer is always skipped since it
-            // may be \n, indicating that specified row position is already at beginning
-            // of line.
+            // Scans backward until \n encountered, skipping first character since it
+            // may be \n if prior row did not wrap. Result identifies beginning of prior
+            // line (not row), which could be larger than width of window.
             let buf = self.buffer.borrow();
-            let stop_pos = cmp::max(row_pos, self.cols as usize) - self.cols as usize;
             let result = buf
                 .backward_from(row_pos)
                 .index()
                 .skip(1)
-                .find(|&(pos, c)| pos == stop_pos || c == '\n');
+                .find(|&(_, c)| c == '\n');
 
+            // Distance between current row position and prior line position could be
+            // larger than width of window.
             let pos = match result {
-                Some((pos, '\n')) => pos + 1,
-                Some((pos, _)) => pos,
+                Some((pos, _)) => pos + 1,
                 None => 0,
             };
-            Some(pos)
+
+            let delta = (row_pos - pos) % self.cols as usize;
+            Some(row_pos - if delta > 0 {
+                delta
+            } else {
+                self.cols as usize
+            })
         } else {
             // Already at top row of buffer.
             None
