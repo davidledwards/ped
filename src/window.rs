@@ -263,7 +263,6 @@ impl Window {
                     // Note that position of current row can be derived from new cursor
                     // position.
                     let (row_pos, _) = self.find_up_from(cursor_pos + 1, 1);
-                    println!("\x1b[50;1Hrow_pos: {}, cursor_pos: {}", row_pos, cursor_pos);
                     (row_pos, (cursor_pos - row_pos) as u32)
                 } else {
                     // Prior row must be at least as long as window width because
@@ -299,7 +298,49 @@ impl Window {
     }
 
     fn move_right(&mut self) -> usize {
-        0
+        // Tries to move buffer position right by 1 character, though it may already be
+        // at end of buffer.
+        let right = self.buffer.borrow().forward().index().next();
+
+        if let Some((cursor_pos, c)) = right {
+            // Calculate new column number based on adjacent character and current
+            // location of cursor.
+            let col = if c == '\n' {
+                0
+            } else {
+                if self.cursor.col < self.cols - 1 {
+                    self.cursor.col + 1
+                } else {
+                    0
+                }
+            };
+
+            // New column number at left edge of window implies that cursor wraps to
+            // next row, which may require changes to canvas.
+            let row = if col == 0 {
+                if self.cursor.row < self.rows - 1 {
+                    self.cursor.row + 1
+                } else {
+                    self.back.shift_up(1);
+                    self.render_rows(self.cursor.row, 1, cursor_pos + 1);
+                    self.draw();
+                    self.cursor.row
+                }
+            } else {
+                self.cursor.row
+            };
+
+            // Set cursor position on display.
+            self.cursor = Point::new(row, col);
+            self.display.write_cursor(self.cursor);
+            self.display.send();
+
+            // Set cursor position in buffer.
+            self.buffer.borrow_mut().set_pos(cursor_pos + 1)
+        } else {
+            // Already at end of buffer.
+            self.buffer.borrow().get_pos()
+        }
     }
 
     pub fn draw(&mut self) {
