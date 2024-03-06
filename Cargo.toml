@@ -3,8 +3,11 @@ name = "ped"
 version = "0.1.0"
 edition = "2021"
 authors = ["David Edwards <david.l.edwards@gmail.com>"]
-license = "Apache-2.0"
+description = "The pedestrian text editor"
 readme = "README.md"
+homepage = "https://github.com/davidledwards/ped"
+repository = "https://github.com/davidledwards/ped"
+license = "Apache-2.0"
 
 [dependencies]
 libc = "0.2.153"
