@@ -32,8 +32,8 @@ impl Display {
         }
     }
 
-    pub fn write_cell(&mut self, p: Point, cell: Cell, last: Option<(Point, Cell)>) {
-        match last {
+    pub fn write_cell(&mut self, p: Point, cell: Cell, hint: Option<(Point, Cell)>) {
+        match hint {
             Some((prev_p, prev_cell)) => {
                 if p.row != prev_p.row || p.col != prev_p.col + 1 {
                     self.write_cursor(p);
@@ -51,6 +51,7 @@ impl Display {
     }
 
     pub fn write_cursor(&mut self, cursor: Point) {
-        self.out.push_str(ansi::set_cursor(self.origin + cursor).as_str());
+        self.out
+            .push_str(ansi::set_cursor(self.origin + cursor).as_str());
     }
 }

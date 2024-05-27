@@ -3,37 +3,37 @@ mod buffer;
 mod canvas;
 mod color;
 mod display;
+mod document;
 mod error;
 mod io;
 mod key;
 mod term;
 mod window;
 
-use window::{Window, Direction, Focus};
 use buffer::Buffer;
 use canvas::Point;
 use color::Color;
+use document::{Direction, Document, Focus};
 use error::Error;
 use key::{Key, Keyboard, Modifier};
-use std::cell::RefCell;
-use std::rc::Rc;
 use term::Terminal;
+use window::Window;
 
 fn main() -> Result<(), Error> {
     let mut buffer = Buffer::new()?;
     let _ = io::read_file("TEST", &mut buffer)?;
     let pos = buffer.size() / 2;
     buffer.set_pos(pos);
-    let buf = Rc::new(RefCell::new(buffer));
 
-    let mut win = Window::new(
+    let window = Window::new(
+        Point::new(5, 10),
         40,
         70,
         Color::new(color::BRIGHT_MAGENTA, 234),
-        Point::new(5, 10),
-        buf.clone());
+    );
 
-    let (rows, cols) = term::size()?;
+    let mut doc = Document::new(buffer, window);
+
     let term = Terminal::new()?;
     let mut keyb = Keyboard::new(term);
 
@@ -47,26 +47,35 @@ fn main() -> Result<(), Error> {
                 }
             }
             Key::Up(Modifier::None) => {
-                win.move_cursor(Direction::Up);
+                doc.move_cursor(Direction::Up);
             }
             Key::Up(Modifier::Shift) => {
-                win.move_cursor(Direction::PageUp);
+                doc.move_cursor(Direction::PageUp);
             }
             Key::Down(Modifier::None) => {
-                win.move_cursor(Direction::Down);
+                doc.move_cursor(Direction::Down);
             }
             Key::Down(Modifier::Shift) => {
-                win.move_cursor(Direction::PageDown);
+                doc.move_cursor(Direction::PageDown);
             }
             Key::Left(Modifier::None) => {
-                win.move_cursor(Direction::Left);
+                doc.move_cursor(Direction::Left);
             }
             Key::Right(Modifier::None) => {
-                win.move_cursor(Direction::Right);
+                doc.move_cursor(Direction::Right);
             }
             Key::Control(12) => {
-                win.align_cursor(Focus::Auto);
-                win.redraw();
+                doc.align_cursor(Focus::Auto);
+            }
+            Key::Control(31) => {
+                let pos = doc.buffer().get_pos();
+                let line = doc
+                    .buffer()
+                    .forward_from(0)
+                    .take(pos)
+                    .filter(|&c| c == '\n')
+                    .count();
+                println!("\x1b[55;1H|line: {}|", line + 1);
             }
             key => {
                 println!("{:?}\r", key);

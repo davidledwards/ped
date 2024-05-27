@@ -78,6 +78,12 @@ impl Canvas {
         &mut self.content[(start as usize)..(end as usize)]
     }
 
+    pub fn cell_mut(&mut self, row: u32, col: u32) -> &mut Cell {
+        assert!(row < self.rows);
+        assert!(col < self.cols);
+        &mut self.content[(row * self.cols + col) as usize]
+    }
+
     pub fn put(&mut self, row: u32, col: u32, cell: Cell) {
         assert!(row < self.rows);
         assert!(col < self.cols);
@@ -107,6 +113,31 @@ impl Canvas {
             }
         }
         changes
+    }
+
+    pub fn move_rows(&mut self, from_row: u32, to_row: u32, rows: u32) {
+        debug_assert!(from_row < self.rows);
+        debug_assert!(to_row < self.rows);
+        debug_assert!(if from_row < to_row {
+            to_row + rows <= self.rows
+        } else {
+            from_row + rows <= self.rows
+        });
+
+        let start = (from_row * self.cols) as usize;
+        let end = start + (rows * self.cols) as usize;
+        let dest = (to_row * self.cols) as usize;
+        self.content.copy_within(start..end, dest);
+    }
+
+    pub fn clear_rows(&mut self, start_row: u32, end_row: u32) {
+        debug_assert!(start_row < self.rows);
+        debug_assert!(end_row <= self.rows);
+        debug_assert!(start_row <= end_row);
+
+        let start = (start_row * self.cols) as usize;
+        let end = (end_row * self.cols) as usize;
+        self.content[start..end].fill(Cell::EMPTY);
     }
 
     pub fn shift_up(&mut self, rows: u32) {
