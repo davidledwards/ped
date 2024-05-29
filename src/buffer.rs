@@ -1,5 +1,7 @@
 //! Gap buffer.
 
+use libc::PF_NS;
+
 use crate::error::{Error, Result};
 use std::alloc::{self, Layout};
 use std::cmp;
@@ -152,6 +154,85 @@ impl Buffer {
             Some(cs)
         } else {
             None
+        }
+    }
+
+    // find beginning of line relative to pos or beginning of buffer
+    pub fn find_bol(&self, pos: usize) -> usize {
+        // Scan backwards to find first \n or beginning of buffer, whichever comes first,
+        // denoting beginning of line.
+        let r = self.backward_from(pos).index().find(|&(_, c)| c == '\n');
+
+        // Found position is always pointing to \n, but we want next character.
+        match r {
+            Some((_pos, _)) => _pos + 1,
+            None => 0,
+        }
+    }
+
+    // find end of line relative to pos or end of buffer
+    // points to \n, otherwise end of buffer
+    pub fn find_eol(&self, pos: usize) -> usize {
+        let r = self.forward_from(pos).index().find(|&(_, c)| c == '\n');
+        match r {
+            Some((_pos, _)) => _pos,
+            None => self.size,
+        }
+    }
+
+    // find end of line relative to pos but only n distance away from pos, whichever
+    // comes first
+    // resulting pos could be \n, end of buffer, or arbitrary char if n is reached first
+    pub fn find_eol_or(&self, pos: usize, n: usize) -> usize {
+        let r = self
+            .forward_from(pos)
+            .index()
+            .take(n)
+            .find(|&(_, c)| c == '\n');
+        match r {
+            Some((_pos, _)) => _pos,
+            None => cmp::min(pos + n, self.size),
+        }
+    }
+
+    pub fn find_next_or(&self, pos: usize, n: usize) -> Option<usize> {
+        // Scans forward until \n encountered, but not to exceed specified number of
+        // characters.
+        let r = self
+            .forward_from(pos)
+            .index()
+            .take(n)
+            .find(|&(_, c)| c == '\n');
+
+        // If find operation terminates before end of buffer or maximum number of
+        // characters are scanned, this implies \n is found, so skip to next character.
+        // Otherwise, distinguish between both conditions that could cause find to
+        // terminate early.
+        match r {
+            Some((_pos, _)) => Some(_pos + 1),
+            None => {
+                if pos + n < self.size {
+                    Some(pos + n)
+                } else {
+                    None
+                }
+            }
+        }
+    }
+
+    pub fn find_prev(&self, pos: usize) -> Option<usize> {
+        // find end of previous line first
+        let r = self.backward_from(pos).index().find(|&(_, c)| c == '\n');
+        match r {
+            Some((_pos, _)) => {
+                // then find beginning of previous line
+                let r = self.backward_from(_pos).index().find(|&(_, c)| c == '\n');
+                match r {
+                    Some((_pos, _)) => Some(_pos + 1),
+                    None => Some(0),
+                }
+            }
+            None => None,
         }
     }
 

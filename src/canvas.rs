@@ -84,12 +84,6 @@ impl Canvas {
         &mut self.content[(row * self.cols + col) as usize]
     }
 
-    pub fn put(&mut self, row: u32, col: u32, cell: Cell) {
-        assert!(row < self.rows);
-        assert!(col < self.cols);
-        self.content[(row * self.cols + col) as usize] = cell;
-    }
-
     pub fn clear(&mut self) {
         self.content.fill(Cell::EMPTY);
     }
@@ -137,40 +131,6 @@ impl Canvas {
 
         let start = (start_row * self.cols) as usize;
         let end = (end_row * self.cols) as usize;
-        self.content[start..end].fill(Cell::EMPTY);
-    }
-
-    pub fn shift_up(&mut self, rows: u32) {
-        assert!(rows <= self.rows);
-
-        // Move cells that remain on canvas after shift operation.
-        if rows < self.rows {
-            let start = (rows * self.cols) as usize;
-            let end = start + ((self.rows - rows) * self.cols) as usize;
-            let dest = 0;
-            self.content.copy_within(start..end, dest);
-        }
-
-        // Empty cells previously occupied before shift operation.
-        let start = ((self.rows - rows) * self.cols) as usize;
-        let end = (self.rows * self.cols) as usize;
-        self.content[start..end].fill(Cell::EMPTY);
-    }
-
-    pub fn shift_down(&mut self, rows: u32) {
-        assert!(rows <= self.rows);
-
-        // Move cells that remain on canvas after shift operation.
-        if rows < self.rows {
-            let start = 0;
-            let end = ((self.rows - rows) * self.cols) as usize;
-            let dest = (rows * self.cols) as usize;
-            self.content.copy_within(start..end, dest);
-        }
-
-        // Empty cells previously occupied before shift operation.
-        let start = 0;
-        let end = (rows * self.cols) as usize;
         self.content[start..end].fill(Cell::EMPTY);
     }
 

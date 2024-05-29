@@ -25,10 +25,11 @@ fn main() -> Result<(), Error> {
     let pos = buffer.size() / 2;
     buffer.set_pos(pos);
 
+    let (rows, cols) = term::size()?;
     let window = Window::new(
-        Point::new(5, 10),
-        40,
-        70,
+        Point::new(0, 0),
+        rows - 1,
+        cols / 2,
         Color::new(color::BRIGHT_MAGENTA, 234),
     );
 
@@ -67,6 +68,9 @@ fn main() -> Result<(), Error> {
             Key::Control(12) => {
                 doc.align_cursor(Focus::Auto);
             }
+            Key::Control(18) => {
+                doc.window().redraw();
+            }
             Key::Control(31) => {
                 let pos = doc.buffer().get_pos();
                 let line = doc
@@ -75,7 +79,7 @@ fn main() -> Result<(), Error> {
                     .take(pos)
                     .filter(|&c| c == '\n')
                     .count();
-                println!("\x1b[55;1H|line: {}|", line + 1);
+                println!("\x1b[{};1H|line: {}|", rows, line + 1);
             }
             key => {
                 println!("{:?}\r", key);

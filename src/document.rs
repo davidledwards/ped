@@ -25,6 +25,11 @@ pub enum Direction {
     PageDown,
 }
 
+pub struct Cursor {
+    pos: usize,
+    point: Point,
+}
+
 // thinking about operations on the window. there appear to be two kinds of operations
 // - movements relative to the cursor, such move left or page down.
 // - movements relative to an edit, such as inserting a character or cuttting a region.
@@ -85,6 +90,11 @@ impl Document {
         &self.buffer
     }
 
+    // probably don't want to do this directly from document
+    pub fn window(&mut self) -> &mut Window {
+        &mut self.window
+    }
+
     pub fn align_cursor(&mut self, focus: Focus) {
         // Determine ideal row where cursor would like to be focused, though this should
         // be considered a hint.
@@ -95,7 +105,7 @@ impl Document {
 
         // Tries to position cursor on target row, but no guarantee depending on proximity
         // of row to top of buffer.
-        self.cursor.col = self.detect_col();
+        self.cursor.col = self.detect_col(self.buffer.get_pos());
         let (origin_pos, rows) = self.find_up(row);
 
         // Renders the entire back canvas before drawing.
@@ -324,7 +334,7 @@ impl Document {
         let mut row = row;
         let mut col = 0;
 
-        for (pos, c) in self.buffer.forward_from(row_pos).index() {
+        for c in self.buffer.forward_from(row_pos) {
             if c == '\n' {
                 self.window.clear_row_from(row, col);
                 col = self.window.cols();
@@ -399,22 +409,24 @@ impl Document {
     // returns None if current row is already at top.
     fn find_prev_row(&self, row_pos: usize) -> Option<usize> {
         if row_pos > 0 {
-            // Scans backward until \n encountered, skipping first character since it
-            // may be \n if prior row did not wrap. Result identifies beginning of prior
-            // line (not row), which could be larger than width of window.
-            let result = self
-                .buffer
-                .backward_from(row_pos)
-                .index()
-                .skip(1)
-                .find(|&(_, c)| c == '\n');
+            let pos = self.buffer.find_bol(row_pos - 1);
 
-            // Distance between current row position and prior line position could be
-            // larger than width of window.
-            let pos = match result {
-                Some((pos, _)) => pos + 1,
-                None => 0,
-            };
+            // // Scans backward until \n encountered, skipping first character since it
+            // // may be \n if prior row did not wrap. Result identifies beginning of prior
+            // // line (not row), which could be larger than width of window.
+            // let result = self
+            //     .buffer
+            //     .backward_from(row_pos)
+            //     .index()
+            //     .skip(1)
+            //     .find(|&(_, c)| c == '\n');
+
+            // // Distance between current row position and prior line position could be
+            // // larger than width of window.
+            // let pos = match result {
+            //     Some((pos, _)) => pos + 1,
+            //     None => 0,
+            // };
 
             let delta = (row_pos - pos) % self.window.cols() as usize;
             Some(
@@ -438,21 +450,8 @@ impl Document {
     fn find_next_row(&self, row_pos: usize) -> Option<usize> {
         // Scans forward until \n encountered or number of characters not to exceed
         // width of window.
-        let stop_pos = row_pos + self.window.cols() as usize;
-        let result = self
-            .buffer
-            .forward_from(row_pos)
-            .index()
-            .find(|&(pos, c)| pos == stop_pos || c == '\n');
-
-        // Note that if find operation terminates due to scanning maximum number of
-        // characters, this condition indicates a soft wrap. Otherwise, implied \n
-        // is skipped over.
-        match result {
-            Some((pos, _)) if pos == stop_pos => Some(pos),
-            Some((pos, _)) => Some(pos + 1),
-            None => None,
-        }
+        self.buffer
+            .find_next_or(row_pos, self.window.cols() as usize)
     }
 
     // finds buffer position of specified column relative to row_pos, where row_pos is assumed
@@ -463,33 +462,18 @@ impl Document {
     fn find_col(&self, row_pos: usize, col: u32) -> (usize, u32) {
         // Scans forward until \n encountered or number of characters processed reaches
         // specified column.
-        let stop_pos = row_pos + col as usize;
-        let result = self
-            .buffer
-            .forward_from(row_pos)
-            .index()
-            .find(|&(pos, c)| pos == stop_pos || c == '\n');
-
-        let col_pos = match result {
-            Some((pos, _)) => pos,
-            None => self.buffer.size(),
-        };
+        let col_pos = self.buffer.find_eol_or(row_pos, col as usize);
         (col_pos, (col_pos - row_pos) as u32)
     }
 
-    // returns column number corresponding to current buffer position, which is
+    // returns column number corresponding to given buffer position, which is
     // always <= self.cols
-    fn detect_col(&self) -> u32 {
+    fn detect_col(&self, pos: usize) -> u32 {
         // Scan backwards to find first \n or beginning of buffer, whichever comes first,
         // denoting beginning of line (not row).
-        let result = self.buffer.backward().index().find(|&(_, c)| c == '\n');
-
-        let line_pos = match result {
-            Some((pos, _)) => pos + 1,
-            None => 0,
-        };
+        let line_pos = self.buffer.find_bol(pos);
 
         // Column numnber can be easily derived based on width of window.
-        (self.buffer.get_pos() - line_pos) as u32 % self.window.cols()
+        (pos - line_pos) as u32 % self.window.cols()
     }
 }
