@@ -10,6 +10,8 @@ pub struct Point {
 }
 
 impl Point {
+    pub const ORIGIN: Point = Point { row: 0, col: 0 };
+
     pub fn new(row: u32, col: u32) -> Point {
         Point { row, col }
     }

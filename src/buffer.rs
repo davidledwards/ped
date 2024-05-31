@@ -1,7 +1,5 @@
 //! Gap buffer.
 
-use libc::PF_NS;
-
 use crate::error::{Error, Result};
 use std::alloc::{self, Layout};
 use std::cmp;
@@ -157,13 +155,15 @@ impl Buffer {
         }
     }
 
-    // find beginning of line relative to pos or beginning of buffer
-    pub fn find_bol(&self, pos: usize) -> usize {
-        // Scan backwards to find first \n or beginning of buffer, whichever comes first,
-        // denoting beginning of line.
+    /// Returns the position of the first character of the line relative to `pos`.
+    ///
+    /// Specifically, this function returns the position of the character following the
+    /// first `\n` encountered when scanning backwards from `pos`, or returns `0` if the
+    /// beginning of buffer is reached.
+    ///
+    /// Note that when scanning backwards, `pos` is an _exclusive_ bound.
+    pub fn find_beg_line(&self, pos: usize) -> usize {
         let r = self.backward_from(pos).index().find(|&(_, c)| c == '\n');
-
-        // Found position is always pointing to \n, but we want next character.
         match r {
             Some((_pos, _)) => _pos + 1,
             None => 0,
@@ -172,7 +172,7 @@ impl Buffer {
 
     // find end of line relative to pos or end of buffer
     // points to \n, otherwise end of buffer
-    pub fn find_eol(&self, pos: usize) -> usize {
+    pub fn find_end_line(&self, pos: usize) -> usize {
         let r = self.forward_from(pos).index().find(|&(_, c)| c == '\n');
         match r {
             Some((_pos, _)) => _pos,
@@ -183,7 +183,7 @@ impl Buffer {
     // find end of line relative to pos but only n distance away from pos, whichever
     // comes first
     // resulting pos could be \n, end of buffer, or arbitrary char if n is reached first
-    pub fn find_eol_or(&self, pos: usize, n: usize) -> usize {
+    pub fn find_end_line_or(&self, pos: usize, n: usize) -> usize {
         let r = self
             .forward_from(pos)
             .index()
@@ -195,7 +195,7 @@ impl Buffer {
         }
     }
 
-    pub fn find_next_or(&self, pos: usize, n: usize) -> Option<usize> {
+    pub fn find_next_line_or(&self, pos: usize, n: usize) -> Option<usize> {
         // Scans forward until \n encountered, but not to exceed specified number of
         // characters.
         let r = self
@@ -681,6 +681,28 @@ mod tests {
         ) {
             assert_eq!(a_pos, b_pos);
             assert_eq!(a, b);
+        }
+    }
+
+    #[test]
+    fn find_beg_line() {
+        const TEXT: &str = "abc\ndef\nghi";
+
+        let mut buf = Buffer::new().unwrap();
+        let cs = TEXT.chars().collect();
+        let _ = buf.insert_chars(&cs).unwrap();
+
+        // All chars in `def\n` range should find the same beginning of line.
+        for pos in 4..8 {
+            let p = buf.find_beg_line(pos);
+            assert_eq!(p, 4);
+        }
+
+        // All chars in `abc\n` range should find the same beginning of line, which
+        // also happens to be beginning of buffer.
+        for pos in 0..4 {
+            let p = buf.find_beg_line(pos);
+            assert_eq!(p, 0);
         }
     }
 }

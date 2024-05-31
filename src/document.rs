@@ -8,6 +8,7 @@ use std::cmp;
 pub struct Document {
     buffer: Buffer,
     window: Window,
+    cursor_pos: usize,
     cursor: Point,
 }
 
@@ -23,11 +24,6 @@ pub enum Direction {
     Right,
     PageUp,
     PageDown,
-}
-
-pub struct Cursor {
-    pos: usize,
-    point: Point,
 }
 
 // thinking about operations on the window. there appear to be two kinds of operations
@@ -78,9 +74,10 @@ pub struct Cursor {
 impl Document {
     pub fn new(buffer: Buffer, window: Window) -> Document {
         let mut doc = Document {
+            cursor_pos: buffer.get_pos(),
             buffer,
             window,
-            cursor: Point::new(0, 0),
+            cursor: Point::ORIGIN,
         };
         doc.align_cursor(Focus::Auto);
         doc
@@ -105,8 +102,8 @@ impl Document {
 
         // Tries to position cursor on target row, but no guarantee depending on proximity
         // of row to top of buffer.
-        self.cursor.col = self.detect_col(self.buffer.get_pos());
-        let (origin_pos, rows) = self.find_up(row);
+        self.cursor.col = self.detect_col(self.cursor_pos);
+        let (origin_pos, rows) = self.find_up(self.find_cur_row(), row);
 
         // Renders the entire back canvas before drawing.
         self.render_rows(0, self.window.rows(), origin_pos);
@@ -137,7 +134,7 @@ impl Document {
 
     fn move_up(&mut self) -> Option<Point> {
         // Tries to move cursor up by 1 row, though it may already be at top of buffer.
-        let (row_pos, rows) = self.find_up(1);
+        let (row_pos, rows) = self.find_up(self.find_cur_row(), 1);
         if rows > 0 {
             let (cursor_pos, col) = self.find_col(row_pos, self.cursor.col);
 
@@ -153,7 +150,7 @@ impl Document {
             };
 
             // Set cursor position in buffer.
-            self.buffer.set_pos(cursor_pos);
+            self.cursor_pos = cursor_pos;
             Some(Point::new(row, col))
         } else {
             // Already at top of buffer.
@@ -164,12 +161,12 @@ impl Document {
     fn move_page_up(&mut self) -> Option<Point> {
         // Tries to move cursor up by number of rows equal to size of window, though top of
         // buffer could be reached first.
-        let (row_pos, rows) = self.find_up(self.window.rows());
+        let (row_pos, rows) = self.find_up(self.find_cur_row(), self.window.rows());
         if rows > 0 {
             // Tries to maintain current location of cursor on display by moving up
             // additional rows, though again, top of buffer could be reached first.
             let (cursor_pos, col) = self.find_col(row_pos, self.cursor.col);
-            let (origin_pos, row) = self.find_up_from(row_pos, self.cursor.row);
+            let (origin_pos, row) = self.find_up(row_pos, self.cursor.row);
 
             // Since entire display likely changed in most cases, perform full rendering of
             // canvas before drawing.
@@ -177,7 +174,7 @@ impl Document {
             self.window.draw();
 
             // Set cursor position in buffer.
-            self.buffer.set_pos(cursor_pos);
+            self.cursor_pos = cursor_pos;
             Some(Point::new(row, col))
         } else {
             // Already at top of buffer.
@@ -187,7 +184,7 @@ impl Document {
 
     fn move_down(&mut self) -> Option<Point> {
         // Tries to move cursor down by 1 row, though it may already be at end of buffer.
-        let (row_pos, rows) = self.find_down(1);
+        let (row_pos, rows) = self.find_down(self.find_cur_row(), 1);
         if rows > 0 {
             let (cursor_pos, col) = self.find_col(row_pos, self.cursor.col);
 
@@ -203,7 +200,7 @@ impl Document {
             };
 
             // Set cursor position in buffer.
-            self.buffer.set_pos(cursor_pos);
+            self.cursor_pos = cursor_pos;
             Some(Point::new(row, col))
         } else {
             // Already at end of buffer.
@@ -214,12 +211,12 @@ impl Document {
     fn move_page_down(&mut self) -> Option<Point> {
         // Tries to move cursor down by number of rows equal to size of window, though
         // bottom of buffer could be reached first.
-        let (row_pos, rows) = self.find_down(self.window.rows());
+        let (row_pos, rows) = self.find_down(self.find_cur_row(), self.window.rows());
         if rows > 0 {
             // Tries to maintain current location of cursor on display by moving down
             // additional rows, though again, bottom of buffer could be reached first.
             let (cursor_pos, col) = self.find_col(row_pos, self.cursor.col);
-            let (origin_pos, row) = self.find_up_from(row_pos, self.cursor.row);
+            let (origin_pos, row) = self.find_up(row_pos, self.cursor.row);
 
             // Since entire display likely changed in most cases, perform full rendering of
             // canvas before drawing.
@@ -227,7 +224,7 @@ impl Document {
             self.window.draw();
 
             // Set cursor position in buffer.
-            self.buffer.set_pos(cursor_pos);
+            self.cursor_pos = cursor_pos;
             Some(Point::new(row, col))
         } else {
             None
@@ -237,7 +234,7 @@ impl Document {
     fn move_left(&mut self) -> Option<Point> {
         // Tries to move buffer position left by 1 character, though it may already be
         // at beginning of buffer.
-        let left = self.buffer.backward().index().next();
+        let left = self.buffer.backward_from(self.cursor_pos).index().next();
 
         if let Some((cursor_pos, c)) = left {
             let (row, col) = if self.cursor.col > 0 {
@@ -249,7 +246,7 @@ impl Document {
                 let (row_pos, col) = if c == '\n' {
                     // Note that position of current row can be derived from new cursor
                     // position.
-                    let (row_pos, _) = self.find_up_from(cursor_pos + 1, 1);
+                    let (row_pos, _) = self.find_up(cursor_pos + 1, 1);
                     (row_pos, (cursor_pos - row_pos) as u32)
                 } else {
                     // Prior row must be at least as long as window width because
@@ -275,7 +272,7 @@ impl Document {
             };
 
             // Set cursor position in buffer.
-            self.buffer.set_pos(cursor_pos);
+            self.cursor_pos = cursor_pos;
             Some(Point::new(row, col))
         } else {
             // Already at beginning of buffer.
@@ -286,7 +283,7 @@ impl Document {
     fn move_right(&mut self) -> Option<Point> {
         // Tries to move buffer position right by 1 character, though it may already be
         // at end of buffer.
-        let right = self.buffer.forward().index().next();
+        let right = self.buffer.forward_from(self.cursor_pos).index().next();
 
         if let Some((cursor_pos, c)) = right {
             // Calculate new column number based on adjacent character and current
@@ -317,7 +314,7 @@ impl Document {
             };
 
             // Set cursor position in buffer.
-            self.buffer.set_pos(cursor_pos + 1);
+            self.cursor_pos = cursor_pos + 1;
             Some(Point::new(row, col))
         } else {
             // Already at end of buffer.
@@ -360,11 +357,7 @@ impl Document {
         }
     }
 
-    fn find_up(&self, rows: u32) -> (usize, u32) {
-        self.find_up_from(self.find_cur_row(), rows)
-    }
-
-    fn find_up_from(&self, row_pos: usize, rows: u32) -> (usize, u32) {
+    fn find_up(&self, row_pos: usize, rows: u32) -> (usize, u32) {
         let mut row = 0;
         let mut row_pos = row_pos;
 
@@ -379,11 +372,7 @@ impl Document {
         (row_pos, row)
     }
 
-    fn find_down(&self, rows: u32) -> (usize, u32) {
-        self.find_down_from(self.find_cur_row(), rows)
-    }
-
-    fn find_down_from(&self, row_pos: usize, rows: u32) -> (usize, u32) {
+    fn find_down(&self, row_pos: usize, rows: u32) -> (usize, u32) {
         let mut row = 0;
         let mut row_pos = row_pos;
 
@@ -400,7 +389,7 @@ impl Document {
 
     // returns buffer position of cursor row
     fn find_cur_row(&self) -> usize {
-        self.buffer.get_pos() - self.cursor.col as usize
+        self.cursor_pos - self.cursor.col as usize
     }
 
     // returns buffer position of previous row, where row_pos is assumed to be beginning of
@@ -409,34 +398,23 @@ impl Document {
     // returns None if current row is already at top.
     fn find_prev_row(&self, row_pos: usize) -> Option<usize> {
         if row_pos > 0 {
-            let pos = self.buffer.find_bol(row_pos - 1);
-
-            // // Scans backward until \n encountered, skipping first character since it
-            // // may be \n if prior row did not wrap. Result identifies beginning of prior
-            // // line (not row), which could be larger than width of window.
-            // let result = self
-            //     .buffer
-            //     .backward_from(row_pos)
-            //     .index()
-            //     .skip(1)
-            //     .find(|&(_, c)| c == '\n');
-
-            // // Distance between current row position and prior line position could be
-            // // larger than width of window.
-            // let pos = match result {
-            //     Some((pos, _)) => pos + 1,
-            //     None => 0,
-            // };
-
-            let delta = (row_pos - pos) % self.window.cols() as usize;
-            Some(
-                row_pos
-                    - if delta > 0 {
-                        delta
+            let offset = match self.buffer.get(row_pos - 1) {
+                // Indicates that current row position is also beginning of line, so
+                // determine offset to prior row by finding beginning of prior line.
+                Some('\n') => {
+                    let pos = self.buffer.find_beg_line(row_pos - 1);
+                    let offset = (row_pos - pos) % self.window.cols() as usize;
+                    if offset > 0 {
+                        offset
                     } else {
                         self.window.cols() as usize
-                    },
-            )
+                    }
+                }
+                // Indicates that current row position is not beginning of line, which
+                // means it wrapped, making offset to prior row trivial.
+                _ => self.window.cols() as usize,
+            };
+            Some(row_pos - offset)
         } else {
             // Already at top row of buffer.
             None
@@ -451,7 +429,7 @@ impl Document {
         // Scans forward until \n encountered or number of characters not to exceed
         // width of window.
         self.buffer
-            .find_next_or(row_pos, self.window.cols() as usize)
+            .find_next_line_or(row_pos, self.window.cols() as usize)
     }
 
     // finds buffer position of specified column relative to row_pos, where row_pos is assumed
@@ -462,7 +440,7 @@ impl Document {
     fn find_col(&self, row_pos: usize, col: u32) -> (usize, u32) {
         // Scans forward until \n encountered or number of characters processed reaches
         // specified column.
-        let col_pos = self.buffer.find_eol_or(row_pos, col as usize);
+        let col_pos = self.buffer.find_end_line_or(row_pos, col as usize);
         (col_pos, (col_pos - row_pos) as u32)
     }
 
@@ -471,7 +449,7 @@ impl Document {
     fn detect_col(&self, pos: usize) -> u32 {
         // Scan backwards to find first \n or beginning of buffer, whichever comes first,
         // denoting beginning of line (not row).
-        let line_pos = self.buffer.find_bol(pos);
+        let line_pos = self.buffer.find_beg_line(pos);
 
         // Column numnber can be easily derived based on width of window.
         (pos - line_pos) as u32 % self.window.cols()
