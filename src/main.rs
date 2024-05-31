@@ -29,7 +29,7 @@ fn main() -> Result<(), Error> {
     let window = Window::new(
         Point::new(0, 0),
         rows - 1,
-        cols / 2,
+        cols,
         Color::new(color::BRIGHT_MAGENTA, 234),
     );
 
@@ -69,7 +69,7 @@ fn main() -> Result<(), Error> {
                 doc.align_cursor(Focus::Auto);
             }
             Key::Control(18) => {
-                doc.window().redraw();
+                doc.render();
             }
             Key::Control(31) => {
                 let pos = doc.buffer().get_pos();
