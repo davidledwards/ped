@@ -417,8 +417,8 @@ impl Document {
     }
 
     fn render_rows(&mut self, row: u32, rows: u32, row_pos: usize) {
-        assert!(row < self.window.rows());
-        assert!(row + rows <= self.window.rows());
+        debug_assert!(row < self.window.rows());
+        debug_assert!(row + rows <= self.window.rows());
 
         // Objective of this loop is to write specified range of rows to window.
         let end_row = row + rows;

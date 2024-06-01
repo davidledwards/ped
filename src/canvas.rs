@@ -57,8 +57,8 @@ pub struct Canvas {
 
 impl Canvas {
     pub fn new(rows: u32, cols: u32) -> Canvas {
-        assert!(rows > 0);
-        assert!(cols > 0);
+        debug_assert!(rows > 0);
+        debug_assert!(cols > 0);
         Canvas {
             rows,
             cols,
@@ -67,22 +67,22 @@ impl Canvas {
     }
 
     pub fn row(&self, row: u32) -> &[Cell] {
-        assert!(row < self.rows);
+        debug_assert!(row < self.rows);
         let start = row * self.cols;
         let end = start + self.cols;
         &self.content[(start as usize)..(end as usize)]
     }
 
     pub fn row_mut(&mut self, row: u32) -> &mut [Cell] {
-        assert!(row < self.rows);
+        debug_assert!(row < self.rows);
         let start = row * self.cols;
         let end = start + self.cols;
         &mut self.content[(start as usize)..(end as usize)]
     }
 
     pub fn cell_mut(&mut self, row: u32, col: u32) -> &mut Cell {
-        assert!(row < self.rows);
-        assert!(col < self.cols);
+        debug_assert!(row < self.rows);
+        debug_assert!(col < self.cols);
         &mut self.content[(row * self.cols + col) as usize]
     }
 
@@ -95,8 +95,8 @@ impl Canvas {
     //
     // Note that this canvas will be equivalent to other upon return.
     pub fn reconcile(&mut self, other: &Canvas) -> Vec<(Point, Cell)> {
-        assert!(self.rows == other.rows);
-        assert!(self.cols == other.cols);
+        debug_assert!(self.rows == other.rows);
+        debug_assert!(self.cols == other.cols);
 
         let mut changes = Vec::new();
         for i in 0..self.content.len() {

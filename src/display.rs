@@ -13,8 +13,8 @@ pub struct Display {
 
 impl Display {
     pub fn new(rows: u32, cols: u32, origin: Point) -> Display {
-        assert!(rows > 0);
-        assert!(cols > 0);
+        debug_assert!(rows > 0);
+        debug_assert!(cols > 0);
 
         Display {
             rows,
