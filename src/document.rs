@@ -215,6 +215,34 @@ impl Document {
         }
     }
 
+    // scroll window down without moving cursor position
+    // cursor moves down with text, but stays focused on the same position
+    pub fn scroll_down(&mut self) {
+        let try_rows = self.cursor.row + 1;
+        let (row_pos, rows) = self.find_up(self.row_pos, try_rows);
+        if rows == try_rows {
+            // this means we are not yet at the top of buffer
+            self.window.scroll_down(0, 1);
+            self.render_rows(0, 1, row_pos);
+            self.window.draw();
+
+            let (row, col) = if self.cursor.row < self.window.rows() - 1 {
+                // cursor not on bottom row, row pos remains unchanged
+                (self.cursor.row + 1, self.cursor.col)
+            } else {
+                // cursor on bottom row, need to find new row pos and col
+                // because the display scrolled, we know that prev row pos will be found
+                let (row_pos, _) = self.find_up(self.row_pos, 1);
+                let (cursor_pos, col) = self.find_col(row_pos, self.cursor.col);
+                self.cursor_pos = cursor_pos;
+                self.row_pos = row_pos;
+                (self.cursor.row, col)
+            };
+            self.cursor = Point::new(row, col);
+            self.window.set_cursor(self.cursor);
+        }
+    }
+
     fn move_up(&mut self) {
         // Tries to move cursor up by 1 row, though it may already be at top of buffer.
         let (row_pos, rows) = self.find_up(self.row_pos, 1);

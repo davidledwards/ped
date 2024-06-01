@@ -74,6 +74,9 @@ fn main() -> Result<(), Error> {
             Key::Up(Modifier::ShiftControl) => {
                 doc.scroll_up();
             }
+            Key::Down(Modifier::ShiftControl) => {
+                doc.scroll_down();
+            }
             Key::Control(1) => {
                 doc.move_beg();
             }
