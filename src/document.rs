@@ -98,7 +98,7 @@ impl Document {
     pub fn render(&mut self) {
         let (top_pos, _) = self.find_up(self.row_pos, self.cursor.row);
         self.render_rows(0, self.window.rows(), top_pos);
-        self.window.draw();
+        self.window.redraw();
         self.window.set_cursor(self.cursor);
     }
 
@@ -119,9 +119,9 @@ impl Document {
         // of row to top of buffer.
         self.row_pos = self.cursor_pos - col as usize;
         let (top_pos, row) = self.find_up(self.row_pos, row);
-        self.cursor = Point::new(row, col);
         self.render_rows(0, self.window.rows(), top_pos);
         self.window.draw();
+        self.cursor = Point::new(row, col);
         self.window.set_cursor(self.cursor);
     }
 
@@ -136,6 +136,83 @@ impl Document {
         };
         self.window.set_cursor(self.cursor);
         self.buffer.get_pos()
+    }
+
+    pub fn move_beg(&mut self) {
+        if self.cursor.col > 0 {
+            self.cursor_pos = self.row_pos;
+            self.cursor = Point::new(self.cursor.row, 0);
+            self.window.set_cursor(self.cursor);
+        }
+    }
+
+    pub fn move_end(&mut self) {
+        // determine max number of characters to move right based on cursor pos.
+        // this will never underflow because width of window must always be > 0.
+        let n = (self.window.cols() - self.cursor.col - 1) as usize;
+
+        let cursor_pos = self.buffer.find_end_line_or(self.cursor_pos, n);
+        if cursor_pos > self.cursor_pos {
+            // moved at least one character
+            self.cursor_pos = cursor_pos;
+            self.cursor = Point::new(self.cursor.row, (self.cursor_pos - self.row_pos) as u32);
+            self.window.set_cursor(self.cursor);
+        }
+    }
+
+    pub fn move_top(&mut self) {
+        // possible to optimize rendering if already at top of file, even though
+        // cursor may not be at top.
+        self.row_pos = 0;
+        self.render_rows(0, self.window.rows(), self.row_pos);
+        self.window.draw();
+
+        self.cursor_pos = 0;
+        self.cursor = Point::new(0, 0);
+        self.window.set_cursor(self.cursor);
+    }
+
+    pub fn move_bottom(&mut self) {
+        self.cursor_pos = self.buffer.size();
+
+        let col = (self.cursor_pos - self.buffer.find_beg_line(self.cursor_pos)) as u32
+            % self.window.cols();
+
+        self.row_pos = self.cursor_pos - col as usize;
+        let (top_pos, row) = self.find_up(self.row_pos, self.window.rows() - 1);
+        self.render_rows(0, self.window.rows(), top_pos);
+        self.window.draw();
+        self.cursor = Point::new(row, col);
+        self.window.set_cursor(self.cursor);
+    }
+
+    // scroll window up without moving cursor position
+    // cursor moves up with text, but stays focused on same position
+    pub fn scroll_up(&mut self) {
+        // this will find the row pos following the last row on display
+        let try_rows = self.window.rows() - self.cursor.row;
+        let (row_pos, rows) = self.find_down(self.row_pos, try_rows);
+        if rows == try_rows {
+            // this means we are not yet at bottom of buffer
+            self.window.scroll_up(self.window.rows(), 1);
+            self.render_rows(self.window.rows() - 1, 1, row_pos);
+            self.window.draw();
+
+            let (row, col) = if self.cursor.row > 0 {
+                // cursor not on top row, row pos remains unchanged
+                (self.cursor.row - 1, self.cursor.col)
+            } else {
+                // cursor on top row, need to find new row pos and col
+                // because the display scrolled, we know that next row pos will be found
+                let (row_pos, _) = self.find_down(self.row_pos, 1);
+                let (cursor_pos, col) = self.find_col(row_pos, self.cursor.col);
+                self.cursor_pos = cursor_pos;
+                self.row_pos = row_pos;
+                (0, col)
+            };
+            self.cursor = Point::new(row, col);
+            self.window.set_cursor(self.cursor);
+        }
     }
 
     fn move_up(&mut self) {

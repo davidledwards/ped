@@ -65,6 +65,21 @@ fn main() -> Result<(), Error> {
             Key::Right(Modifier::None) => {
                 doc.move_cursor(Direction::Right);
             }
+            Key::Home(Modifier::None) => {
+                doc.move_top();
+            }
+            Key::End(Modifier::None) => {
+                doc.move_bottom();
+            }
+            Key::Up(Modifier::ShiftControl) => {
+                doc.scroll_up();
+            }
+            Key::Control(1) => {
+                doc.move_beg();
+            }
+            Key::Control(5) => {
+                doc.move_end();
+            }
             Key::Control(12) => {
                 doc.align_cursor(Focus::Auto);
             }
