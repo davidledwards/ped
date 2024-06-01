@@ -163,7 +163,7 @@ impl Buffer {
     ///
     /// Note that when scanning backwards, `pos` is an _exclusive_ bound.
     pub fn find_beg_line(&self, pos: usize) -> usize {
-        let r = self.backward_from(pos).index().find(|&(_, c)| c == '\n');
+        let r = self.backward(pos).index().find(|&(_, c)| c == '\n');
         match r {
             Some((_pos, _)) => _pos + 1,
             None => 0,
@@ -173,7 +173,7 @@ impl Buffer {
     // find end of line relative to pos or end of buffer
     // points to \n, otherwise end of buffer
     pub fn find_end_line(&self, pos: usize) -> usize {
-        let r = self.forward_from(pos).index().find(|&(_, c)| c == '\n');
+        let r = self.forward(pos).index().find(|&(_, c)| c == '\n');
         match r {
             Some((_pos, _)) => _pos,
             None => self.size,
@@ -184,11 +184,7 @@ impl Buffer {
     // comes first
     // resulting pos could be \n, end of buffer, or arbitrary char if n is reached first
     pub fn find_end_line_or(&self, pos: usize, n: usize) -> usize {
-        let r = self
-            .forward_from(pos)
-            .index()
-            .take(n)
-            .find(|&(_, c)| c == '\n');
+        let r = self.forward(pos).index().take(n).find(|&(_, c)| c == '\n');
         match r {
             Some((_pos, _)) => _pos,
             None => cmp::min(pos + n, self.size),
@@ -198,11 +194,7 @@ impl Buffer {
     pub fn find_next_line_or(&self, pos: usize, n: usize) -> Option<usize> {
         // Scans forward until \n encountered, but not to exceed specified number of
         // characters.
-        let r = self
-            .forward_from(pos)
-            .index()
-            .take(n)
-            .find(|&(_, c)| c == '\n');
+        let r = self.forward(pos).index().take(n).find(|&(_, c)| c == '\n');
 
         // If find operation terminates before end of buffer or maximum number of
         // characters are scanned, this implies \n is found, so skip to next character.
@@ -222,11 +214,11 @@ impl Buffer {
 
     pub fn find_prev(&self, pos: usize) -> Option<usize> {
         // find end of previous line first
-        let r = self.backward_from(pos).index().find(|&(_, c)| c == '\n');
+        let r = self.backward(pos).index().find(|&(_, c)| c == '\n');
         match r {
             Some((_pos, _)) => {
                 // then find beginning of previous line
-                let r = self.backward_from(_pos).index().find(|&(_, c)| c == '\n');
+                let r = self.backward(_pos).index().find(|&(_, c)| c == '\n');
                 match r {
                     Some((_pos, _)) => Some(_pos + 1),
                     None => Some(0),
@@ -291,28 +283,14 @@ impl Buffer {
         Ok(count)
     }
 
-    pub fn forward(&self) -> Forward<'_> {
-        Forward {
-            buffer: &self,
-            pos: self.get_pos(),
-        }
-    }
-
-    pub fn forward_from(&self, pos: usize) -> Forward<'_> {
+    pub fn forward(&self, pos: usize) -> Forward<'_> {
         Forward {
             buffer: &self,
             pos: cmp::min(pos, self.size),
         }
     }
 
-    pub fn backward(&self) -> Backward<'_> {
-        Backward {
-            buffer: &self,
-            pos: self.get_pos(),
-        }
-    }
-
-    pub fn backward_from(&self, pos: usize) -> Backward<'_> {
+    pub fn backward(&self, pos: usize) -> Backward<'_> {
         Backward {
             buffer: &self,
             pos: cmp::min(pos, self.size),
@@ -590,7 +568,7 @@ mod tests {
         let n = buf.read(&mut reader).unwrap();
         assert_eq!(n, TEXT.chars().count());
 
-        for (a, b) in zip(buf.forward_from(0), TEXT.chars()) {
+        for (a, b) in zip(buf.forward(0), TEXT.chars()) {
             assert_eq!(a, b);
         }
     }
@@ -616,18 +594,18 @@ mod tests {
         const TEXT: &str = "Lorem ipsum dolor sit amet, consectetur porttitor";
 
         let mut buf = Buffer::new().unwrap();
-        assert_eq!(buf.forward_from(0).next(), None);
+        assert_eq!(buf.forward(0).next(), None);
 
         let cs = TEXT.chars().collect();
         let n = buf.insert_chars(&cs).unwrap();
         assert_eq!(cs.len(), n);
 
-        for (a, b) in zip(buf.forward_from(0), cs.iter()) {
+        for (a, b) in zip(buf.forward(0), cs.iter()) {
             assert_eq!(a, *b);
         }
 
         let pos = buf.set_pos(buf.size() / 2);
-        for (a, b) in zip(buf.forward(), cs[pos..].iter()) {
+        for (a, b) in zip(buf.forward(buf.get_pos()), cs[pos..].iter()) {
             assert_eq!(a, *b);
         }
     }
@@ -640,7 +618,7 @@ mod tests {
         let cs = TEXT.chars().collect();
         let _ = buf.insert_chars(&cs).unwrap();
 
-        for ((a_pos, a), (b_pos, b)) in zip(buf.forward_from(0).index(), zip(0..cs.len(), cs)) {
+        for ((a_pos, a), (b_pos, b)) in zip(buf.forward(0).index(), zip(0..cs.len(), cs)) {
             assert_eq!(a_pos, b_pos);
             assert_eq!(a, b);
         }
@@ -651,18 +629,18 @@ mod tests {
         const TEXT: &str = "Lorem ipsum dolor sit amet, consectetur porttitor";
 
         let mut buf = Buffer::new().unwrap();
-        assert_eq!(buf.backward_from(buf.size()).next(), None);
+        assert_eq!(buf.backward(buf.size()).next(), None);
 
         let cs = TEXT.chars().collect();
         let n = buf.insert_chars(&cs).unwrap();
         assert_eq!(cs.len(), n);
 
-        for (a, b) in zip(buf.backward_from(buf.size()), cs.iter().rev()) {
+        for (a, b) in zip(buf.backward(buf.size()), cs.iter().rev()) {
             assert_eq!(a, *b);
         }
 
         let pos = buf.set_pos(buf.size() / 2);
-        for (a, b) in zip(buf.backward(), cs[0..pos].iter().rev()) {
+        for (a, b) in zip(buf.backward(buf.get_pos()), cs[0..pos].iter().rev()) {
             assert_eq!(a, *b);
         }
     }
@@ -676,7 +654,7 @@ mod tests {
         let _ = buf.insert_chars(&cs).unwrap();
 
         for ((a_pos, a), (b_pos, b)) in zip(
-            buf.backward_from(buf.size()).index(),
+            buf.backward(buf.size()).index(),
             zip((0..cs.len()).rev(), cs.into_iter().rev()),
         ) {
             assert_eq!(a_pos, b_pos);

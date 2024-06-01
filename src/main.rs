@@ -75,7 +75,7 @@ fn main() -> Result<(), Error> {
                 let pos = doc.buffer().get_pos();
                 let line = doc
                     .buffer()
-                    .forward_from(0)
+                    .forward(0)
                     .take(pos)
                     .filter(|&c| c == '\n')
                     .count();

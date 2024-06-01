@@ -229,7 +229,7 @@ impl Document {
     fn move_left(&mut self) {
         // Tries to move buffer position left by 1 character, though it may already be
         // at beginning of buffer.
-        let left = self.buffer.backward_from(self.cursor_pos).index().next();
+        let left = self.buffer.backward(self.cursor_pos).index().next();
 
         if let Some((cursor_pos, c)) = left {
             let (row, col) = if self.cursor.col > 0 {
@@ -275,7 +275,7 @@ impl Document {
     fn move_right(&mut self) {
         // Tries to move buffer position right by 1 character, though it may already be
         // at end of buffer.
-        let right = self.buffer.forward_from(self.cursor_pos).index().next();
+        let right = self.buffer.forward(self.cursor_pos).index().next();
 
         if let Some((cursor_pos, c)) = right {
             // Calculate new column number based on adjacent character and current
@@ -320,7 +320,7 @@ impl Document {
         let mut row = row;
         let mut col = 0;
 
-        for c in self.buffer.forward_from(row_pos) {
+        for c in self.buffer.forward(row_pos) {
             if c == '\n' {
                 self.window.clear_row_from(row, col);
                 col = self.window.cols();
