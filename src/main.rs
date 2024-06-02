@@ -13,7 +13,7 @@ mod window;
 use buffer::Buffer;
 use canvas::Point;
 use color::Color;
-use document::{Direction, Document, Focus};
+use document::{Document, Focus};
 use error::Error;
 use key::{Key, Keyboard, Modifier};
 use term::Terminal;
@@ -48,26 +48,30 @@ fn main() -> Result<(), Error> {
                 }
             }
             Key::Up(Modifier::None) => {
-                doc.move_cursor(Direction::Up);
-            }
-            Key::Up(Modifier::Shift) => {
-                doc.move_cursor(Direction::PageUp);
+                doc.move_up();
             }
             Key::Down(Modifier::None) => {
-                doc.move_cursor(Direction::Down);
-            }
-            Key::Down(Modifier::Shift) => {
-                doc.move_cursor(Direction::PageDown);
+                doc.move_down();
             }
             Key::Left(Modifier::None) => {
-                doc.move_cursor(Direction::Left);
+                doc.move_left();
             }
             Key::Right(Modifier::None) => {
-                doc.move_cursor(Direction::Right);
+                doc.move_right();
             }
+            // fn/up-arrow
+            Key::PageUp(Modifier::None) => {
+                doc.move_page_up();
+            }
+            // fn/down-arrow
+            Key::PageDown(Modifier::None) => {
+                doc.move_page_down();
+            }
+            // cmd/left-arrow
             Key::Home(Modifier::None) => {
                 doc.move_top();
             }
+            // cmd/right-arrow
             Key::End(Modifier::None) => {
                 doc.move_bottom();
             }
@@ -77,15 +81,19 @@ fn main() -> Result<(), Error> {
             Key::Down(Modifier::ShiftControl) => {
                 doc.scroll_down();
             }
+            // ctrl-A
             Key::Control(1) => {
                 doc.move_beg();
             }
+            // ctrl-E
             Key::Control(5) => {
                 doc.move_end();
             }
+            // ctrl-L
             Key::Control(12) => {
                 doc.align_cursor(Focus::Auto);
             }
+            // ctrl-R
             Key::Control(18) => {
                 doc.render();
             }
