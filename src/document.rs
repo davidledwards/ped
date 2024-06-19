@@ -2,14 +2,24 @@
 
 use crate::buffer::Buffer;
 use crate::canvas::{Cell, Point};
+use crate::error::Result;
 use crate::window::Window;
 use std::cmp;
 
 pub struct Document {
+    /// Gap buffer containing the contents of this document.
     buffer: Buffer,
+
+    /// Window attached to this document.
     window: Window,
-    cursor_pos: usize,
+
+    /// Buffer position corresponding to the cursor.
+    cur_pos: usize,
+
+    /// Buffer position corresponding to the first character of the `cursor` row.
     row_pos: usize,
+
+    /// Position of the cursor in `window`.
     cursor: Point,
 }
 
@@ -61,11 +71,11 @@ pub enum Focus {
 
 impl Document {
     pub fn new(buffer: Buffer, window: Window) -> Document {
-        let cursor_pos = buffer.get_pos();
+        let cur_pos = buffer.get_pos();
         let mut doc = Document {
             buffer,
             window,
-            cursor_pos,
+            cur_pos,
             row_pos: 0,
             cursor: Point::ORIGIN,
         };
@@ -77,9 +87,58 @@ impl Document {
         &self.buffer
     }
 
+    pub fn insert_char(&mut self, c: char) -> Result<()> {
+        self.insert(&vec![c])
+    }
+
+    pub fn insert(&mut self, cs: &Vec<char>) -> Result<()> {
+        // Knowing number of wrapping rows prior to insertion helps optimize rendering
+        // when resulting cursor remains on same row.
+        let wrap_rows = self.wrapped_rows(self.row_pos);
+        self.buffer.set_pos(self.cur_pos);
+        let cur_pos = self.buffer.insert_chars(cs)?;
+
+        // Locate resulting cursor position and render accordingly.
+        let (row, col, row_pos) = self.find_cursor(cur_pos);
+        let row = if row == self.cursor.row {
+            // New cursor on same row.
+            if self.wrapped_rows(self.row_pos) > wrap_rows {
+                // Insertion caused more rows to wrap, so everything below current row
+                // essentially gets shifted down.
+                self.render_rows_from(row, self.row_pos);
+            } else {
+                // Number of wrapping rows did not change after insertion, so limit
+                // rendering to only those rows that wrap. Note that number of wrapping
+                // rows could extend beyond bottom of window, so ensure that number is
+                // appropriately bounded.
+                let rows = cmp::min(wrap_rows + 1, self.window.rows() - row);
+                self.render_rows(row, rows, self.row_pos);
+            }
+            row
+        } else if row < self.window.rows() {
+            // New cursor on different row but still visible, so render all rows starting
+            // from current row.
+            self.render_rows_from(self.cursor.row, self.row_pos);
+            row
+        } else {
+            // New cursor position not visible, so find top of buffer and render entire
+            // window.
+            let (top_pos, _) = self.find_up(row_pos, self.window.rows() - 1);
+            self.render_rows_from(0, top_pos);
+            self.window.rows() - 1
+        };
+        self.window.draw();
+
+        self.cur_pos = cur_pos;
+        self.row_pos = row_pos;
+        self.cursor = Point::new(row, col);
+        self.window.set_cursor(self.cursor);
+        Ok(())
+    }
+
     pub fn render(&mut self) {
         let (top_pos, _) = self.find_up(self.row_pos, self.cursor.row);
-        self.render_rows(0, self.window.rows(), top_pos);
+        self.render_rows_from(0, top_pos);
         self.window.redraw();
         self.window.set_cursor(self.cursor);
     }
@@ -94,10 +153,10 @@ impl Document {
 
         // Tries to position cursor on target row, but no guarantee depending on proximity
         // of row to top of buffer.
-        let col = self.column_of(self.cursor_pos);
-        self.row_pos = self.cursor_pos - col as usize;
+        let col = self.column_of(self.cur_pos);
+        self.row_pos = self.cur_pos - col as usize;
         let (top_pos, row) = self.find_up(self.row_pos, row);
-        self.render_rows(0, self.window.rows(), top_pos);
+        self.render_rows_from(0, top_pos);
         self.window.draw();
 
         self.cursor = Point::new(row, col);
@@ -108,7 +167,7 @@ impl Document {
         // Tries to move cursor up by 1 row, though it may already be at top of buffer.
         let (row_pos, rows) = self.find_up(self.row_pos, 1);
         if rows > 0 {
-            let (cursor_pos, col) = self.find_col(row_pos, self.cursor.col);
+            let (cur_pos, col) = self.find_col(row_pos, self.cursor.col);
 
             // Changes to canvas only occur when cursor is already at top row of window,
             // otherwise just change position of cursor on display.
@@ -121,7 +180,7 @@ impl Document {
                 0
             };
 
-            self.cursor_pos = cursor_pos;
+            self.cur_pos = cur_pos;
             self.row_pos = row_pos;
             self.cursor = Point::new(row, col);
             self.window.set_cursor(self.cursor);
@@ -132,7 +191,7 @@ impl Document {
         // Tries to move cursor down by 1 row, though it may already be at end of buffer.
         let (row_pos, rows) = self.find_down(self.row_pos, 1);
         if rows > 0 {
-            let (cursor_pos, col) = self.find_col(row_pos, self.cursor.col);
+            let (cur_pos, col) = self.find_col(row_pos, self.cursor.col);
 
             // Changes to canvas only occur when cursor is already at bottow row of
             // window, otherwise just change position of cursor on display.
@@ -145,7 +204,7 @@ impl Document {
                 self.cursor.row
             };
 
-            self.cursor_pos = cursor_pos;
+            self.cur_pos = cur_pos;
             self.row_pos = row_pos;
             self.cursor = Point::new(row, col);
             self.window.set_cursor(self.cursor);
@@ -155,9 +214,9 @@ impl Document {
     pub fn move_left(&mut self) {
         // Tries to move buffer position left by 1 character, though it may already be
         // at beginning of buffer.
-        let left = self.buffer.backward(self.cursor_pos).index().next();
+        let left = self.buffer.backward(self.cur_pos).index().next();
 
-        if let Some((cursor_pos, c)) = left {
+        if let Some((cur_pos, c)) = left {
             let (row, col) = if self.cursor.col > 0 {
                 // Cursor not at left edge of window, so just a simple cursor move.
                 (self.cursor.row, self.cursor.col - 1)
@@ -167,14 +226,14 @@ impl Document {
                 let (row_pos, col) = if c == '\n' {
                     // Note that position of current row can be derived from new cursor
                     // position.
-                    let (row_pos, _) = self.find_up(cursor_pos + 1, 1);
-                    (row_pos, (cursor_pos - row_pos) as u32)
+                    let (row_pos, _) = self.find_up(cur_pos + 1, 1);
+                    (row_pos, (cur_pos - row_pos) as u32)
                 } else {
                     // Prior row must be at least as long as window width because
                     // character before cursor is not \n, which means prior row must
                     // have soft wrapped.
                     (
-                        cursor_pos + 1 - self.window.cols() as usize,
+                        cur_pos + 1 - self.window.cols() as usize,
                         self.window.cols() - 1,
                     )
                 };
@@ -193,7 +252,7 @@ impl Document {
                 (row, col)
             };
 
-            self.cursor_pos = cursor_pos;
+            self.cur_pos = cur_pos;
             self.cursor = Point::new(row, col);
             self.window.set_cursor(self.cursor);
         }
@@ -202,9 +261,9 @@ impl Document {
     pub fn move_right(&mut self) {
         // Tries to move buffer position right by 1 character, though it may already be
         // at end of buffer.
-        let right = self.buffer.forward(self.cursor_pos).index().next();
+        let right = self.buffer.forward(self.cur_pos).index().next();
 
-        if let Some((cursor_pos, c)) = right {
+        if let Some((cur_pos, c)) = right {
             // Calculate new column number based on adjacent character and current
             // location of cursor.
             let col = if c == '\n' {
@@ -220,7 +279,7 @@ impl Document {
             // New column number at left edge of window implies that cursor wraps to
             // next row, which may require changes to canvas.
             let row = if col == 0 {
-                self.row_pos = cursor_pos + 1;
+                self.row_pos = cur_pos + 1;
                 if self.cursor.row < self.window.rows() - 1 {
                     self.cursor.row + 1
                 } else {
@@ -233,7 +292,7 @@ impl Document {
                 self.cursor.row
             };
 
-            self.cursor_pos = cursor_pos + 1;
+            self.cur_pos = cur_pos + 1;
             self.cursor = Point::new(row, col);
             self.window.set_cursor(self.cursor);
         }
@@ -246,15 +305,15 @@ impl Document {
         if rows > 0 {
             // Tries to maintain current location of cursor on display by moving up
             // additional rows, though again, top of buffer could be reached first.
-            let (cursor_pos, col) = self.find_col(row_pos, self.cursor.col);
+            let (cur_pos, col) = self.find_col(row_pos, self.cursor.col);
             let (top_pos, row) = self.find_up(row_pos, self.cursor.row);
 
             // Since entire display likely changed in most cases, perform full rendering of
             // canvas before drawing.
-            self.render_rows(0, self.window.rows(), top_pos);
+            self.render_rows_from(0, top_pos);
             self.window.draw();
 
-            self.cursor_pos = cursor_pos;
+            self.cur_pos = cur_pos;
             self.row_pos = row_pos;
             self.cursor = Point::new(row, col);
             self.window.set_cursor(self.cursor);
@@ -268,15 +327,15 @@ impl Document {
         if rows > 0 {
             // Tries to maintain current location of cursor on display by moving down
             // additional rows, though again, bottom of buffer could be reached first.
-            let (cursor_pos, col) = self.find_col(row_pos, self.cursor.col);
+            let (cur_pos, col) = self.find_col(row_pos, self.cursor.col);
             let (top_pos, row) = self.find_up(row_pos, self.cursor.row);
 
             // Since entire display likely changed in most cases, perform full rendering of
             // canvas before drawing.
-            self.render_rows(0, self.window.rows(), top_pos);
+            self.render_rows_from(0, top_pos);
             self.window.draw();
 
-            self.cursor_pos = cursor_pos;
+            self.cur_pos = cur_pos;
             self.row_pos = row_pos;
             self.cursor = Point::new(row, col);
             self.window.set_cursor(self.cursor);
@@ -287,7 +346,7 @@ impl Document {
     pub fn move_beg(&mut self) {
         // Adjust cursor position and column if cursor not already at beginning of row.
         if self.cursor.col > 0 {
-            self.cursor_pos = self.row_pos;
+            self.cur_pos = self.row_pos;
             self.cursor.col = 0;
             self.window.set_cursor(self.cursor);
         }
@@ -298,12 +357,12 @@ impl Document {
         // Try moving forward in buffer to find end of line, though stop if distance
         // between current column and right edge of window reached.
         let n = (self.window.cols() - self.cursor.col - 1) as usize;
-        let cursor_pos = self.buffer.find_end_line_or(self.cursor_pos, n);
+        let cur_pos = self.buffer.find_end_line_or(self.cur_pos, n);
 
         // Adjust cursor position and column if cursor not already at end of row.
-        if cursor_pos > self.cursor_pos {
-            self.cursor_pos = cursor_pos;
-            self.cursor.col = (self.cursor_pos - self.row_pos) as u32;
+        if cur_pos > self.cur_pos {
+            self.cur_pos = cur_pos;
+            self.cursor.col = (self.cur_pos - self.row_pos) as u32;
             self.window.set_cursor(self.cursor);
         }
     }
@@ -314,11 +373,11 @@ impl Document {
         // simple optimization is to ignore when cursor is already at top of buffer.
         if self.row_pos > 0 {
             self.row_pos = 0;
-            self.render_rows(0, self.window.rows(), self.row_pos);
+            self.render_rows_from(0, self.row_pos);
             self.window.draw();
         }
 
-        self.cursor_pos = 0;
+        self.cur_pos = 0;
         self.cursor = Point::ORIGIN;
         self.window.set_cursor(self.cursor);
     }
@@ -326,14 +385,14 @@ impl Document {
     /// Moves the cursor to the bottom of the buffer.
     pub fn move_bottom(&mut self) {
         // Determine column number at end of buffer.
-        self.cursor_pos = self.buffer.size();
-        let col = self.column_of(self.cursor_pos);
+        self.cur_pos = self.buffer.size();
+        let col = self.column_of(self.cur_pos);
 
         // Try to position cursor on last row of window, though this is only advisory
         // since buffer contents could be smaller than window.
-        self.row_pos = self.cursor_pos - col as usize;
+        self.row_pos = self.cur_pos - col as usize;
         let (top_pos, row) = self.find_up(self.row_pos, self.window.rows() - 1);
-        self.render_rows(0, self.window.rows(), top_pos);
+        self.render_rows_from(0, top_pos);
         self.window.draw();
 
         self.cursor = Point::new(row, col);
@@ -363,8 +422,8 @@ impl Document {
                 // Indicates that cursor is already on top row, so new row position and
                 // column number need to be calculated.
                 let (row_pos, _) = self.find_down(self.row_pos, 1);
-                let (cursor_pos, col) = self.find_col(row_pos, self.cursor.col);
-                self.cursor_pos = cursor_pos;
+                let (cur_pos, col) = self.find_col(row_pos, self.cursor.col);
+                self.cur_pos = cur_pos;
                 self.row_pos = row_pos;
                 (0, col)
             };
@@ -397,8 +456,8 @@ impl Document {
                 // Indicates that cursor is already on bottom row, so new row position and
                 // column number need to be calculated.
                 let (row_pos, _) = self.find_up(self.row_pos, 1);
-                let (cursor_pos, col) = self.find_col(row_pos, self.cursor.col);
-                self.cursor_pos = cursor_pos;
+                let (cur_pos, col) = self.find_col(row_pos, self.cursor.col);
+                self.cur_pos = cur_pos;
                 self.row_pos = row_pos;
                 (self.cursor.row, col)
             };
@@ -443,6 +502,12 @@ impl Document {
             self.window.clear_row_from(row, col);
             self.window.clear_rows(row + 1, end_row);
         }
+    }
+
+    /// Writes the contents of the buffer to the window, where `row` is the beginning row
+    /// and `row_pos` is the buffer position of `row`.
+    fn render_rows_from(&mut self, row: u32, row_pos: usize) {
+        self.render_rows(row, self.window.rows() - row, row_pos);
     }
 
     /// Finds the buffer position of `rows` preceding `row_pos`.
@@ -541,5 +606,47 @@ impl Document {
         // Column number is derived by calculating distance between given position
         // and beginning of line, though bounded by width of window.
         (pos - self.buffer.find_beg_line(pos)) as u32 % self.window.cols()
+    }
+
+    /// Returns the number of rows that wrap beyond the current row designated by
+    /// `row_pos`.
+    fn wrapped_rows(&self, row_pos: usize) -> u32 {
+        (self.buffer.find_end_line(row_pos) - row_pos) as u32 / self.window.cols()
+    }
+
+    /// Finds the cursor and corresponding row position at the given cursor `pos`, returning
+    /// the tuple (row, col, row_pos).
+    ///
+    /// Note that the resulting _row_ may be >= [`self.window.rows()`]. This behavior is
+    /// intentional as it allows the caller to reason about rendering decisions in an
+    /// optimal manner.
+    ///
+    /// This computation is relative to the current cursor position, which is assumed to
+    /// be in a correct state prior to calling this function.
+    fn find_cursor(&self, pos: usize) -> (u32, u32, usize) {
+        if pos > self.cur_pos {
+            self.buffer
+                .forward(self.cur_pos)
+                .index()
+                .take(pos - self.cur_pos)
+                .fold(
+                    (self.cursor.row, self.cursor.col, self.row_pos),
+                    |(row, col, row_pos), (pos, c)| {
+                        if c == '\n' || col == self.window.cols() - 1 {
+                            // Move to next row when \n is encountered or cursor at right edge of
+                            // window, nothing that next row position always follows the current
+                            // character.
+                            (row + 1, 0, pos + 1)
+                        } else {
+                            (row, col + 1, row_pos)
+                        }
+                    },
+                )
+        } else if pos < self.cur_pos {
+            // TODO: fix me
+            (0, 0, 0)
+        } else {
+            (self.cursor.row, self.cursor.col, self.row_pos)
+        }
     }
 }

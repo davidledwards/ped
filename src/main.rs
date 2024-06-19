@@ -97,6 +97,26 @@ fn main() -> Result<(), Error> {
             Key::Control(18) => {
                 doc.render();
             }
+            // "1"
+            Key::Char('1') => {
+                let cs = "^lorem-ipsum$".chars().collect();
+                doc.insert(&cs)?;
+            }
+            // "2"
+            Key::Char('2') => {
+                let cs = "^lorem-ipsum$\n^lorem-ipsum$\n^lorem-ipsum$"
+                    .chars()
+                    .collect();
+                doc.insert(&cs)?;
+            }
+            // "3"
+            Key::Char('3') => {
+                let cs = "@".repeat(10000).chars().collect();
+                doc.insert(&cs)?;
+            }
+            Key::Char(c) => {
+                doc.insert_char(c)?;
+            }
             Key::Control(31) => {
                 let pos = doc.buffer().get_pos();
                 let line = doc
