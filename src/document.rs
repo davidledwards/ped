@@ -131,8 +131,7 @@ impl Document {
 
         self.cur_pos = cur_pos;
         self.row_pos = row_pos;
-        self.cursor = Point::new(row, col);
-        self.window.set_cursor(self.cursor);
+        self.set_cursor(row, col);
         Ok(())
     }
 
@@ -158,9 +157,7 @@ impl Document {
         let (top_pos, row) = self.find_up(self.row_pos, row);
         self.render_rows_from(0, top_pos);
         self.window.draw();
-
-        self.cursor = Point::new(row, col);
-        self.window.set_cursor(self.cursor);
+        self.set_cursor(row, col);
     }
 
     pub fn move_up(&mut self) {
@@ -182,8 +179,7 @@ impl Document {
 
             self.cur_pos = cur_pos;
             self.row_pos = row_pos;
-            self.cursor = Point::new(row, col);
-            self.window.set_cursor(self.cursor);
+            self.set_cursor(row, col);
         }
     }
 
@@ -206,8 +202,7 @@ impl Document {
 
             self.cur_pos = cur_pos;
             self.row_pos = row_pos;
-            self.cursor = Point::new(row, col);
-            self.window.set_cursor(self.cursor);
+            self.set_cursor(row, col);
         }
     }
 
@@ -253,8 +248,7 @@ impl Document {
             };
 
             self.cur_pos = cur_pos;
-            self.cursor = Point::new(row, col);
-            self.window.set_cursor(self.cursor);
+            self.set_cursor(row, col);
         }
     }
 
@@ -293,8 +287,7 @@ impl Document {
             };
 
             self.cur_pos = cur_pos + 1;
-            self.cursor = Point::new(row, col);
-            self.window.set_cursor(self.cursor);
+            self.set_cursor(row, col);
         }
     }
 
@@ -315,8 +308,7 @@ impl Document {
 
             self.cur_pos = cur_pos;
             self.row_pos = row_pos;
-            self.cursor = Point::new(row, col);
-            self.window.set_cursor(self.cursor);
+            self.set_cursor(row, col);
         }
     }
 
@@ -337,8 +329,7 @@ impl Document {
 
             self.cur_pos = cur_pos;
             self.row_pos = row_pos;
-            self.cursor = Point::new(row, col);
-            self.window.set_cursor(self.cursor);
+            self.set_cursor(row, col);
         }
     }
 
@@ -347,8 +338,7 @@ impl Document {
         // Adjust cursor position and column if cursor not already at beginning of row.
         if self.cursor.col > 0 {
             self.cur_pos = self.row_pos;
-            self.cursor.col = 0;
-            self.window.set_cursor(self.cursor);
+            self.set_cursor_col(0);
         }
     }
 
@@ -362,8 +352,7 @@ impl Document {
         // Adjust cursor position and column if cursor not already at end of row.
         if cur_pos > self.cur_pos {
             self.cur_pos = cur_pos;
-            self.cursor.col = (self.cur_pos - self.row_pos) as u32;
-            self.window.set_cursor(self.cursor);
+            self.set_cursor_col((self.cur_pos - self.row_pos) as u32);
         }
     }
 
@@ -378,8 +367,7 @@ impl Document {
         }
 
         self.cur_pos = 0;
-        self.cursor = Point::ORIGIN;
-        self.window.set_cursor(self.cursor);
+        self.set_cursor(0, 0);
     }
 
     /// Moves the cursor to the bottom of the buffer.
@@ -394,9 +382,7 @@ impl Document {
         let (top_pos, row) = self.find_up(self.row_pos, self.window.rows() - 1);
         self.render_rows_from(0, top_pos);
         self.window.draw();
-
-        self.cursor = Point::new(row, col);
-        self.window.set_cursor(self.cursor);
+        self.set_cursor(row, col);
     }
 
     /// Scrolls the contents of the window up while preserving the cursor position, which
@@ -427,9 +413,7 @@ impl Document {
                 self.row_pos = row_pos;
                 (0, col)
             };
-
-            self.cursor = Point::new(row, col);
-            self.window.set_cursor(self.cursor);
+            self.set_cursor(row, col);
         }
     }
 
@@ -461,10 +445,20 @@ impl Document {
                 self.row_pos = row_pos;
                 (self.cursor.row, col)
             };
-
-            self.cursor = Point::new(row, col);
-            self.window.set_cursor(self.cursor);
+            self.set_cursor(row, col);
         }
+    }
+
+    /// Sets the cursor to (`row`, `col`) and updates the window.
+    fn set_cursor(&mut self, row: u32, col: u32) {
+        self.cursor = Point::new(row, col);
+        self.window.set_cursor(self.cursor);
+    }
+
+    /// Sets the cursor column to `col`, retaining the current row, and updates the
+    /// window.
+    fn set_cursor_col(&mut self, col: u32) {
+        self.set_cursor(self.cursor.row, col);
     }
 
     /// Writes the contents of the buffer to the window, where `row` is the beginning row,

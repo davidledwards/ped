@@ -67,11 +67,11 @@ fn main() -> Result<(), Error> {
             Key::PageDown(Modifier::None) => {
                 doc.move_page_down();
             }
-            // cmd/left-arrow
+            // fn/left-arrow
             Key::Home(Modifier::None) => {
                 doc.move_top();
             }
-            // cmd/right-arrow
+            // fn/right-arrow
             Key::End(Modifier::None) => {
                 doc.move_bottom();
             }
