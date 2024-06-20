@@ -16,7 +16,6 @@ use color::Color;
 use document::{Document, Focus};
 use error::Error;
 use key::{Key, Keyboard, Modifier};
-use term::Terminal;
 use window::Window;
 
 fn main() -> Result<(), Error> {
@@ -35,8 +34,8 @@ fn main() -> Result<(), Error> {
 
     let mut doc = Document::new(buffer, window);
 
-    let term = Terminal::new()?;
-    let mut keyb = Keyboard::new(term);
+    term::init()?;
+    let mut keyb = Keyboard::new();
 
     loop {
         match keyb.read()? {
@@ -132,5 +131,6 @@ fn main() -> Result<(), Error> {
             }
         }
     }
+    term::restore()?;
     Ok(())
 }

@@ -1,76 +1,65 @@
 //! Terminal handling.
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 use libc::{c_int, c_void, sigaction, sighandler_t, siginfo_t, termios, winsize};
 use libc::{SA_SIGINFO, SIGWINCH, STDIN_FILENO, STDOUT_FILENO, TCSADRAIN, TIOCGWINSZ, VMIN, VTIME};
-use std::io::{self, Bytes, Read, Stdin};
+use std::io;
 use std::mem::MaybeUninit;
 use std::ptr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
 
-/// A terminal in raw mode.
-pub struct Terminal {
-    tty: Bytes<Stdin>,
-    prior_term: termios,
-}
+static DEFAULT_TERM: OnceLock<Result<termios>> = OnceLock::new();
 
-impl Terminal {
-    /// Puts the terminal into raw mode.
-    ///
-    /// The terminal mode is changed such that raw bytes are read from standard input without
-    /// buffering, returning an instance of [`Terminal`] that, when dropped, will restore the
-    /// terminal to its prior mode.
-    ///
-    /// Raw mode is configured such that reads do not block indefinitely when no bytes are
-    /// available. In this case, the underlying driver waits `1/10` second before returning with
-    /// nothing.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Err`] if an I/O error occurred while enabling raw mode.
-    pub fn new() -> Result<Terminal> {
+fn default_term() -> Result<termios> {
+    let def_term = DEFAULT_TERM.get_or_init(|| {
         register_winsize_handler();
-
-        let prior_term = unsafe {
-            let mut prior_term = MaybeUninit::<termios>::uninit();
-            os_result(libc::tcgetattr(STDIN_FILENO, prior_term.as_mut_ptr()))?;
-            prior_term.assume_init()
+        let term = unsafe {
+            let mut term = MaybeUninit::<termios>::uninit();
+            os_result(libc::tcgetattr(STDIN_FILENO, term.as_mut_ptr()))?;
+            term.assume_init()
         };
-        let mut raw_term = prior_term.clone();
-        unsafe {
-            libc::cfmakeraw(&mut raw_term);
-            raw_term.c_cc[VMIN] = 0;
-            raw_term.c_cc[VTIME] = 1;
-            os_result(libc::tcsetattr(STDIN_FILENO, TCSADRAIN, &raw_term))?;
-        };
-        Ok(Terminal {
-            tty: io::stdin().bytes(),
-            prior_term,
-        })
-    }
-
-    /// Reads the next byte if available.
-    ///
-    /// If a byte is available, this function immediately returns with [`Some<u8>`]. Otherwise, it
-    /// will block for `1/10` second, waiting for input, before returning [`None`].
-    ///
-    /// # Errors
-    ///
-    /// Returns `Err` if an I/O error occurred while fetching the next byte.
-    pub fn read(&mut self) -> Result<Option<u8>> {
-        Ok(self.tty.next().transpose()?)
-    }
-
-    fn restore(&mut self) -> Result<()> {
-        unsafe { os_result(libc::tcsetattr(STDIN_FILENO, TCSADRAIN, &self.prior_term)) }
+        Ok(term)
+    });
+    match def_term {
+        Err(Error::IO(e)) => Err(io::Error::new(e.kind(), e.to_string()).into()),
+        Err(e) => panic!("{:?}", e),
+        Ok(term) => Ok(term.clone()),
     }
 }
 
-impl Drop for Terminal {
-    fn drop(&mut self) {
-        self.restore()
-            .expect("terminal settings should have been restored");
+/// Puts the terminal into raw mode.
+///
+/// The terminal mode is changed such that raw bytes are read from standard input without
+/// buffering. Raw mode is configured such that reads do not block indefinitely when no
+/// bytes are available. In this case, the underlying driver waits `1/10` second before
+/// returning with nothing.
+///
+/// # Errors
+///
+/// Returns [`Err`] if an I/O error occurred while enabling raw mode.
+pub fn init() -> Result<()> {
+    match default_term() {
+        Ok(mut term) => {
+            unsafe {
+                libc::cfmakeraw(&mut term);
+                term.c_cc[VMIN] = 0;
+                term.c_cc[VTIME] = 1;
+                os_result(libc::tcsetattr(STDIN_FILENO, TCSADRAIN, &term))?;
+            }
+            Ok(())
+        }
+        Err(e) => Err(e),
+    }
+}
+
+pub fn restore() -> Result<()> {
+    match default_term() {
+        Ok(term) => {
+            unsafe { os_result(libc::tcsetattr(STDIN_FILENO, TCSADRAIN, &term))? }
+            Ok(())
+        }
+        Err(e) => Err(e),
     }
 }
 

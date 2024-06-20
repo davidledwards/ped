@@ -1,7 +1,7 @@
-//! Keyboard abstraction over [`Terminal`].
+//! Keyboard reader.
 
 use crate::error::Result;
-use crate::term::Terminal;
+use std::io::{self, Bytes, Read, Stdin};
 use std::str::from_utf8;
 
 /// The set of keys recognized by [`Keyboard`]s.
@@ -37,15 +37,21 @@ pub enum Modifier {
     ShiftControl,
 }
 
-/// A keyboard that reads bytes from a [`Terminal`] and produces corresponding [`Key`]s.
+/// A keyboard that reads bytes from the terminal and produces corresponding [`Key`]s.
 pub struct Keyboard {
-    term: Terminal,
+    term: Bytes<Stdin>,
 }
 
 impl Keyboard {
-    /// Creates a new keyboard using the given terminal.
-    pub fn new(term: Terminal) -> Keyboard {
-        Keyboard { term }
+    /// Creates a new keyboard reader.
+    pub fn new() -> Keyboard {
+        Keyboard {
+            term: io::stdin().bytes(),
+        }
+    }
+
+    fn next(&mut self) -> Result<Option<u8>> {
+        Ok(self.term.next().transpose()?)
     }
 
     /// Reads the next key.
@@ -65,7 +71,7 @@ impl Keyboard {
     ///
     /// Returns [`Err`] if an I/O error occurred while reading bytes from the underlying terminal.
     pub fn read(&mut self) -> Result<Key> {
-        let key = match self.term.read()? {
+        let key = match self.next()? {
             Some(8) => Key::Backspace,
             Some(9) => Key::Tab,
             Some(13) => Key::Return,
@@ -84,11 +90,11 @@ impl Keyboard {
     /// In most cases, this reads an ANSI escape sequence. However, it may produce [`Key::Escape`]
     /// itself if no further bytes are read, or [`Key::None`] if the sequence is unrecognized.
     fn read_escape(&mut self) -> Result<Key> {
-        let key = match self.term.read()? {
+        let key = match self.next()? {
             Some(27) => self.read_escape()?,
             Some(b'[') => self.read_ansi()?,
             Some(b'O') => {
-                match self.term.read()? {
+                match self.next()? {
                     // F1-F4
                     Some(b @ b'P'..=b'S') => Key::Function(b - b'P' + 1),
                     _ => Key::None,
@@ -108,7 +114,7 @@ impl Keyboard {
     fn read_ansi(&mut self) -> Result<Key> {
         // Optional key code or key modifier depending on trailing byte, which
         // indicates either VT or xterm sequence.
-        let (key_code, next_b) = match self.term.read()? {
+        let (key_code, next_b) = match self.next()? {
             Some(b @ b'0'..=b'9') => {
                 let (mut n, next_b) = self.read_number(b)?;
                 if n == 0 {
@@ -121,7 +127,7 @@ impl Keyboard {
 
         // Optional key modifier, which is bitmask.
         let (key_mod, next_b) = match next_b {
-            Some(b';') => match self.term.read()? {
+            Some(b';') => match self.next()? {
                 Some(b @ b'0'..=b'9') => {
                     let (mut n, next_b) = self.read_number(b)?;
                     if n == 0 {
@@ -147,9 +153,9 @@ impl Keyboard {
     /// Returns a tuple containing the number itself and the next byte read from the terminal.
     fn read_number(&mut self, b: u8) -> Result<(u8, Option<u8>)> {
         let n = b - b'0';
-        let result = match self.term.read()? {
-            Some(b @ b'0'..=b'9') => (n * 10 + (b - b'0'), self.term.read()?),
-            None => (n, self.term.read()?),
+        let result = match self.next()? {
+            Some(b @ b'0'..=b'9') => (n * 10 + (b - b'0'), self.next()?),
+            None => (n, self.next()?),
             b => (n, b),
         };
         Ok(result)
@@ -167,7 +173,7 @@ impl Keyboard {
             let mut buf = [0; 4];
             buf[0] = b;
             for i in 1..n {
-                if let Some(b) = self.term.read()? {
+                if let Some(b) = self.next()? {
                     buf[i] = b;
                 } else {
                     // Expected number of bytes not read, so assumed to be malformed.
