@@ -9,25 +9,6 @@ use std::ptr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
 
-static DEFAULT_TERM: OnceLock<Result<termios>> = OnceLock::new();
-
-fn default_term() -> Result<termios> {
-    let def_term = DEFAULT_TERM.get_or_init(|| {
-        register_winsize_handler();
-        let term = unsafe {
-            let mut term = MaybeUninit::<termios>::uninit();
-            os_result(libc::tcgetattr(STDIN_FILENO, term.as_mut_ptr()))?;
-            term.assume_init()
-        };
-        Ok(term)
-    });
-    match def_term {
-        Err(Error::IO(e)) => Err(io::Error::new(e.kind(), e.to_string()).into()),
-        Err(e) => panic!("{:?}", e),
-        Ok(term) => Ok(term.clone()),
-    }
-}
-
 /// Puts the terminal into raw mode.
 ///
 /// The terminal mode is changed such that raw bytes are read from standard input without
@@ -37,7 +18,7 @@ fn default_term() -> Result<termios> {
 ///
 /// # Errors
 ///
-/// Returns [`Err`] if an I/O error occurred while enabling raw mode.
+/// Returns [`Err`] if an I/O error occurs while configuring raw mode.
 pub fn init() -> Result<()> {
     match default_term() {
         Ok(mut term) => {
@@ -53,6 +34,11 @@ pub fn init() -> Result<()> {
     }
 }
 
+/// Restores the terminal to its original configuration.
+///
+/// # Errors
+///
+/// Returns [`Err`] if an I/O error occurs while restoring the terminal configuration.
 pub fn restore() -> Result<()> {
     match default_term() {
         Ok(term) => {
@@ -93,6 +79,28 @@ fn os_result(err: c_int) -> Result<()> {
         Err(io::Error::last_os_error().into())
     } else {
         Ok(())
+    }
+}
+
+/// Ensures that default terminal configuration is captured at most once.
+static DEFAULT_TERM: OnceLock<Result<termios>> = OnceLock::new();
+
+/// Returns the default terminal configuration that can be used for restoring after
+/// changing into raw mode.
+fn default_term() -> Result<termios> {
+    let def_term = DEFAULT_TERM.get_or_init(|| {
+        register_winsize_handler();
+        let term = unsafe {
+            let mut term = MaybeUninit::<termios>::uninit();
+            os_result(libc::tcgetattr(STDIN_FILENO, term.as_mut_ptr()))?;
+            term.assume_init()
+        };
+        Ok(term)
+    });
+    match def_term {
+        Err(Error::IO(e)) => Err(io::Error::new(e.kind(), e.to_string()).into()),
+        Err(e) => panic!("{:?}", e),
+        Ok(term) => Ok(term.clone()),
     }
 }
 

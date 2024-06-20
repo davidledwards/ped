@@ -19,6 +19,8 @@ use key::{Key, Keyboard, Modifier};
 use window::Window;
 
 fn main() -> Result<(), Error> {
+    term::init()?;
+
     let mut buffer = Buffer::new()?;
     let _ = io::read_file("TEST", &mut buffer)?;
     let pos = buffer.size() / 2;
@@ -34,7 +36,6 @@ fn main() -> Result<(), Error> {
 
     let mut doc = Document::new(buffer, window);
 
-    term::init()?;
     let mut keyb = Keyboard::new();
 
     loop {
