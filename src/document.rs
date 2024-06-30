@@ -32,17 +32,6 @@ pub enum Focus {
 // - movements relative to the cursor, such move left or page down.
 // - movements relative to an edit, such as inserting a character or cuttting a region.
 //
-// movements relative to cursor:
-// - the editor reads a movement key, such as move 1 line up.
-// - instruct the window to move up 1 line. the window has the ability to navigate the buffer
-//   to determine how to repaint the canvas.
-// - the window should return the new buffer position to the editor, which allows it to
-//   update its own state.
-// - in general, tell the window how it needs to move within the buffer, and it will return
-//   the new buffer positon. a side effect of any move is that the window may repaint the
-//   canvas to ensure the new buffer position is visible to the user. such repainting is
-//   a concern of the window, not the editor.
-//
 // movements relative to an edit:
 // - the editor reads a key that results in a change to the buffer. the editor needs to
 //   orchestrate this change.
@@ -61,12 +50,24 @@ pub enum Focus {
 //   call: window.remove(n, 1). if a block of size m is deleted at position n, then
 //   call: window.remove(n, m). the hint will allow the window to optimize its work.
 //
-// note that pos does not necessarily means the gap pos in the buffer. since many
-// buffer operations are movement, we can avoid continuously moving the gap around
-// until there is a mutating operation.
-//
-// essentially, a mutating operation needs to ensure:
-//   buffer.set_pos(cursor.pos);
+// removing text:
+// - operation should relative to the cursor since all other operations, such as
+//   insert and movement are in relation to the cursor.
+// - doc.remove(n: isize): if n < 0, then the effective range of text removed is
+//   [cur_pos - n, curpos), and if n > 0, then [cur_pos, cur_pos + n).
+// - when n < 0: examples
+//   - user presses delete, removing character left of cursor
+//     - doc.remove(-1): remove 1 character
+//     - doc.remove(-n): remove n characters
+//   - user selects a range moving forward, then cuts the text
+//     - n = cur_pos - mark_pos
+//     - doc.remove(-n)
+//     - this feels a bit odd because we need to compute the distance when mark_pos
+//       is only necessary value
+// - another option is to specify the other bound on the range using the position
+//   itself: doc.remove(pos). although, this does not feel very intuitive.
+//   - doc.remove_from(pos): implies [pos, cur_pos)
+//   - doc.remove_to(pos): implies [cur_pos, pos)
 //
 
 impl Document {
@@ -81,6 +82,10 @@ impl Document {
         };
         doc.align_cursor(Focus::Auto);
         doc
+    }
+
+    pub fn cursor(&self) -> (Point, usize) {
+        (self.cursor, self.cur_pos)
     }
 
     pub fn buffer(&self) -> &Buffer {
@@ -99,33 +104,37 @@ impl Document {
         let cur_pos = self.buffer.insert_chars(cs)?;
 
         // Locate resulting cursor position and render accordingly.
-        let (row, col, row_pos) = self.find_cursor(cur_pos);
-        let row = if row == self.cursor.row {
-            // New cursor on same row.
-            if self.wrapped_rows(self.row_pos) > wrap_rows {
-                // Insertion caused more rows to wrap, so everything below current row
-                // essentially gets shifted down.
-                self.render_rows_from(row, self.row_pos);
-            } else {
-                // Number of wrapping rows did not change after insertion, so limit
-                // rendering to only those rows that wrap. Note that number of wrapping
-                // rows could extend beyond bottom of window, so ensure that number is
-                // appropriately bounded.
-                let rows = cmp::min(wrap_rows + 1, self.window.rows() - row);
-                self.render_rows(row, rows, self.row_pos);
+        let (maybe_row, col, row_pos) = self.find_cursor(cur_pos);
+        let row = match maybe_row {
+            Some(row) => {
+                if row == self.cursor.row {
+                    if self.wrapped_rows(self.row_pos) > wrap_rows {
+                        // Insertion caused more rows to wrap, so everything below current
+                        // row essentially gets shifted down.
+                        self.render_rows_from(row, self.row_pos);
+                    } else {
+                        // Number of wrapping rows did not change after insertion, so limit
+                        // rendering to only those rows that wrap. Note that number of
+                        // wrapping rows could extend beyond bottom of window, so ensure
+                        // that number is appropriately bounded.
+                        let rows = cmp::min(wrap_rows + 1, self.window.rows() - row);
+                        self.render_rows(row, rows, self.row_pos);
+                    }
+                    row
+                } else {
+                    // New cursor on different row but still visible, so render all rows
+                    // starting from current row.
+                    self.render_rows_from(self.cursor.row, self.row_pos);
+                    row
+                }
             }
-            row
-        } else if row < self.window.rows() {
-            // New cursor on different row but still visible, so render all rows starting
-            // from current row.
-            self.render_rows_from(self.cursor.row, self.row_pos);
-            row
-        } else {
-            // New cursor position not visible, so find top of buffer and render entire
-            // window.
-            let (top_pos, _) = self.find_up(row_pos, self.window.rows() - 1);
-            self.render_rows_from(0, top_pos);
-            self.window.rows() - 1
+            None => {
+                // New cursor position not visible, so find top of buffer and render entire
+                // window.
+                let (top_pos, _) = self.find_up(row_pos, self.window.rows() - 1);
+                self.render_rows_from(0, top_pos);
+                self.window.rows() - 1
+            }
         };
         self.window.draw();
 
@@ -133,6 +142,79 @@ impl Document {
         self.row_pos = row_pos;
         self.set_cursor(row, col);
         Ok(())
+    }
+
+    fn debug(&self, text: String) {
+        use std::io::Write;
+        print!("\x1b[{};1H|{}|", self.window.rows() + 1, text);
+        let _ = std::io::stdout().flush();
+    }
+
+    pub fn remove_from(&mut self, from_pos: usize) -> Vec<char> {
+        if from_pos < self.cur_pos {
+            // Calculate number of wrapping rows prior to text removal in order to
+            // help optimize rendering when resulting cursor remains on same row.
+            let wrap_rows = self.wrapped_rows(self.find_row_pos(from_pos));
+
+            // Locate resulting cursor position before removing text.
+            let (maybe_row, col, row_pos) = self.find_cursor(from_pos);
+            self.buffer.set_pos(from_pos);
+
+            // This unwrap should never panic since condition of entering this block
+            // is that > 0 characters will be removed.
+            let text = self.buffer.delete_chars(self.cur_pos - from_pos).unwrap();
+
+            let row = match maybe_row {
+                Some(row) => {
+                    if row == self.cursor.row {
+                        if self.wrapped_rows(row_pos) < wrap_rows {
+                            // Removal caused less rows to wrap, so everything below
+                            // current row essentially gets shifted up.
+                            self.render_rows_from(row, row_pos);
+                        } else {
+                            // Number of wrapping rows did not change after removal, so
+                            // limit rendering to only those rows that wrap. Note that number
+                            // of wrapping rows could extend beyond bottom of window, so
+                            // ensure that number is appropriately bounded.
+                            let rows = cmp::min(wrap_rows + 1, self.window.rows() - row);
+                            self.render_rows(row, rows, row_pos);
+                        }
+                        row
+                    } else {
+                        // New cursor on different row but still visible, so render all rows
+                        // starting from the new row.
+                        self.render_rows_from(row, row_pos);
+                        row
+                    }
+                }
+                None => {
+                    // New cursor position not visible, so position new row at top of
+                    // window and render entire window.
+                    self.render_rows_from(0, row_pos);
+                    0
+                }
+            };
+            self.window.draw();
+
+            self.cur_pos = from_pos;
+            self.row_pos = row_pos;
+            self.set_cursor(row, col);
+            text
+        } else {
+            vec![]
+        }
+    }
+
+    // removes text in range [cur_pos, to_pos)
+    pub fn remove_to(&mut self, to_pos: usize) -> Vec<char> {
+        vec![]
+    }
+
+    pub fn move_to(&mut self, pos: usize) {
+        // move cursor to given pos
+        // set row, col, row_pos accordingly
+        // render screen
+        // could move up or down
     }
 
     pub fn render(&mut self) {
@@ -582,6 +664,10 @@ impl Document {
             .find_next_line_or(row_pos, self.window.cols() as usize)
     }
 
+    fn find_row_pos(&self, pos: usize) -> usize {
+        pos - ((pos - self.buffer.find_beg_line(pos)) % self.window.cols() as usize)
+    }
+
     /// Finds the buffer position of `col` relative to `row_pos`, which is assumed to be
     /// the position corresponding to column `0`.
     ///
@@ -611,15 +697,17 @@ impl Document {
     /// Finds the cursor and corresponding row position at the given cursor `pos`, returning
     /// the tuple (row, col, row_pos).
     ///
-    /// Note that the resulting _row_ may be >= [`self.window.rows()`]. This behavior is
-    /// intentional as it allows the caller to reason about rendering decisions in an
-    /// optimal manner.
+    /// Note that the resulting _row_ is an `Option<u32>` because the calculated row
+    /// may extend beyond the visible portion of the window. Specifically, if the
+    /// resulting row would be outside the range [`0`, `self.window.rows()`), then the
+    /// value is `None`.
     ///
     /// This computation is relative to the current cursor position, which is assumed to
     /// be in a correct state prior to calling this function.
-    fn find_cursor(&self, pos: usize) -> (u32, u32, usize) {
+    fn find_cursor(&self, pos: usize) -> (Option<u32>, u32, usize) {
         if pos > self.cur_pos {
-            self.buffer
+            let (row, col, row_pos) = self
+                .buffer
                 .forward(self.cur_pos)
                 .index()
                 .take(pos - self.cur_pos)
@@ -635,12 +723,35 @@ impl Document {
                             (row, col + 1, row_pos)
                         }
                     },
-                )
+                );
+            let maybe_row = if row < self.window.rows() {
+                Some(row)
+            } else {
+                None
+            };
+            (maybe_row, col, row_pos)
         } else if pos < self.cur_pos {
-            // TODO: fix me
-            (0, 0, 0)
+            let (rows, _) = self
+                .buffer
+                .backward(self.cur_pos)
+                .index()
+                .take(self.cur_pos - pos)
+                .fold((0, self.cursor.col), |(rows, col), (pos, c)| {
+                    if c == '\n' || col == 0 {
+                        (rows + 1, self.window.cols() - 1)
+                    } else {
+                        (rows, col - 1)
+                    }
+                });
+            let row_pos = self.find_row_pos(pos);
+            let maybe_row = if rows <= self.cursor.row {
+                Some(self.cursor.row - rows)
+            } else {
+                None
+            };
+            (maybe_row, (pos - row_pos) as u32, row_pos)
         } else {
-            (self.cursor.row, self.cursor.col, self.row_pos)
+            (Some(self.cursor.row), self.cursor.col, self.row_pos)
         }
     }
 }

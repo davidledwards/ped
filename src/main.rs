@@ -114,6 +114,11 @@ fn main() -> Result<(), Error> {
                 let cs = "@".repeat(10000).chars().collect();
                 doc.insert(&cs)?;
             }
+            // "6"
+            Key::Char('6') => {
+                let (_, cur_pos) = doc.cursor();
+                let _ = doc.remove_from(if cur_pos > 10 { cur_pos - 10 } else { 0 });
+            }
             Key::Char(c) => {
                 doc.insert_char(c)?;
             }
