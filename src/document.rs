@@ -28,46 +28,9 @@ pub enum Focus {
     Row(u32),
 }
 
-// thinking about operations on the window. there appear to be two kinds of operations
-// - movements relative to the cursor, such move left or page down.
-// - movements relative to an edit, such as inserting a character or cuttting a region.
-//
-// movements relative to an edit:
-// - the editor reads a key that results in a change to the buffer. the editor needs to
-//   orchestrate this change.
-// - instruct the window to focus the cursor on the new buffer position that resulted
-//   from the edit. an example is inserting a character, which moves the cursor to the
-//   right or may cause it to wrap to a line that is not yet visible.
-// - the window is solely responsible for dispalying the buffer to the user, so the
-//   editor is not able to tell it precisely how to behave. example: suppose the cursor
-//   is at the bottom-right-most cell of the buffer when the user inserts a character.
-//   depending on the scrolling behavior of the window, it will scroll down one or
-//   more lines. the editor should not be burdened with this responsibility.
-// - the editor could give a hint to the window by telling it which area of the buffer
-//   was changed. if a character is inserted at buffer pos n, then tell the window as
-//   such: window.insert(n, 1). if a block of size m is inserted at position n, then
-//   inform as such: window.insert(n, m). if a character is deleted at position n, then
-//   call: window.remove(n, 1). if a block of size m is deleted at position n, then
-//   call: window.remove(n, m). the hint will allow the window to optimize its work.
-//
-// removing text:
-// - operation should relative to the cursor since all other operations, such as
-//   insert and movement are in relation to the cursor.
-// - doc.remove(n: isize): if n < 0, then the effective range of text removed is
-//   [cur_pos - n, curpos), and if n > 0, then [cur_pos, cur_pos + n).
-// - when n < 0: examples
-//   - user presses delete, removing character left of cursor
-//     - doc.remove(-1): remove 1 character
-//     - doc.remove(-n): remove n characters
-//   - user selects a range moving forward, then cuts the text
-//     - n = cur_pos - mark_pos
-//     - doc.remove(-n)
-//     - this feels a bit odd because we need to compute the distance when mark_pos
-//       is only necessary value
-// - another option is to specify the other bound on the range using the position
-//   itself: doc.remove(pos). although, this does not feel very intuitive.
-//   - doc.remove_from(pos): implies [pos, cur_pos)
-//   - doc.remove_to(pos): implies [cur_pos, pos)
+// TODO
+// - determine best way to represent cursor publicly
+// - should buffer be borrowed?
 //
 
 impl Document {
@@ -144,12 +107,29 @@ impl Document {
         Ok(())
     }
 
-    fn debug(&self, text: String) {
-        use std::io::Write;
-        print!("\x1b[{};1H|{}|", self.window.rows() + 1, text);
-        let _ = std::io::stdout().flush();
+    pub fn delete_left(&mut self) -> Option<char> {
+        if self.cur_pos > 0 {
+            let cs = self.remove_from(self.cur_pos - 1);
+            Some(cs[0])
+        } else {
+            None
+        }
     }
 
+    pub fn delete_right(&mut self) -> Option<char> {
+        if self.cur_pos < self.buffer.size() {
+            let cs = self.remove_to(self.cur_pos + 1);
+            Some(cs[0])
+        } else {
+            None
+        }
+    }
+
+    /// Removes and returns characters from `from_pos` to the cursor position.
+    ///
+    /// Specifically, characters in the range [`from_pos`, `self.cur_pos`) are removed
+    /// if `from_pos` is less than `self.cur_pos`, otherwise the operation is ignored
+    /// and an empty vector is returned.
     pub fn remove_from(&mut self, from_pos: usize) -> Vec<char> {
         if from_pos < self.cur_pos {
             // Calculate number of wrapping rows prior to text removal in order to
@@ -158,10 +138,10 @@ impl Document {
 
             // Locate resulting cursor position before removing text.
             let (maybe_row, col, row_pos) = self.find_cursor(from_pos);
-            self.buffer.set_pos(from_pos);
 
             // This unwrap should never panic since condition of entering this block
             // is that > 0 characters will be removed.
+            self.buffer.set_pos(from_pos);
             let text = self.buffer.delete_chars(self.cur_pos - from_pos).unwrap();
 
             let row = match maybe_row {
@@ -195,7 +175,6 @@ impl Document {
                 }
             };
             self.window.draw();
-
             self.cur_pos = from_pos;
             self.row_pos = row_pos;
             self.set_cursor(row, col);
@@ -205,9 +184,57 @@ impl Document {
         }
     }
 
-    // removes text in range [cur_pos, to_pos)
+    /// Removes and returns characters from the cursor position to `to_pos`.
+    ///
+    /// Specifically, characters in the range [`self.cur_pos`, `to_pos`) are removed
+    /// if `to_pos` is greater than `self.cur_pos`, otherwise the operation is ignored
+    /// and an empty vector is returned.
     pub fn remove_to(&mut self, to_pos: usize) -> Vec<char> {
-        vec![]
+        let to_pos = cmp::min(to_pos, self.buffer.size());
+        if to_pos > self.cur_pos {
+            // Possibly capture number of wrapping rows prior to text removal, but only
+            // if from and to positions share same beginning of line.
+            let wrap_rows = if self.buffer.find_beg_line(to_pos) <= self.cur_pos {
+                Some(self.wrapped_rows(self.row_pos))
+            } else {
+                None
+            };
+
+            // This unwrap should never panic since condition of entering this block
+            // is that > 0 characters will be removed.
+            self.buffer.set_pos(self.cur_pos);
+            let text = self.buffer.delete_chars(to_pos - self.cur_pos).unwrap();
+
+            match wrap_rows {
+                Some(wrap_rows) => {
+                    // This condition occurs when from and to positions share same
+                    // beginning of line, which means rendering can be optimized under
+                    // certain circumstances.
+                    if self.wrapped_rows(self.row_pos) < wrap_rows {
+                        // Removal caused less rows to wrap, so everything below current
+                        // row essentially gets shifted up.
+                        self.render_rows_from(self.cursor.row, self.row_pos);
+                    } else {
+                        // Number of wrapping rows did not change after removal, so limit
+                        // rendering to only those rows that wrap. Note that number of
+                        // wrapping rows could extend beyond bottom of window, so ensure
+                        // that number is appropriately bounded.
+                        let rows = cmp::min(wrap_rows + 1, self.window.rows() - self.cursor.row);
+                        self.render_rows(self.cursor.row, rows, self.row_pos);
+                    }
+                }
+                None => {
+                    // This condition occurs when from and to positions do not share
+                    // same beginning of line, which means following rows always shift up.
+                    self.render_rows_from(self.cursor.row, self.row_pos);
+                }
+            }
+            self.window.draw();
+            self.window.set_cursor(self.cursor);
+            text
+        } else {
+            vec![]
+        }
     }
 
     pub fn move_to(&mut self, pos: usize) {

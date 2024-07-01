@@ -40,7 +40,7 @@ fn main() -> Result<(), Error> {
 
     loop {
         match keyb.read()? {
-            Key::Control(4) => break,
+            Key::Control(3) => break,
             Key::None => {
                 if term::size_changed() {
                     let (rows, cols) = term::size()?;
@@ -117,7 +117,20 @@ fn main() -> Result<(), Error> {
             // "6"
             Key::Char('6') => {
                 let (_, cur_pos) = doc.cursor();
-                let _ = doc.remove_from(if cur_pos > 10 { cur_pos - 10 } else { 0 });
+                let _ = doc.remove_from(cur_pos.saturating_sub(10));
+            }
+            // "7"
+            Key::Char('7') => {
+                let (_, cur_pos) = doc.cursor();
+                let _ = doc.remove_to(cur_pos + 10);
+            }
+            // backspace
+            Key::Backspace => {
+                let _ = doc.delete_left();
+            }
+            // ctrl-D
+            Key::Control(4) => {
+                let _ = doc.delete_right();
             }
             Key::Char(c) => {
                 doc.insert_char(c)?;
