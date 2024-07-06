@@ -1,4 +1,4 @@
-//! Document.
+//! Editor.
 
 use crate::buffer::Buffer;
 use crate::canvas::{Cell, Point};
@@ -6,11 +6,11 @@ use crate::error::Result;
 use crate::window::Window;
 use std::cmp;
 
-pub struct Document {
-    /// Gap buffer containing the contents of this document.
+pub struct Editor {
+    /// Gap buffer containing the contents of this editor.
     buffer: Buffer,
 
-    /// Window attached to this document.
+    /// Window attached to this editor.
     window: Window,
 
     /// Buffer position corresponding to the cursor.
@@ -31,20 +31,21 @@ pub enum Focus {
 // TODO
 // - determine best way to represent cursor publicly
 // - should buffer be borrowed?
+// - column anchor when moving vertically
 //
 
-impl Document {
-    pub fn new(buffer: Buffer, window: Window) -> Document {
+impl Editor {
+    pub fn new(buffer: Buffer, window: Window) -> Editor {
         let cur_pos = buffer.get_pos();
-        let mut doc = Document {
+        let mut editor = Editor {
             buffer,
             window,
             cur_pos,
             row_pos: 0,
             cursor: Point::ORIGIN,
         };
-        doc.align_cursor(Focus::Auto);
-        doc
+        editor.align_cursor(Focus::Auto);
+        editor
     }
 
     pub fn cursor(&self) -> (Point, usize) {
