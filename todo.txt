@@ -1,0 +1,6 @@
+Things to work on:
+- move editing functions into editor type
+- soft column anchors when moving up/down
+- build out window frame
+- simple workspace with one window
+- attach and detach windows from documents
