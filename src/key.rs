@@ -5,7 +5,7 @@ use std::io::{self, Bytes, Read, Stdin};
 use std::str::from_utf8;
 
 /// The set of keys recognized by [`Keyboard`]s.
-#[derive(Debug)]
+#[derive(Eq, PartialEq, Hash, Debug)]
 pub enum Key {
     None,
     Escape,
@@ -29,7 +29,7 @@ pub enum Key {
 }
 
 /// An optional modifier for certain kinds of [`Key`]s.
-#[derive(Debug)]
+#[derive(Eq, PartialEq, Hash, Debug)]
 pub enum Modifier {
     None,
     Shift,

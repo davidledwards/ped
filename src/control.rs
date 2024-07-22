@@ -5,6 +5,8 @@ use crate::error::{Error, Result};
 use crate::key::{Key, Keyboard, Modifier};
 use crate::workspace::Workspace;
 
+use std::collections::HashMap;
+
 //
 // this is the controller that loops indefinitely over keystrokes, modifies the buffer,
 // and updates the display.
@@ -103,18 +105,77 @@ use crate::workspace::Workspace;
 // to a window in order for the user to interact with it. when it is detached, the window
 // no longer becomes visible, yet the editing context is still retained by the editor.
 //
+
+// key map concept:
+// - map of "action" -> function
+//   - example: "cursor-up" -> move_cursor_up()
+//   - essentially a static map
+//   - used to build the actual key map at runtime
+//
+// - map of Key -> function
+//   - example: Key::Control(1) -> move_beg_of_line()
+//   - gets built at runtime
+//   - keys are well-known and finite, used to drive construction of the map
+//
+// struct KeyName {
+//    id: &'static str,
+//    key: Key,
+// }
+//
+// key map is essentially: KeyMap<KeyName, Fn>
+//
+// construct the map by iterating through array of KeyName, find key.id in the action
+// map, which returns a Fn, then add (key.key, fn) to the key map.
+// - if any key.id is not found, then panic since this would indicaate an inconsistent
+//   state.
+//
+// in practice, a user may want to rebind a "key" to an "action". for example, a user may
+// change the keys used for moving to beg and end of line.
+// ^A -> "move-beg-of-line"
+// ^E -> "move-end-of-line"
+//
+// these would be loaded from an external file and bound at runtime using the same
+// method described above.
+//
+// what do we bind by default? should this be externalized? or, embedded in the code?
+// it seems we would want a default keymap in case the externalized bindings could not
+// be located at runtime.
+//
+// KeyMap::new() -> KeyMap -- creates default keymap
+// KeyMap::load(file) -> KeyMap -- create keymap using bindings from file
+//
+// key::keys -> &'static [KeyName]
+
+type KeyMap = HashMap<Key, Box<dyn Fn(&mut Editor) -> Result<()>>>;
+
 pub struct Controller {
     keyboard: Keyboard,
     workspace: Workspace,
     editor: Editor,
+    keymap: KeyMap,
+}
+
+fn do_move_beg(editor: &mut Editor) -> Result<()> {
+    editor.move_beg();
+    Ok(())
+}
+
+fn do_move_down(editor: &mut Editor) -> Result<()> {
+    editor.move_down();
+    Ok(())
 }
 
 impl Controller {
     pub fn new(keyboard: Keyboard, workspace: Workspace, editor: Editor) -> Controller {
+        let mut keymap: KeyMap = HashMap::new();
+        keymap.insert(Key::Control(1), Box::new(do_move_beg));
+        keymap.insert(Key::Down(Modifier::None), Box::new(do_move_down));
+
         Controller {
             keyboard,
             workspace,
             editor,
+            keymap,
         }
     }
 

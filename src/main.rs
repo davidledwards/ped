@@ -8,6 +8,7 @@ mod editor;
 mod error;
 mod io;
 mod key;
+mod keymap;
 mod term;
 mod window;
 mod workspace;
