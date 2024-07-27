@@ -16,11 +16,11 @@ mod workspace;
 use buffer::Buffer;
 use control::Controller;
 use editor::Editor;
-use error::Error;
+use error::Result;
 use key::Keyboard;
 use workspace::Workspace;
 
-fn main() -> Result<(), Error> {
+fn main() -> Result<()> {
     term::init()?;
 
     let mut buffer = Buffer::new()?;
