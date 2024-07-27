@@ -23,7 +23,7 @@ use workspace::Workspace;
 fn main() -> Result<()> {
     term::init()?;
 
-    let mut buffer = Buffer::new()?;
+    let mut buffer = Buffer::new();
     let _ = io::read_file("TEST", &mut buffer)?;
     let pos = buffer.size() / 2;
     buffer.set_pos(pos);

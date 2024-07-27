@@ -8,12 +8,6 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// The set of possible errors.
 #[derive(Debug)]
 pub enum Error {
-    /// An out of memory error.
-    OutOfMemory,
-
-    /// An attempt was made to allocate a buffer that is too large.
-    BufferTooLarge(usize),
-
     /// An I/O error.
     IO(io::Error),
 

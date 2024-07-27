@@ -2,7 +2,6 @@
 
 use crate::buffer::Buffer;
 use crate::canvas::{Cell, Point};
-use crate::error::Result;
 use crate::window::Window;
 use std::cmp;
 
@@ -56,16 +55,16 @@ impl Editor {
         &self.buffer
     }
 
-    pub fn insert_char(&mut self, c: char) -> Result<()> {
+    pub fn insert_char(&mut self, c: char) {
         self.insert(&vec![c])
     }
 
-    pub fn insert(&mut self, cs: &Vec<char>) -> Result<()> {
+    pub fn insert(&mut self, cs: &Vec<char>) {
         // Knowing number of wrapping rows prior to insertion helps optimize rendering
         // when resulting cursor remains on same row.
         let wrap_rows = self.wrapped_rows(self.row_pos);
         self.buffer.set_pos(self.cur_pos);
-        let cur_pos = self.buffer.insert_chars(cs)?;
+        let cur_pos = self.buffer.insert_chars(cs);
 
         // Locate resulting cursor position and render accordingly.
         let (maybe_row, col, row_pos) = self.find_cursor(cur_pos);
@@ -105,7 +104,6 @@ impl Editor {
         self.cur_pos = cur_pos;
         self.row_pos = row_pos;
         self.set_cursor(row, col);
-        Ok(())
     }
 
     pub fn delete_left(&mut self) -> Option<char> {

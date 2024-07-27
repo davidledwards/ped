@@ -1,7 +1,7 @@
 //! Main controller.
 
 use crate::editor::{Editor, Focus};
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::key::{Key, Keyboard, Modifier};
 use crate::workspace::Workspace;
 
@@ -240,19 +240,19 @@ impl Controller {
                 // "1"
                 Key::Char('1') => {
                     let cs = "^lorem-ipsum$".chars().collect();
-                    self.editor.insert(&cs)?;
+                    self.editor.insert(&cs);
                 }
                 // "2"
                 Key::Char('2') => {
                     let cs = "^lorem-ipsum$\n^lorem-ipsum$\n^lorem-ipsum$"
                         .chars()
                         .collect();
-                    self.editor.insert(&cs)?;
+                    self.editor.insert(&cs);
                 }
                 // "3"
                 Key::Char('3') => {
                     let cs = "@".repeat(10000).chars().collect();
-                    self.editor.insert(&cs)?;
+                    self.editor.insert(&cs);
                 }
                 // "6"
                 Key::Char('6') => {
@@ -273,7 +273,7 @@ impl Controller {
                     let _ = self.editor.delete_right();
                 }
                 Key::Char(c) => {
-                    self.editor.insert_char(c)?;
+                    self.editor.insert_char(c);
                 }
                 _ => {}
             }

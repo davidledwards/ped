@@ -1,6 +1,6 @@
 //! Gap buffer.
 
-use crate::error::{Error, Result};
+use crate::error::Result;
 use std::alloc::{self, Layout};
 use std::cmp;
 use std::io::{BufRead, Write};
@@ -16,51 +16,29 @@ pub struct Buffer {
     gap_len: usize,
 }
 
-pub struct Forward<'a> {
-    buffer: &'a Buffer,
-    pos: usize,
-}
-
-pub struct ForwardIndex<'a> {
-    it: Forward<'a>,
-}
-
-pub struct Backward<'a> {
-    buffer: &'a Buffer,
-    pos: usize,
-}
-
-pub struct BackwardIndex<'a> {
-    it: Backward<'a>,
-}
+// Buffer capacity increments and bounds.
+const INIT_CAPACITY: usize = 65_536;
+const GROW_CAPACITY: usize = 65_536;
+const MAX_CAPACITY: usize = 2_147_483_648;
 
 impl Buffer {
-    // Initial capacity of buffer if not specified.
-    const INIT_CAPACITY: usize = 65_536;
-
-    // Smallest increment of capacity growth.
-    const GROW_CAPACITY: usize = 65_536;
-
-    // Largest possible buffer capacity.
-    const MAX_CAPACITY: usize = 2_147_483_648;
-
-    pub fn new() -> Result<Buffer> {
-        Buffer::with_capacity(Buffer::INIT_CAPACITY)
+    pub fn new() -> Buffer {
+        Buffer::with_capacity(INIT_CAPACITY)
     }
 
-    pub fn with_capacity(capacity: usize) -> Result<Buffer> {
+    pub fn with_capacity(capacity: usize) -> Buffer {
         let n = if capacity > 0 {
             capacity
         } else {
-            Buffer::INIT_CAPACITY
+            INIT_CAPACITY
         };
-        Ok(Buffer {
-            buf: Buffer::alloc(n)?,
+        Buffer {
+            buf: Buffer::alloc(n),
             capacity: n,
             size: 0,
             gap: 0,
             gap_len: n,
-        })
+        }
     }
 
     pub fn capacity(&self) -> usize {
@@ -108,27 +86,27 @@ impl Buffer {
         }
     }
 
-    pub fn insert(&mut self, c: char) -> Result<usize> {
-        self.ensure(1)?;
+    pub fn insert(&mut self, c: char) -> usize {
+        self.ensure(1);
         unsafe {
             *self.buf.add(self.gap) = c;
         }
         self.gap += 1;
         self.gap_len -= 1;
         self.size += 1;
-        Ok(self.gap)
+        self.gap
     }
 
-    pub fn insert_chars(&mut self, cs: &Vec<char>) -> Result<usize> {
+    pub fn insert_chars(&mut self, cs: &Vec<char>) -> usize {
         let n = cs.len();
-        self.ensure(n)?;
+        self.ensure(n);
         unsafe {
             ptr::copy_nonoverlapping(cs.as_ptr(), self.buf.add(self.gap), n);
         }
         self.gap += n;
         self.gap_len -= n;
         self.size += n;
-        Ok(self.gap)
+        self.gap
     }
 
     pub fn delete(&mut self) -> Option<char> {
@@ -245,7 +223,7 @@ impl Buffer {
                 // - enough characters have been read to reach trigger, or
                 // - reader has reached EOF
                 let cs = chunk.chars().collect();
-                let _ = self.insert_chars(&cs)?;
+                let _ = self.insert_chars(&cs);
                 count += cs.len();
                 chunk.clear();
             }
@@ -309,26 +287,29 @@ impl Buffer {
         }
     }
 
-    fn ensure(&mut self, n: usize) -> Result<()> {
+    /// Ensure that buffer capacity is at least `n` bytes.
+    fn ensure(&mut self, n: usize) {
         let free = self.capacity - self.size;
         if n > free {
             self.grow(n - free)
-        } else {
-            Ok(())
         }
     }
 
-    fn grow(&mut self, need: usize) -> Result<()> {
-        // New capacity rounds up to next increment while satisfying need.
-        let capacity = self
-            .capacity
-            .saturating_add(need)
-            .saturating_add(Buffer::GROW_CAPACITY - 1)
-            .saturating_div(Buffer::GROW_CAPACITY)
-            .saturating_mul(Buffer::GROW_CAPACITY);
+    /// Increase buffer capacity by at least `need` bytes.
+    fn grow(&mut self, need: usize) {
+        // Calculate new capacity which must satisfy needed bytes but also align on
+        // growth increment.
+        let capacity = if need > MAX_CAPACITY {
+            panic!("incremental allocation too large: {} bytes", need);
+        } else {
+            // This calculation is safe from panic since capacity is always <= MAX_CAPACITY
+            // and addition would never overflow because result is sufficiently smaller than
+            // usize::MAX.
+            (self.capacity + need + GROW_CAPACITY - 1) / GROW_CAPACITY * GROW_CAPACITY
+        };
 
         // Allocate new buffer and copy contents of old buffer.
-        let buf = Buffer::alloc(capacity)?;
+        let buf = Buffer::alloc(capacity);
         let gap_len = self.gap_len + (capacity - self.capacity);
         unsafe {
             // Copy left of gap.
@@ -347,20 +328,18 @@ impl Buffer {
         self.buf = buf;
         self.capacity = capacity;
         self.gap_len = gap_len;
-        Ok(())
     }
 
-    fn alloc(capacity: usize) -> Result<*mut char> {
-        if capacity > Buffer::MAX_CAPACITY {
-            Err(Error::BufferTooLarge(capacity))
+    fn alloc(capacity: usize) -> *mut char {
+        if capacity > MAX_CAPACITY {
+            panic!("allocation too large: {} bytes", capacity);
+        }
+        let layout = Layout::array::<char>(capacity).unwrap();
+        let buf = unsafe { alloc::alloc(layout) as *mut char };
+        if buf.is_null() {
+            alloc::handle_alloc_error(layout);
         } else {
-            let layout = Layout::array::<char>(capacity).unwrap();
-            let buf = unsafe { alloc::alloc(layout) as *mut char };
-            if buf.is_null() {
-                Err(Error::OutOfMemory)
-            } else {
-                Ok(buf)
-            }
+            buf
         }
     }
 
@@ -368,6 +347,17 @@ impl Buffer {
         let layout = Layout::array::<char>(capacity).unwrap();
         unsafe { alloc::dealloc(buf as *mut u8, layout) }
     }
+}
+
+impl Drop for Buffer {
+    fn drop(&mut self) {
+        Buffer::dealloc(self.buf, self.capacity);
+    }
+}
+
+pub struct Forward<'a> {
+    buffer: &'a Buffer,
+    pos: usize,
 }
 
 impl<'a> Forward<'a> {
@@ -390,6 +380,10 @@ impl Iterator for Forward<'_> {
     }
 }
 
+pub struct ForwardIndex<'a> {
+    it: Forward<'a>,
+}
+
 impl Iterator for ForwardIndex<'_> {
     type Item = (usize, char);
 
@@ -399,6 +393,11 @@ impl Iterator for ForwardIndex<'_> {
             None => None,
         }
     }
+}
+
+pub struct Backward<'a> {
+    buffer: &'a Buffer,
+    pos: usize,
 }
 
 impl<'a> Backward<'a> {
@@ -421,6 +420,10 @@ impl Iterator for Backward<'_> {
     }
 }
 
+pub struct BackwardIndex<'a> {
+    it: Backward<'a>,
+}
+
 impl Iterator for BackwardIndex<'_> {
     type Item = (usize, char);
 
@@ -432,12 +435,6 @@ impl Iterator for BackwardIndex<'_> {
     }
 }
 
-impl Drop for Buffer {
-    fn drop(&mut self) {
-        Buffer::dealloc(self.buf, self.capacity);
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -446,9 +443,9 @@ mod tests {
 
     #[test]
     fn new_buffer() {
-        let buf = Buffer::new().unwrap();
+        let buf = Buffer::new();
         assert!(!buf.buf.is_null());
-        assert_eq!(buf.capacity, Buffer::INIT_CAPACITY);
+        assert_eq!(buf.capacity, INIT_CAPACITY);
         assert_eq!(buf.size, 0);
         assert_eq!(buf.gap, 0);
         assert_eq!(buf.gap_len, buf.capacity);
@@ -458,7 +455,7 @@ mod tests {
     fn new_buffer_with_capacity() {
         const CAP: usize = 17;
 
-        let buf = Buffer::with_capacity(CAP).unwrap();
+        let buf = Buffer::with_capacity(CAP);
         assert!(!buf.buf.is_null());
         assert_eq!(buf.capacity, CAP);
         assert_eq!(buf.size, 0);
@@ -470,30 +467,30 @@ mod tests {
     fn grow_buffer() {
         const CAP: usize = 17;
 
-        let mut buf = Buffer::with_capacity(CAP).unwrap();
+        let mut buf = Buffer::with_capacity(CAP);
         for c in iter::repeat('*').take(CAP + 1) {
-            buf.insert(c).unwrap();
+            buf.insert(c);
         }
-        assert_eq!(buf.capacity, Buffer::GROW_CAPACITY);
+        assert_eq!(buf.capacity, GROW_CAPACITY);
         assert_eq!(buf.size, CAP + 1);
     }
 
     #[test]
     fn insert() {
-        let mut buf = Buffer::new().unwrap();
-        let pos = buf.insert('a').unwrap();
+        let mut buf = Buffer::new();
+        let pos = buf.insert('a');
         assert_eq!(pos, 1);
         assert_eq!(buf.get(0), Some('a'));
         assert_eq!(buf.size(), 1);
 
-        let pos = buf.insert('b').unwrap();
+        let pos = buf.insert('b');
         assert_eq!(pos, 2);
         assert_eq!(buf.get(1), Some('b'));
         assert_eq!(buf.size(), 2);
 
         let pos = buf.set_pos(1);
         assert_eq!(pos, 1);
-        let pos = buf.insert('c').unwrap();
+        let pos = buf.insert('c');
         assert_eq!(pos, 2);
         assert_eq!(buf.get(0), Some('a'));
         assert_eq!(buf.get(1), Some('c'));
@@ -503,8 +500,8 @@ mod tests {
 
     #[test]
     fn insert_chars() {
-        let mut buf = Buffer::new().unwrap();
-        let pos = buf.insert_chars(&vec!['a', 'b', 'c']).unwrap();
+        let mut buf = Buffer::new();
+        let pos = buf.insert_chars(&vec!['a', 'b', 'c']);
         assert_eq!(pos, 3);
         assert_eq!(buf.get(0), Some('a'));
         assert_eq!(buf.get(1), Some('b'));
@@ -513,7 +510,7 @@ mod tests {
 
         let pos = buf.set_pos(1);
         assert_eq!(pos, 1);
-        let pos = buf.insert_chars(&vec!['d', 'e', 'f']).unwrap();
+        let pos = buf.insert_chars(&vec!['d', 'e', 'f']);
         assert_eq!(pos, 4);
         assert_eq!(buf.get(0), Some('a'));
         assert_eq!(buf.get(1), Some('d'));
@@ -528,9 +525,9 @@ mod tests {
     fn delete() {
         const TEXT: &str = "abcdef";
 
-        let mut buf = Buffer::new().unwrap();
+        let mut buf = Buffer::new();
         let cs = TEXT.chars().collect();
-        let _ = buf.insert_chars(&cs).unwrap();
+        let _ = buf.insert_chars(&cs);
         assert_eq!(buf.size(), cs.len());
 
         let pos = buf.set_pos(1);
@@ -545,9 +542,9 @@ mod tests {
     fn delete_chars() {
         const TEXT: &str = "abcxyzdef";
 
-        let mut buf = Buffer::new().unwrap();
+        let mut buf = Buffer::new();
         let text = TEXT.chars().collect();
-        let _ = buf.insert_chars(&text).unwrap();
+        let _ = buf.insert_chars(&text);
         assert_eq!(buf.size(), text.len());
 
         let pos = buf.set_pos(3);
@@ -563,7 +560,7 @@ mod tests {
         const TEXT: &str = "ƿŠɎĊȹ·ĽĖ]ɄɁɈǍȶĸĔȚì.İĈËĩ·øǮƩŒƆŉȡȅǫĈǞǿDǶǳȦǧž¬Ǿ3ÙģDíĎȪƐŖUƝËǻ";
 
         let mut reader = Cursor::new(TEXT.to_string());
-        let mut buf = Buffer::new().unwrap();
+        let mut buf = Buffer::new();
 
         let n = buf.read(&mut reader).unwrap();
         assert_eq!(n, TEXT.chars().count());
@@ -577,8 +574,8 @@ mod tests {
     fn write_from_buffer() {
         const TEXT: &str = "ųų!)EÝ×vĶǑǟ²ȋØWÚųțòWůĪĎɎ«ƿǎǓC±ţOƹǅĠ/9ŷŌȈïĚſ°ǼȎ¢2^ÁǑī0ÄgŐĢśŧ¶";
 
-        let mut buf = Buffer::new().unwrap();
-        let _ = buf.insert_chars(&TEXT.chars().collect()).unwrap();
+        let mut buf = Buffer::new();
+        let _ = buf.insert_chars(&TEXT.chars().collect());
         let mut writer = Cursor::new(Vec::new());
 
         let n = buf.write(&mut writer).unwrap();
@@ -593,11 +590,11 @@ mod tests {
     fn forward() {
         const TEXT: &str = "Lorem ipsum dolor sit amet, consectetur porttitor";
 
-        let mut buf = Buffer::new().unwrap();
+        let mut buf = Buffer::new();
         assert_eq!(buf.forward(0).next(), None);
 
         let cs = TEXT.chars().collect();
-        let n = buf.insert_chars(&cs).unwrap();
+        let n = buf.insert_chars(&cs);
         assert_eq!(cs.len(), n);
 
         for (a, b) in zip(buf.forward(0), cs.iter()) {
@@ -614,9 +611,9 @@ mod tests {
     fn forward_with_index() {
         const TEXT: &str = "Lorem ipsum dolor sit amet, consectetur porttitor";
 
-        let mut buf = Buffer::new().unwrap();
+        let mut buf = Buffer::new();
         let cs = TEXT.chars().collect();
-        let _ = buf.insert_chars(&cs).unwrap();
+        let _ = buf.insert_chars(&cs);
 
         for ((a_pos, a), (b_pos, b)) in zip(buf.forward(0).index(), zip(0..cs.len(), cs)) {
             assert_eq!(a_pos, b_pos);
@@ -628,11 +625,11 @@ mod tests {
     fn backward() {
         const TEXT: &str = "Lorem ipsum dolor sit amet, consectetur porttitor";
 
-        let mut buf = Buffer::new().unwrap();
+        let mut buf = Buffer::new();
         assert_eq!(buf.backward(buf.size()).next(), None);
 
         let cs = TEXT.chars().collect();
-        let n = buf.insert_chars(&cs).unwrap();
+        let n = buf.insert_chars(&cs);
         assert_eq!(cs.len(), n);
 
         for (a, b) in zip(buf.backward(buf.size()), cs.iter().rev()) {
@@ -649,9 +646,9 @@ mod tests {
     fn backward_with_index() {
         const TEXT: &str = "Lorem ipsum dolor sit amet, consectetur porttitor";
 
-        let mut buf = Buffer::new().unwrap();
+        let mut buf = Buffer::new();
         let cs = TEXT.chars().collect();
-        let _ = buf.insert_chars(&cs).unwrap();
+        let _ = buf.insert_chars(&cs);
 
         for ((a_pos, a), (b_pos, b)) in zip(
             buf.backward(buf.size()).index(),
@@ -666,9 +663,9 @@ mod tests {
     fn find_beg_line() {
         const TEXT: &str = "abc\ndef\nghi";
 
-        let mut buf = Buffer::new().unwrap();
+        let mut buf = Buffer::new();
         let cs = TEXT.chars().collect();
-        let _ = buf.insert_chars(&cs).unwrap();
+        let _ = buf.insert_chars(&cs);
 
         // All chars in `def\n` range should find the same beginning of line.
         for pos in 4..8 {
