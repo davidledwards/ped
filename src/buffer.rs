@@ -275,10 +275,12 @@ impl Buffer {
         }
     }
 
+    #[inline(always)]
     fn char_at(&self, pos: usize) -> char {
         unsafe { *self.buf.add(self.index_of(pos)) }
     }
 
+    #[inline(always)]
     fn index_of(&self, pos: usize) -> usize {
         if pos < self.gap {
             pos
