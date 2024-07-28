@@ -4,12 +4,11 @@ use crate::error::Result;
 use std::alloc::{self, Layout};
 use std::cmp;
 use std::io::{BufRead, Write};
-use std::ptr;
-use std::slice;
+use std::ptr::NonNull;
 
 #[derive(Debug)]
 pub struct Buffer {
-    buf: *mut char,
+    buf: NonNull<char>,
     capacity: usize,
     size: usize,
     gap: usize,
@@ -58,7 +57,7 @@ impl Buffer {
         if pos < self.gap {
             let n = self.gap - pos;
             unsafe {
-                ptr::copy(
+                NonNull::copy_to(
                     self.buf.add(pos),
                     self.buf.add(self.gap + self.gap_len - n),
                     n,
@@ -67,7 +66,7 @@ impl Buffer {
         } else if pos > self.gap {
             let n = pos - self.gap;
             unsafe {
-                ptr::copy(
+                NonNull::copy_to(
                     self.buf.add(self.gap + self.gap_len),
                     self.buf.add(self.gap),
                     n,
@@ -78,19 +77,21 @@ impl Buffer {
         self.gap
     }
 
-    pub fn get(&self, pos: usize) -> Option<char> {
+    pub fn get_char(&self, pos: usize) -> Option<char> {
         if pos < self.size {
-            Some(self.char_at(pos))
+            Some(self.get_char_unchecked(pos))
         } else {
             None
         }
     }
 
-    pub fn insert(&mut self, c: char) -> usize {
+    fn get_char_unchecked(&self, pos: usize) -> char {
+        self.read_char(self.index_of(pos))
+    }
+
+    pub fn insert_char(&mut self, c: char) -> usize {
         self.ensure(1);
-        unsafe {
-            *self.buf.add(self.gap) = c;
-        }
+        self.write_char(self.gap, c);
         self.gap += 1;
         self.gap_len -= 1;
         self.size += 1;
@@ -101,7 +102,8 @@ impl Buffer {
         let n = cs.len();
         self.ensure(n);
         unsafe {
-            ptr::copy_nonoverlapping(cs.as_ptr(), self.buf.add(self.gap), n);
+            let cs_ptr = NonNull::new_unchecked(cs.as_ptr() as *mut char);
+            cs_ptr.copy_to_nonoverlapping(self.ptr_at(self.gap), n);
         }
         self.gap += n;
         self.gap_len -= n;
@@ -109,9 +111,9 @@ impl Buffer {
         self.gap
     }
 
-    pub fn delete(&mut self) -> Option<char> {
+    pub fn remove_char(&mut self) -> Option<char> {
         if self.gap < self.size {
-            let c = unsafe { *self.buf.add(self.gap + self.gap_len) };
+            let c = self.read_char(self.gap + self.gap_len);
             self.gap_len += 1;
             self.size -= 1;
             Some(c)
@@ -120,11 +122,12 @@ impl Buffer {
         }
     }
 
-    pub fn delete_chars(&mut self, count: usize) -> Option<Vec<char>> {
+    pub fn remove_chars(&mut self, count: usize) -> Option<Vec<char>> {
         if self.gap < self.size {
             let end = self.gap + self.gap_len;
             let n = cmp::min(count, self.capacity - end);
-            let cs = unsafe { Vec::from(slice::from_raw_parts(self.buf.add(end), n)) };
+            let cs =
+                Vec::from(unsafe { NonNull::slice_from_raw_parts(self.ptr_at(end), n).as_ref() });
             self.gap_len += n;
             self.size -= n;
             Some(cs)
@@ -246,7 +249,7 @@ impl Buffer {
         let mut count = 0;
 
         for pos in 0..self.size {
-            let c = self.char_at(pos);
+            let c = self.get_char_unchecked(pos);
             let encoding = c.encode_utf8(&mut bytes);
             chunk.extend_from_slice(encoding.as_bytes());
             if chunk.len() >= WRITE_CHUNK_SIZE || pos == self.size - 1 {
@@ -276,8 +279,8 @@ impl Buffer {
     }
 
     #[inline(always)]
-    fn char_at(&self, pos: usize) -> char {
-        unsafe { *self.buf.add(self.index_of(pos)) }
+    fn ptr_at(&self, n: usize) -> NonNull<char> {
+        unsafe { self.buf.add(n) }
     }
 
     #[inline(always)]
@@ -287,6 +290,16 @@ impl Buffer {
         } else {
             pos + self.gap_len
         }
+    }
+
+    #[inline(always)]
+    fn read_char(&self, n: usize) -> char {
+        unsafe { self.ptr_at(n).read() }
+    }
+
+    #[inline(always)]
+    fn write_char(&mut self, n: usize, c: char) {
+        unsafe { self.ptr_at(n).write(c) }
     }
 
     /// Ensure that buffer capacity is at least `n` bytes.
@@ -299,8 +312,6 @@ impl Buffer {
 
     /// Increase buffer capacity by at least `need` bytes.
     fn grow(&mut self, need: usize) {
-        // Calculate new capacity which must satisfy needed bytes but also align on
-        // growth increment.
         let capacity = if need > MAX_CAPACITY {
             panic!("incremental allocation too large: {} bytes", need);
         } else {
@@ -315,11 +326,11 @@ impl Buffer {
         let gap_len = self.gap_len + (capacity - self.capacity);
         unsafe {
             // Copy left of gap.
-            ptr::copy_nonoverlapping(self.buf, buf, self.gap);
+            NonNull::copy_to_nonoverlapping(self.ptr_at(0), buf, self.gap);
 
             // Copy right of gap.
-            ptr::copy_nonoverlapping(
-                self.buf.add(self.gap + self.gap_len),
+            NonNull::copy_to_nonoverlapping(
+                self.ptr_at(self.gap + self.gap_len),
                 buf.add(self.gap + gap_len),
                 capacity - (self.gap + gap_len),
             );
@@ -332,22 +343,21 @@ impl Buffer {
         self.gap_len = gap_len;
     }
 
-    fn alloc(capacity: usize) -> *mut char {
+    fn alloc(capacity: usize) -> NonNull<char> {
         if capacity > MAX_CAPACITY {
             panic!("allocation too large: {} bytes", capacity);
         }
         let layout = Layout::array::<char>(capacity).unwrap();
-        let buf = unsafe { alloc::alloc(layout) as *mut char };
-        if buf.is_null() {
-            alloc::handle_alloc_error(layout);
-        } else {
-            buf
+        let ptr = unsafe { alloc::alloc(layout) as *mut char };
+        match NonNull::new(ptr) {
+            Some(buf) => buf,
+            None => alloc::handle_alloc_error(layout),
         }
     }
 
-    fn dealloc(buf: *mut char, capacity: usize) {
+    fn dealloc(buf: NonNull<char>, capacity: usize) {
         let layout = Layout::array::<char>(capacity).unwrap();
-        unsafe { alloc::dealloc(buf as *mut u8, layout) }
+        unsafe { alloc::dealloc(buf.as_ptr() as *mut u8, layout) }
     }
 }
 
@@ -373,7 +383,7 @@ impl Iterator for Forward<'_> {
 
     fn next(&mut self) -> Option<char> {
         if self.pos < self.buffer.size {
-            let c = self.buffer.char_at(self.pos);
+            let c = self.buffer.get_char_unchecked(self.pos);
             self.pos += 1;
             Some(c)
         } else {
@@ -414,7 +424,7 @@ impl Iterator for Backward<'_> {
     fn next(&mut self) -> Option<char> {
         if self.pos > 0 {
             self.pos -= 1;
-            let c = self.buffer.char_at(self.pos);
+            let c = self.buffer.get_char_unchecked(self.pos);
             Some(c)
         } else {
             None
@@ -446,7 +456,6 @@ mod tests {
     #[test]
     fn new_buffer() {
         let buf = Buffer::new();
-        assert!(!buf.buf.is_null());
         assert_eq!(buf.capacity, INIT_CAPACITY);
         assert_eq!(buf.size, 0);
         assert_eq!(buf.gap, 0);
@@ -458,7 +467,6 @@ mod tests {
         const CAP: usize = 17;
 
         let buf = Buffer::with_capacity(CAP);
-        assert!(!buf.buf.is_null());
         assert_eq!(buf.capacity, CAP);
         assert_eq!(buf.size, 0);
         assert_eq!(buf.gap, 0);
@@ -471,7 +479,7 @@ mod tests {
 
         let mut buf = Buffer::with_capacity(CAP);
         for c in iter::repeat('*').take(CAP + 1) {
-            buf.insert(c);
+            buf.insert_char(c);
         }
         assert_eq!(buf.capacity, GROW_CAPACITY);
         assert_eq!(buf.size, CAP + 1);
@@ -480,23 +488,23 @@ mod tests {
     #[test]
     fn insert() {
         let mut buf = Buffer::new();
-        let pos = buf.insert('a');
+        let pos = buf.insert_char('a');
         assert_eq!(pos, 1);
-        assert_eq!(buf.get(0), Some('a'));
+        assert_eq!(buf.get_char(0), Some('a'));
         assert_eq!(buf.size(), 1);
 
-        let pos = buf.insert('b');
+        let pos = buf.insert_char('b');
         assert_eq!(pos, 2);
-        assert_eq!(buf.get(1), Some('b'));
+        assert_eq!(buf.get_char(1), Some('b'));
         assert_eq!(buf.size(), 2);
 
         let pos = buf.set_pos(1);
         assert_eq!(pos, 1);
-        let pos = buf.insert('c');
+        let pos = buf.insert_char('c');
         assert_eq!(pos, 2);
-        assert_eq!(buf.get(0), Some('a'));
-        assert_eq!(buf.get(1), Some('c'));
-        assert_eq!(buf.get(2), Some('b'));
+        assert_eq!(buf.get_char(0), Some('a'));
+        assert_eq!(buf.get_char(1), Some('c'));
+        assert_eq!(buf.get_char(2), Some('b'));
         assert_eq!(buf.size(), 3);
     }
 
@@ -505,21 +513,21 @@ mod tests {
         let mut buf = Buffer::new();
         let pos = buf.insert_chars(&vec!['a', 'b', 'c']);
         assert_eq!(pos, 3);
-        assert_eq!(buf.get(0), Some('a'));
-        assert_eq!(buf.get(1), Some('b'));
-        assert_eq!(buf.get(2), Some('c'));
+        assert_eq!(buf.get_char(0), Some('a'));
+        assert_eq!(buf.get_char(1), Some('b'));
+        assert_eq!(buf.get_char(2), Some('c'));
         assert_eq!(buf.size(), 3);
 
         let pos = buf.set_pos(1);
         assert_eq!(pos, 1);
         let pos = buf.insert_chars(&vec!['d', 'e', 'f']);
         assert_eq!(pos, 4);
-        assert_eq!(buf.get(0), Some('a'));
-        assert_eq!(buf.get(1), Some('d'));
-        assert_eq!(buf.get(2), Some('e'));
-        assert_eq!(buf.get(3), Some('f'));
-        assert_eq!(buf.get(4), Some('b'));
-        assert_eq!(buf.get(5), Some('c'));
+        assert_eq!(buf.get_char(0), Some('a'));
+        assert_eq!(buf.get_char(1), Some('d'));
+        assert_eq!(buf.get_char(2), Some('e'));
+        assert_eq!(buf.get_char(3), Some('f'));
+        assert_eq!(buf.get_char(4), Some('b'));
+        assert_eq!(buf.get_char(5), Some('c'));
         assert_eq!(buf.size(), 6);
     }
 
@@ -534,9 +542,9 @@ mod tests {
 
         let pos = buf.set_pos(1);
         assert_eq!(pos, 1);
-        let c = buf.delete();
+        let c = buf.remove_char();
         assert_eq!(c, Some('b'));
-        assert_eq!(buf.get(1), Some('c'));
+        assert_eq!(buf.get_char(1), Some('c'));
         assert_eq!(buf.size(), cs.len() - 1);
     }
 
@@ -551,9 +559,9 @@ mod tests {
 
         let pos = buf.set_pos(3);
         assert_eq!(pos, 3);
-        let cs = buf.delete_chars(3);
+        let cs = buf.remove_chars(3);
         assert_eq!(cs, Some(vec!['x', 'y', 'z']));
-        assert_eq!(buf.get(3), Some('d'));
+        assert_eq!(buf.get_char(3), Some('d'));
         assert_eq!(buf.size(), text.len() - 3);
     }
 

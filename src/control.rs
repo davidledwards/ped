@@ -240,19 +240,19 @@ impl Controller {
                 // "1"
                 Key::Char('1') => {
                     let cs = "^lorem-ipsum$".chars().collect();
-                    self.editor.insert(&cs);
+                    self.editor.insert_chars(&cs);
                 }
                 // "2"
                 Key::Char('2') => {
                     let cs = "^lorem-ipsum$\n^lorem-ipsum$\n^lorem-ipsum$"
                         .chars()
                         .collect();
-                    self.editor.insert(&cs);
+                    self.editor.insert_chars(&cs);
                 }
                 // "3"
                 Key::Char('3') => {
                     let cs = "@".repeat(10000).chars().collect();
-                    self.editor.insert(&cs);
+                    self.editor.insert_chars(&cs);
                 }
                 // "6"
                 Key::Char('6') => {

@@ -56,10 +56,10 @@ impl Editor {
     }
 
     pub fn insert_char(&mut self, c: char) {
-        self.insert(&vec![c])
+        self.insert_chars(&vec![c])
     }
 
-    pub fn insert(&mut self, cs: &Vec<char>) {
+    pub fn insert_chars(&mut self, cs: &Vec<char>) {
         // Knowing number of wrapping rows prior to insertion helps optimize rendering
         // when resulting cursor remains on same row.
         let wrap_rows = self.wrapped_rows(self.row_pos);
@@ -141,7 +141,7 @@ impl Editor {
             // This unwrap should never panic since condition of entering this block
             // is that > 0 characters will be removed.
             self.buffer.set_pos(from_pos);
-            let text = self.buffer.delete_chars(self.cur_pos - from_pos).unwrap();
+            let text = self.buffer.remove_chars(self.cur_pos - from_pos).unwrap();
 
             let row = match maybe_row {
                 Some(row) => {
@@ -202,7 +202,7 @@ impl Editor {
             // This unwrap should never panic since condition of entering this block
             // is that > 0 characters will be removed.
             self.buffer.set_pos(self.cur_pos);
-            let text = self.buffer.delete_chars(to_pos - self.cur_pos).unwrap();
+            let text = self.buffer.remove_chars(to_pos - self.cur_pos).unwrap();
 
             match wrap_rows {
                 Some(wrap_rows) => {
@@ -656,7 +656,7 @@ impl Editor {
     /// Returns `None` if the current row is already at the top of the buffer.
     fn prev_row(&self, row_pos: usize) -> Option<usize> {
         if row_pos > 0 {
-            let offset = match self.buffer.get(row_pos - 1) {
+            let offset = match self.buffer.get_char(row_pos - 1) {
                 // Indicates that current row position is also beginning of line, so
                 // determine offset to prior row by finding beginning of prior line.
                 Some('\n') => {
@@ -762,7 +762,7 @@ impl Editor {
                 .backward(self.cur_pos)
                 .index()
                 .take(self.cur_pos - pos)
-                .fold((0, self.cursor.col), |(rows, col), (pos, c)| {
+                .fold((0, self.cursor.col), |(rows, col), (_, c)| {
                     if c == '\n' || col == 0 {
                         (rows + 1, self.window.cols() - 1)
                     } else {
