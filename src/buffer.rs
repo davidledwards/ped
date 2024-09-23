@@ -151,8 +151,12 @@ impl Buffer {
             .unwrap_or(0)
     }
 
-    // find end of line relative to pos or end of buffer
-    // points to \n, otherwise end of buffer
+    /// Returns the position of the end of line relative to `pos`.
+    ///
+    /// Specifically, this function returns the position of the first `\n` encountered when
+    /// scanning foewards from `pos`, or returns the end of buffer position if reached first.
+    ///
+    /// Note that when scanning forwards, `pos` is an _inclusive_ bound.
     pub fn find_end_line(&self, pos: usize) -> usize {
         self.forward(pos)
             .index()
@@ -161,9 +165,12 @@ impl Buffer {
             .unwrap_or(self.size)
     }
 
-    // find end of line relative to pos but only n distance away from pos, whichever
-    // comes first
-    // resulting pos could be \n, end of buffer, or arbitrary char if n is reached first
+    /// Returns either the position of the end of line relative to `pos` or `n` characters
+    /// forward, whichever comes first.
+    ///
+    /// This function behaves similar to [find_end_line], but stops searching if `n`
+    /// characters are scanned before `\n` is encountered, essentially placing a bound on
+    /// the search range.
     pub fn find_end_line_or(&self, pos: usize, n: usize) -> usize {
         self.forward(pos)
             .index()
@@ -173,12 +180,10 @@ impl Buffer {
             .unwrap_or_else(|| cmp::min(pos + n, self.size))
     }
 
+    /// Returns a `Some` containing either the position of the first character of the line
+    /// that follows the current line referenced by `pos` or `n` characters forward,
+    /// otherwise `None` if end of buffer is reached.
     pub fn find_next_line_or(&self, pos: usize, n: usize) -> Option<usize> {
-        // Scans forward until \n encountered, but not to exceed specified number of
-        // characters. If find operation terminates before end of buffer or maximum number
-        // of characters are scanned, this implies \n is found, so skip to next character.
-        // Otherwise, distinguish between both conditions that could cause find to
-        // terminate early.
         self.forward(pos)
             .index()
             .take(n)
