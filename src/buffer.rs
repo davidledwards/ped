@@ -144,69 +144,61 @@ impl Buffer {
     ///
     /// Note that when scanning backwards, `pos` is an _exclusive_ bound.
     pub fn find_beg_line(&self, pos: usize) -> usize {
-        let r = self.backward(pos).index().find(|&(_, c)| c == '\n');
-        match r {
-            Some((_pos, _)) => _pos + 1,
-            None => 0,
-        }
+        self.backward(pos)
+            .index()
+            .find(|&(_, c)| c == '\n')
+            .map(|(_pos, _)| _pos + 1)
+            .unwrap_or(0)
     }
 
     // find end of line relative to pos or end of buffer
     // points to \n, otherwise end of buffer
     pub fn find_end_line(&self, pos: usize) -> usize {
-        let r = self.forward(pos).index().find(|&(_, c)| c == '\n');
-        match r {
-            Some((_pos, _)) => _pos,
-            None => self.size,
-        }
+        self.forward(pos)
+            .index()
+            .find(|&(_, c)| c == '\n')
+            .map(|(_pos, _)| _pos)
+            .unwrap_or(self.size)
     }
 
     // find end of line relative to pos but only n distance away from pos, whichever
     // comes first
     // resulting pos could be \n, end of buffer, or arbitrary char if n is reached first
     pub fn find_end_line_or(&self, pos: usize, n: usize) -> usize {
-        let r = self.forward(pos).index().take(n).find(|&(_, c)| c == '\n');
-        match r {
-            Some((_pos, _)) => _pos,
-            None => cmp::min(pos + n, self.size),
-        }
+        self.forward(pos)
+            .index()
+            .take(n)
+            .find(|&(_, c)| c == '\n')
+            .map(|(_pos, _)| _pos)
+            .unwrap_or_else(|| cmp::min(pos + n, self.size))
     }
 
     pub fn find_next_line_or(&self, pos: usize, n: usize) -> Option<usize> {
         // Scans forward until \n encountered, but not to exceed specified number of
-        // characters.
-        let r = self.forward(pos).index().take(n).find(|&(_, c)| c == '\n');
-
-        // If find operation terminates before end of buffer or maximum number of
-        // characters are scanned, this implies \n is found, so skip to next character.
+        // characters. If find operation terminates before end of buffer or maximum number
+        // of characters are scanned, this implies \n is found, so skip to next character.
         // Otherwise, distinguish between both conditions that could cause find to
         // terminate early.
-        match r {
-            Some((_pos, _)) => Some(_pos + 1),
-            None => {
-                if pos + n < self.size {
-                    Some(pos + n)
-                } else {
-                    None
-                }
-            }
-        }
+        self.forward(pos)
+            .index()
+            .take(n)
+            .find(|&(_, c)| c == '\n')
+            .map(|(_pos, _)| _pos + 1)
+            .or_else(|| (pos + n < self.size).then(|| pos + n))
     }
 
     pub fn find_prev(&self, pos: usize) -> Option<usize> {
-        // find end of previous line first
-        let r = self.backward(pos).index().find(|&(_, c)| c == '\n');
-        match r {
-            Some((_pos, _)) => {
-                // then find beginning of previous line
-                let r = self.backward(_pos).index().find(|&(_, c)| c == '\n');
-                match r {
-                    Some((_pos, _)) => Some(_pos + 1),
-                    None => Some(0),
-                }
-            }
-            None => None,
-        }
+        // find end of previous line first, then find beginning of previous line
+        self.backward(pos)
+            .index()
+            .find(|&(_, c)| c == '\n')
+            .and_then(|(_pos, _)| {
+                self.backward(_pos)
+                    .index()
+                    .find(|&(_, c)| c == '\n')
+                    .map(|(_pos, _)| _pos + 1)
+                    .or(Some(0))
+            })
     }
 
     pub fn read<R>(&mut self, reader: &mut R) -> Result<usize>
@@ -349,10 +341,7 @@ impl Buffer {
         }
         let layout = Layout::array::<char>(capacity).unwrap();
         let ptr = unsafe { alloc::alloc(layout) as *mut char };
-        match NonNull::new(ptr) {
-            Some(buf) => buf,
-            None => alloc::handle_alloc_error(layout),
-        }
+        NonNull::new(ptr).unwrap_or_else(|| alloc::handle_alloc_error(layout))
     }
 
     fn dealloc(buf: NonNull<char>, capacity: usize) {
@@ -400,10 +389,7 @@ impl Iterator for ForwardIndex<'_> {
     type Item = (usize, char);
 
     fn next(&mut self) -> Option<(usize, char)> {
-        match self.it.next() {
-            Some(c) => Some((self.it.pos - 1, c)),
-            None => None,
-        }
+        self.it.next().map(|c| (self.it.pos - 1, c))
     }
 }
 
@@ -440,10 +426,7 @@ impl Iterator for BackwardIndex<'_> {
     type Item = (usize, char);
 
     fn next(&mut self) -> Option<(usize, char)> {
-        match self.it.next() {
-            Some(c) => Some((self.it.pos, c)),
-            None => None,
-        }
+        self.it.next().map(|c| (self.it.pos, c))
     }
 }
 
