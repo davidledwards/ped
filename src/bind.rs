@@ -29,7 +29,7 @@ pub struct Bindings {
 }
 
 impl Bindings {
-    pub fn with_bindings(bindings: &Vec<(String, String)>) -> Bindings {
+    pub fn with_bindings(bindings: &[(String, String)]) -> Bindings {
         let mut this = Bindings {
             key_map: init_key_map(),
             edit_map: init_edit_map(),
@@ -52,25 +52,28 @@ impl Bindings {
         }
     }
 
-    fn bind(&mut self, bindings: &Vec<(String, String)>) {
+    fn bind(&mut self, bindings: &[(String, String)]) {
+        // Extract canonical key names so provided bindings can be verified to exist
+        // before actually trying to bind.
         let key_names: HashSet<&'static str> = self.key_map.values().cloned().collect();
+
         for (name, op) in bindings {
-            key_names
-                .get(name as &str)
-                .map(|name| *name)
-                .and_then(|name| {
-                    self.edit_map
-                        .get_key_value(op as &str)
-                        .map(|(op, _)| *op)
-                        .and_then(|op| self.binding_map.insert(name, op))
-                });
+            if let Some(name) = key_names.get(name.as_str()) {
+                if let Some((op, _)) = self.edit_map.get_key_value(op.as_str()) {
+                    self.binding_map.insert(name, op);
+                } else {
+                    // error: op name unknown
+                }
+            } else {
+                // error: key name unknown
+            }
         }
     }
 }
 
 impl Default for Bindings {
     fn default() -> Bindings {
-        let bindings = DEFAULT_BINDINGS
+        let bindings: Vec<(String, String)> = DEFAULT_BINDINGS
             .iter()
             .map(|(name, op)| (name.to_string(), op.to_string()))
             .collect();
