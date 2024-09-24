@@ -3,7 +3,6 @@
 use crate::canvas::Point;
 use crate::color::Color;
 use crate::error::Result;
-use crate::term;
 use crate::window::Window;
 
 // idea behind the workspace is that it manages the individual windows.
@@ -34,12 +33,11 @@ use crate::window::Window;
 // - size
 // - ...
 //
-// Document: an editing context attached to a buffer
-// - file path
+// Editor: an editing context attached to a buffer
+// - name/URL/path
 // - buffer
 // - cursor (row, col)
-// - list of windows (possibly none if not visible on workspace)
-// - window (window where editing is focused, possibly none)
+// - window (if attached, possibly none)
 //
 // Window: a viewable area on the workspace
 // - origin (row, col)
@@ -53,7 +51,7 @@ use crate::window::Window;
 // - cols
 // - list of windows
 //
-// Editor: a controller that allows editing of documents in the workspace
+// Controller: a controller that allows editing of documents in the workspace
 // - workspace
 // - list of buffers
 // - list of documents (each document attached to a buffer)
@@ -70,16 +68,66 @@ use crate::window::Window;
 // map of (id, window)
 // - take(id): returns window, which allows it to be attached to an editor
 //
+// struct Workspace
+// - rows
+// - cols
+// - windows: map<id, window>
+// - default color
+//
+// when new window is created, existing windows may need to be resized. this also happens
+// if the terminal size changes and the workspace is asked to resize itself.
+// - each window likely to get recreated since the size changes, and hence the canvas
+//   must also change. in a sense, it would be akin to attaching a window to an editor.
+// - for each impacted window, detach the editor, recreate the window, and reattach the
+//   editor. this implies that a reference to the editor must be kept with the window.
+//
+// corner cases to consider
+// - is there a minimum window size and workspace size?
+// - what happens when adding a new window would violate the minimum window size?
+// - how should the workspace behave under these circumstances?
+//
+// layout:
+// - bottom row reserved for workspace
+// -
+
+const MAX_WINDOWS: usize = 32;
 
 pub struct Workspace {
     rows: u32,
     cols: u32,
+    windows: [Option<Window>; MAX_WINDOWS],
 }
 
 impl Workspace {
-    pub fn new() -> Result<Workspace> {
-        let (rows, cols) = term::size()?;
-        Ok(Workspace { rows, cols })
+    pub fn new(rows: u32, cols: u32) -> Result<Workspace> {
+        // create window to occupy workspace
+        // must always have 1 window
+
+        let mut windows = [const { None }; MAX_WINDOWS];
+        let win = Window::new(Point::new(0, 0), rows - 1, cols, Color::new(46, 232));
+        windows[0] = Some(win);
+        Ok(Workspace {
+            rows,
+            cols,
+            windows,
+        })
+    }
+
+    pub fn window(&mut self, id: usize) -> Option<&mut Window> {
+        if id < MAX_WINDOWS {
+            self.windows[id].as_mut()
+        } else {
+            None
+        }
+    }
+
+    pub fn open(&mut self) -> usize {
+        // opens new window, should have argument instructing how this should be done.
+        // a new window will always affect the dimensions of at least one window since
+        // windows are tiled.
+        //
+
+        0
     }
 
     // temp for now, just to give us a window occupying the workspace

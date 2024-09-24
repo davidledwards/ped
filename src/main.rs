@@ -1,4 +1,5 @@
 mod ansi;
+mod bind;
 mod buffer;
 mod canvas;
 mod color;
@@ -8,7 +9,6 @@ mod editor;
 mod error;
 mod io;
 mod key;
-mod keymap;
 mod term;
 mod window;
 mod workspace;
@@ -28,8 +28,9 @@ fn main() -> Result<()> {
     let pos = buffer.size() / 2;
     buffer.set_pos(pos);
 
+    let (rows, cols) = term::size()?;
     let keyboard = Keyboard::new();
-    let mut workspace = Workspace::new()?;
+    let mut workspace = Workspace::new(rows, cols)?;
     let editor = Editor::new(buffer, workspace.new_window());
 
     let mut controller = Controller::new(keyboard, workspace, editor);

@@ -1,11 +1,10 @@
 //! Main controller.
 
+use crate::bind::Bindings;
 use crate::editor::{Editor, Focus};
 use crate::error::Result;
-use crate::key::{Key, Keyboard, Modifier};
+use crate::key::{Ctrl, Key, Keyboard, Shift};
 use crate::workspace::Workspace;
-
-use std::collections::HashMap;
 
 //
 // this is the controller that loops indefinitely over keystrokes, modifies the buffer,
@@ -146,36 +145,20 @@ use std::collections::HashMap;
 //
 // key::keys -> &'static [KeyName]
 
-type KeyMap = HashMap<Key, Box<dyn Fn(&mut Editor) -> Result<()>>>;
-
 pub struct Controller {
     keyboard: Keyboard,
     workspace: Workspace,
     editor: Editor,
-    keymap: KeyMap,
-}
-
-fn do_move_beg(editor: &mut Editor) -> Result<()> {
-    editor.move_beg();
-    Ok(())
-}
-
-fn do_move_down(editor: &mut Editor) -> Result<()> {
-    editor.move_down();
-    Ok(())
+    bindings: Bindings,
 }
 
 impl Controller {
     pub fn new(keyboard: Keyboard, workspace: Workspace, editor: Editor) -> Controller {
-        let mut keymap: KeyMap = HashMap::new();
-        keymap.insert(Key::Control(1), Box::new(do_move_beg));
-        keymap.insert(Key::Down(Modifier::None), Box::new(do_move_down));
-
         Controller {
             keyboard,
             workspace,
             editor,
-            keymap,
+            bindings: Bindings::default(),
         }
     }
 
@@ -187,38 +170,38 @@ impl Controller {
                 Key::None => {
                     // check for change in terminal size and update workspace
                 }
-                Key::Up(Modifier::None) => {
+                Key::Up(Shift::Off, Ctrl::Off) => {
                     self.editor.move_up();
                 }
-                Key::Down(Modifier::None) => {
+                Key::Down(Shift::Off, Ctrl::Off) => {
                     self.editor.move_down();
                 }
-                Key::Left(Modifier::None) => {
+                Key::Left(Shift::Off, Ctrl::Off) => {
                     self.editor.move_left();
                 }
-                Key::Right(Modifier::None) => {
+                Key::Right(Shift::Off, Ctrl::Off) => {
                     self.editor.move_right();
                 }
                 // fn/up-arrow
-                Key::PageUp(Modifier::None) => {
+                Key::PageUp(Shift::Off, Ctrl::Off) => {
                     self.editor.move_page_up();
                 }
                 // fn/down-arrow
-                Key::PageDown(Modifier::None) => {
+                Key::PageDown(Shift::Off, Ctrl::Off) => {
                     self.editor.move_page_down();
                 }
                 // fn/left-arrow
-                Key::Home(Modifier::None) => {
+                Key::Home(Shift::Off, Ctrl::Off) => {
                     self.editor.move_top();
                 }
                 // fn/right-arrow
-                Key::End(Modifier::None) => {
+                Key::End(Shift::Off, Ctrl::Off) => {
                     self.editor.move_bottom();
                 }
-                Key::Up(Modifier::ShiftControl) => {
+                Key::Up(Shift::On, Ctrl::On) => {
                     self.editor.scroll_up();
                 }
-                Key::Down(Modifier::ShiftControl) => {
+                Key::Down(Shift::On, Ctrl::On) => {
                     self.editor.scroll_down();
                 }
                 // ctrl-A
@@ -265,7 +248,7 @@ impl Controller {
                     let _ = self.editor.remove_to(cur_pos + 10);
                 }
                 // backspace
-                Key::Backspace => {
+                Key::Delete | Key::Control(8) => {
                     let _ = self.editor.delete_left();
                 }
                 // ctrl-D

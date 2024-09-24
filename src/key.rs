@@ -8,33 +8,34 @@ use std::str::from_utf8;
 #[derive(Eq, PartialEq, Hash, Debug)]
 pub enum Key {
     None,
-    Escape,
-    Return,
-    Backspace,
+    Control(u8),
+    Char(char),
     Delete,
     Insert,
-    Tab,
-    ReverseTab,
-    Up(Modifier),
-    Down(Modifier),
-    Right(Modifier),
-    Left(Modifier),
-    Home(Modifier),
-    End(Modifier),
-    PageUp(Modifier),
-    PageDown(Modifier),
-    Control(u8),
+    ShiftTab,
+    Up(Shift, Ctrl),
+    Down(Shift, Ctrl),
+    Right(Shift, Ctrl),
+    Left(Shift, Ctrl),
+    Home(Shift, Ctrl),
+    End(Shift, Ctrl),
+    PageUp(Shift, Ctrl),
+    PageDown(Shift, Ctrl),
     Function(u8),
-    Char(char),
 }
 
-/// An optional modifier for certain kinds of [`Key`]s.
+/// Represents the state of the _SHIFT_ key for certain kinds of [`Key`]s.
 #[derive(Eq, PartialEq, Hash, Debug)]
-pub enum Modifier {
-    None,
-    Shift,
-    Control,
-    ShiftControl,
+pub enum Shift {
+    Off,
+    On,
+}
+
+/// Represents the state of the _CONTROL_ key for certain kinds of [`Key`]s.
+#[derive(Eq, PartialEq, Hash, Debug)]
+pub enum Ctrl {
+    Off,
+    On,
 }
 
 /// A keyboard that reads bytes from the terminal and produces corresponding [`Key`]s.
@@ -72,13 +73,10 @@ impl Keyboard {
     /// Returns [`Err`] if an I/O error occurred while reading bytes from the underlying terminal.
     pub fn read(&mut self) -> Result<Key> {
         let key = match self.next()? {
-            Some(8) => Key::Backspace,
-            Some(9) => Key::Tab,
-            Some(13) => Key::Return,
             Some(27) => self.read_escape()?,
             Some(b @ 0..=31) => Key::Control(b),
             Some(b @ 32..=126) => Key::Char(b as char),
-            Some(127) => Key::Backspace,
+            Some(127) => Key::Delete,
             Some(b) => self.read_unicode(b)?,
             None => Key::None,
         };
@@ -100,7 +98,7 @@ impl Keyboard {
                     _ => Key::None,
                 }
             }
-            None => Key::Escape,
+            None => Key::Control(27),
             _ => Key::None,
         };
         Ok(key)
@@ -192,15 +190,15 @@ impl Keyboard {
 /// Returns the key corresponding to the VT-style key code and key modifier, or [`Key::None`] if
 /// unrecognized.
 fn map_vt(key_code: u8, key_mod: u8) -> Key {
-    match (key_code, key_mod.into()) {
-        (1, m) => Key::Home(m),
+    match (key_code, modifiers(key_mod)) {
+        (1, (shift, ctrl)) => Key::Home(shift, ctrl),
         (2, _) => Key::Insert,
         (3, _) => Key::Delete,
-        (4, m) => Key::End(m),
-        (5, m) => Key::PageUp(m),
-        (6, m) => Key::PageDown(m),
-        (7, m) => Key::Home(m),
-        (8, m) => Key::End(m),
+        (4, (shift, ctrl)) => Key::End(shift, ctrl),
+        (5, (shift, ctrl)) => Key::PageUp(shift, ctrl),
+        (6, (shift, ctrl)) => Key::PageDown(shift, ctrl),
+        (7, (shift, ctrl)) => Key::Home(shift, ctrl),
+        (8, (shift, ctrl)) => Key::End(shift, ctrl),
         // F0-F5
         (code @ 10..=15, _) => Key::Function(code - 10),
         // F6-F10
@@ -218,14 +216,14 @@ fn map_vt(key_code: u8, key_mod: u8) -> Key {
 /// Returns the key corresponding to the xterm-style key code and key modifier, or [`Key::None`] if
 /// unrecognized.
 fn map_xterm(key_code: u8, key_mod: u8) -> Key {
-    match (key_code, key_mod.into()) {
-        (b'A', m) => Key::Up(m),
-        (b'B', m) => Key::Down(m),
-        (b'C', m) => Key::Right(m),
-        (b'D', m) => Key::Left(m),
-        (b'F', m) => Key::End(m),
-        (b'H', m) => Key::Home(m),
-        (b'Z', _) => Key::ReverseTab,
+    match (key_code, modifiers(key_mod)) {
+        (b'A', (shift, ctrl)) => Key::Up(shift, ctrl),
+        (b'B', (shift, ctrl)) => Key::Down(shift, ctrl),
+        (b'C', (shift, ctrl)) => Key::Right(shift, ctrl),
+        (b'D', (shift, ctrl)) => Key::Left(shift, ctrl),
+        (b'F', (shift, ctrl)) => Key::End(shift, ctrl),
+        (b'H', (shift, ctrl)) => Key::Home(shift, ctrl),
+        (b'Z', _) => Key::ShiftTab,
         // F1-F4
         (code @ b'P'..=b'S', _) => Key::Function(code - b'P' + 1),
         _ => Key::None,
@@ -238,15 +236,14 @@ const MOD_SHIFT_MASK: u8 = 0x01;
 const MOD_CONTROL_MASK: u8 = 0x04;
 const MOD_ALL_MASK: u8 = MOD_SHIFT_MASK | MOD_CONTROL_MASK;
 
-impl From<u8> for Modifier {
-    fn from(key_mod: u8) -> Self {
-        // Per ANSI, all key modifiers default to 1, hence the reason for substraction before
-        // applying the bitmask.
-        match (key_mod - 1) & MOD_ALL_MASK {
-            MOD_SHIFT_MASK => Modifier::Shift,
-            MOD_CONTROL_MASK => Modifier::Control,
-            MOD_ALL_MASK => Modifier::ShiftControl,
-            _ => Modifier::None,
-        }
+/// Returns the state of _SHIFT_ and _CONTROL_ keys based on the given bitmask.
+fn modifiers(key_mod: u8) -> (Shift, Ctrl) {
+    // Per ANSI standard, all key modifiers default to 1, hence the reason for substraction
+    // before applying the bitmask.
+    match (key_mod - 1) & MOD_ALL_MASK {
+        MOD_SHIFT_MASK => (Shift::On, Ctrl::Off),
+        MOD_CONTROL_MASK => (Shift::Off, Ctrl::On),
+        MOD_ALL_MASK => (Shift::On, Ctrl::On),
+        _ => (Shift::Off, Ctrl::Off),
     }
 }
