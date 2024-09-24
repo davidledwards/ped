@@ -1,9 +1,9 @@
 //! Main controller.
 
 use crate::bind::Bindings;
-use crate::editor::{Editor, Focus};
+use crate::editor::Editor;
 use crate::error::Result;
-use crate::key::{Ctrl, Key, Keyboard, Shift};
+use crate::key::{Key, Keyboard};
 use crate::workspace::Workspace;
 
 //
@@ -153,112 +153,64 @@ pub struct Controller {
 }
 
 impl Controller {
-    pub fn new(keyboard: Keyboard, workspace: Workspace, editor: Editor) -> Controller {
+    pub fn new(
+        keyboard: Keyboard,
+        workspace: Workspace,
+        editor: Editor,
+        bindings: Bindings,
+    ) -> Controller {
         Controller {
             keyboard,
             workspace,
             editor,
-            bindings: Bindings::default(),
+            bindings,
         }
     }
 
     pub fn run(&mut self) -> Result<()> {
         loop {
-            match self.keyboard.read()? {
-                // ctrl-X
-                Key::Control(24) => break,
-                Key::None => {
-                    // check for change in terminal size and update workspace
-                }
-                Key::Up(Shift::Off, Ctrl::Off) => {
-                    self.editor.move_up();
-                }
-                Key::Down(Shift::Off, Ctrl::Off) => {
-                    self.editor.move_down();
-                }
-                Key::Left(Shift::Off, Ctrl::Off) => {
-                    self.editor.move_left();
-                }
-                Key::Right(Shift::Off, Ctrl::Off) => {
-                    self.editor.move_right();
-                }
-                // fn/up-arrow
-                Key::PageUp(Shift::Off, Ctrl::Off) => {
-                    self.editor.move_page_up();
-                }
-                // fn/down-arrow
-                Key::PageDown(Shift::Off, Ctrl::Off) => {
-                    self.editor.move_page_down();
-                }
-                // fn/left-arrow
-                Key::Home(Shift::Off, Ctrl::Off) => {
-                    self.editor.move_top();
-                }
-                // fn/right-arrow
-                Key::End(Shift::Off, Ctrl::Off) => {
-                    self.editor.move_bottom();
-                }
-                Key::Up(Shift::On, Ctrl::On) => {
-                    self.editor.scroll_up();
-                }
-                Key::Down(Shift::On, Ctrl::On) => {
-                    self.editor.scroll_down();
-                }
-                // ctrl-A
-                Key::Control(1) => {
-                    self.editor.move_beg();
-                }
-                // ctrl-E
-                Key::Control(5) => {
-                    self.editor.move_end();
-                }
-                // ctrl-L
-                Key::Control(12) => {
-                    self.editor.align_cursor(Focus::Auto);
-                }
-                // ctrl-R
-                Key::Control(18) => {
-                    self.editor.render();
-                }
-                // "1"
-                Key::Char('1') => {
-                    let cs = "^lorem-ipsum$".chars().collect();
-                    self.editor.insert_chars(&cs);
-                }
-                // "2"
-                Key::Char('2') => {
-                    let cs = "^lorem-ipsum$\n^lorem-ipsum$\n^lorem-ipsum$"
-                        .chars()
-                        .collect();
-                    self.editor.insert_chars(&cs);
-                }
-                // "3"
-                Key::Char('3') => {
-                    let cs = "@".repeat(10000).chars().collect();
-                    self.editor.insert_chars(&cs);
-                }
-                // "6"
-                Key::Char('6') => {
-                    let (_, cur_pos) = self.editor.cursor();
-                    let _ = self.editor.remove_from(cur_pos.saturating_sub(10));
-                }
-                // "7"
-                Key::Char('7') => {
-                    let (_, cur_pos) = self.editor.cursor();
-                    let _ = self.editor.remove_to(cur_pos + 10);
-                }
-                // backspace
-                Key::Delete | Key::Control(8) => {
-                    let _ = self.editor.delete_left();
-                }
-                // ctrl-D
-                Key::Control(4) => {
-                    let _ = self.editor.delete_right();
-                }
-                Key::Char(c) => {
-                    self.editor.insert_char(c);
-                }
-                _ => {}
+            let key = self.keyboard.read()?;
+            match self.bindings.lookup(&key) {
+                Some(binding) => binding(&mut self.editor, &key)?,
+                None => match key {
+                    Key::None => {
+                        // check for change in terminal size and update workspace
+                    }
+                    // ctrl-X
+                    Key::Control(24) => break,
+                    // ctrl-R
+                    Key::Control(18) => {
+                        self.editor.render();
+                    }
+                    // "1"
+                    Key::Char('1') => {
+                        let cs = "^lorem-ipsum$".chars().collect();
+                        self.editor.insert_chars(&cs);
+                    }
+                    // "2"
+                    Key::Char('2') => {
+                        let cs = "^lorem-ipsum$\n^lorem-ipsum$\n^lorem-ipsum$"
+                            .chars()
+                            .collect();
+                        self.editor.insert_chars(&cs);
+                    }
+                    // "3"
+                    Key::Char('3') => {
+                        let cs = "@".repeat(10000).chars().collect();
+                        self.editor.insert_chars(&cs);
+                    }
+                    // "6"
+                    Key::Char('6') => {
+                        let (_, cur_pos) = self.editor.cursor();
+                        let _ = self.editor.remove_from(cur_pos.saturating_sub(10));
+                    }
+                    // "7"
+                    Key::Char('7') => {
+                        let (_, cur_pos) = self.editor.cursor();
+                        let _ = self.editor.remove_to(cur_pos + 10);
+                    }
+                    _ => {}
+                },
             }
         }
         Ok(())

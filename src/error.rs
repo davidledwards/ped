@@ -8,11 +8,17 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// The set of possible errors.
 #[derive(Debug)]
 pub enum Error {
+    /// A generic error with corresponding message.
+    Generic(String),
+
     /// An I/O error.
     IO(io::Error),
+}
 
-    /// A UTF-8 decoding error.
-    UTF8(std::str::Utf8Error),
+impl From<String> for Error {
+    fn from(e: String) -> Error {
+        Error::Generic(e)
+    }
 }
 
 impl From<io::Error> for Error {
@@ -23,6 +29,6 @@ impl From<io::Error> for Error {
 
 impl From<std::str::Utf8Error> for Error {
     fn from(e: std::str::Utf8Error) -> Error {
-        Error::UTF8(e)
+        Error::Generic(e.to_string())
     }
 }

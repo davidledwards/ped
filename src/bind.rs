@@ -1,6 +1,6 @@
 //! Key bindings.
 
-use crate::editor::Editor;
+use crate::editor::{Editor, Focus};
 use crate::error::Result;
 use crate::key::{Ctrl, Key, Shift};
 use std::collections::{HashMap, HashSet};
@@ -29,14 +29,14 @@ pub struct Bindings {
 }
 
 impl Bindings {
-    pub fn with_bindings(bindings: &[(String, String)]) -> Bindings {
+    pub fn with_bindings(bindings: &[(String, String)]) -> Result<Bindings> {
         let mut this = Bindings {
             key_map: init_key_map(),
             edit_map: init_edit_map(),
             binding_map: BindingMap::new(),
         };
-        this.bind(bindings);
-        this
+        this.bind(bindings)?;
+        Ok(this)
     }
 
     pub fn lookup(&self, key: &Key) -> Option<&Binding> {
@@ -52,22 +52,29 @@ impl Bindings {
         }
     }
 
-    fn bind(&mut self, bindings: &[(String, String)]) {
+    fn bind(&mut self, bindings: &[(String, String)]) -> Result<()> {
         // Extract canonical key names so provided bindings can be verified to exist
         // before actually trying to bind.
-        let key_names: HashSet<&'static str> = self.key_map.values().cloned().collect();
+        //
+        // A special "char" name is added since this needs to be resolved, but cannot
+        // exist in predefined key mappings because all characters map to this name.
+        let mut key_names: HashSet<&'static str> = self.key_map.values().cloned().collect();
+        key_names.insert("char");
 
         for (name, op) in bindings {
             if let Some(name) = key_names.get(name.as_str()) {
                 if let Some((op, _)) = self.edit_map.get_key_value(op.as_str()) {
                     self.binding_map.insert(name, op);
                 } else {
-                    // error: op name unknown
+                    return Err(
+                        format!("key binding ({name} -> {op}): {op}: unknown operation").into(),
+                    );
                 }
             } else {
-                // error: key name unknown
+                return Err(format!("key binding ({name} -> {op}): {name}: unknown key").into());
             }
         }
+        Ok(())
     }
 }
 
@@ -77,13 +84,38 @@ impl Default for Bindings {
             .iter()
             .map(|(name, op)| (name.to_string(), op.to_string()))
             .collect();
-        Bindings::with_bindings(&bindings)
+        match Bindings::with_bindings(&bindings) {
+            Ok(bindings) => bindings,
+            Err(e) => panic!("{e:?}"),
+        }
     }
 }
 
-const DEFAULT_BINDINGS: [(&'static str, &'static str); 2] = [
-    ("ctrl-a", "move-beg-of-line"),
-    ("ctrl-e", "move-end-of-line"),
+/// Default key bindings that associate canonical key names to canonical editing operations.
+const DEFAULT_BINDINGS: [(&'static str, &'static str); 23] = [
+    ("char", "insert-char"),
+    ("delete", "delete-char-left"),
+    ("ctrl-h", "delete-char-left"),
+    ("ctrl-d", "delete-char-right"),
+    ("up", "move-up"),
+    ("ctrl-p", "move-up"),
+    ("down", "move-down"),
+    ("ctrl-n", "move-down"),
+    ("left", "move-left"),
+    ("ctrl-b", "move-left"),
+    ("right", "move-right"),
+    ("ctrl-f", "move-right"),
+    ("page-up", "move-page-up"),
+    ("page-down", "move-page-down"),
+    ("ctrl-home", "move-top"),
+    ("ctrl-end", "move-bottom"),
+    ("shift-ctrl-up", "scroll-up"),
+    ("shift-ctrl-down", "scroll-down"),
+    ("home", "move-begin-line"),
+    ("ctrl-a", "move-begin-line"),
+    ("end", "move-end-line"),
+    ("ctrl-e", "move-end-line"),
+    ("ctrl-l", "redraw"),
 ];
 
 /// Predefined key mappings that associate well known [`Key`]s with canonical names.
@@ -108,7 +140,7 @@ const KEY_MAPPINGS: [(Key, &'static str); 87] = [
     (Key::Control(11), "ctrl-k"),
     (Key::Control(12), "ctrl-l"),
     (Key::Control(13), "ctrl-m"),
-    (Key::Control(14), "ctrl-m"),
+    (Key::Control(14), "ctrl-n"),
     (Key::Control(15), "ctrl-o"),
     (Key::Control(16), "ctrl-p"),
     (Key::Control(17), "ctrl-q"),
@@ -196,8 +228,24 @@ fn init_key_map() -> KeyMap {
 ///
 /// Canonical names are used for the runtime binding of keys to editing operations,
 /// which themselves are named and well known.
-const EDIT_MAPPINGS: [(&'static str, Binding); 2] =
-    [("move-up", bind_move_up), ("move-down", bind_move_down)];
+const EDIT_MAPPINGS: [(&'static str, Binding); 16] = [
+    ("insert-char", do_insert_char),
+    ("delete-char-left", do_delete_char_left),
+    ("delete-char-right", do_delete_char_right),
+    ("move-up", do_move_up),
+    ("move-down", do_move_down),
+    ("move-left", do_move_left),
+    ("move-right", do_move_right),
+    ("move-page-up", do_move_page_up),
+    ("move-page-down", do_move_page_down),
+    ("move-top", do_move_top),
+    ("move-bottom", do_move_bottom),
+    ("scroll-up", do_scroll_up),
+    ("scroll-down", do_scroll_down),
+    ("move-begin-line", do_move_begin_line),
+    ("move-end-line", do_move_end_line),
+    ("redraw", do_redraw),
+];
 
 fn init_edit_map() -> EditMap {
     let mut edit_map = EditMap::new();
@@ -207,12 +255,111 @@ fn init_edit_map() -> EditMap {
     edit_map
 }
 
-fn bind_move_up(editor: &mut Editor, key: &Key) -> Result<()> {
+// Below is a collection of functions that get associated with canonocal names of editing
+// operations.
+//
+// These functions are the glue between keys and editing operations, which are configurable
+// and bound at runtime.
+
+/// insert-char
+fn do_insert_char(editor: &mut Editor, key: &Key) -> Result<()> {
+    match key {
+        Key::Char(c) => {
+            editor.insert_char(*c);
+            Ok(())
+        }
+        _ => Err(format!("{key:?}: expecting Key::Char").into()),
+    }
+}
+
+/// delete-char-left
+fn do_delete_char_left(editor: &mut Editor, _: &Key) -> Result<()> {
+    // todo: should we return deleted char in result?
+    let _ = editor.delete_left();
+    Ok(())
+}
+
+/// delete-char-right
+fn do_delete_char_right(editor: &mut Editor, _: &Key) -> Result<()> {
+    // todo: should we return deleted char in result?
+    let _ = editor.delete_right();
+    Ok(())
+}
+
+/// move-up
+fn do_move_up(editor: &mut Editor, _: &Key) -> Result<()> {
     editor.move_up();
     Ok(())
 }
 
-fn bind_move_down(editor: &mut Editor, key: &Key) -> Result<()> {
+/// move-down
+fn do_move_down(editor: &mut Editor, _: &Key) -> Result<()> {
     editor.move_down();
+    Ok(())
+}
+
+/// move-left
+fn do_move_left(editor: &mut Editor, _: &Key) -> Result<()> {
+    editor.move_left();
+    Ok(())
+}
+
+/// move-right
+fn do_move_right(editor: &mut Editor, _: &Key) -> Result<()> {
+    editor.move_right();
+    Ok(())
+}
+
+/// move-page-up
+fn do_move_page_up(editor: &mut Editor, _: &Key) -> Result<()> {
+    editor.move_page_up();
+    Ok(())
+}
+
+/// move-page-down
+fn do_move_page_down(editor: &mut Editor, _: &Key) -> Result<()> {
+    editor.move_page_down();
+    Ok(())
+}
+
+/// move-top
+fn do_move_top(editor: &mut Editor, _: &Key) -> Result<()> {
+    editor.move_top();
+    Ok(())
+}
+
+/// move-bottom
+fn do_move_bottom(editor: &mut Editor, _: &Key) -> Result<()> {
+    editor.move_bottom();
+    Ok(())
+}
+
+/// scroll-up
+fn do_scroll_up(editor: &mut Editor, _: &Key) -> Result<()> {
+    editor.scroll_up();
+    Ok(())
+}
+
+/// scroll-down
+fn do_scroll_down(editor: &mut Editor, _: &Key) -> Result<()> {
+    editor.scroll_down();
+    Ok(())
+}
+
+/// move-begin-line
+fn do_move_begin_line(editor: &mut Editor, _: &Key) -> Result<()> {
+    editor.move_beg();
+    Ok(())
+}
+
+/// move-end-line
+fn do_move_end_line(editor: &mut Editor, _: &Key) -> Result<()> {
+    editor.move_end();
+    Ok(())
+}
+
+/// redraw
+fn do_redraw(editor: &mut Editor, _: &Key) -> Result<()> {
+    editor.align_cursor(Focus::Auto);
     Ok(())
 }
