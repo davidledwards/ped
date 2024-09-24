@@ -92,8 +92,9 @@ impl Default for Bindings {
 }
 
 /// Default key bindings that associate canonical key names to canonical editing operations.
-const DEFAULT_BINDINGS: [(&'static str, &'static str); 23] = [
+const DEFAULT_BINDINGS: [(&'static str, &'static str); 24] = [
     ("char", "insert-char"),
+    ("ctrl-m", "insert-line"),
     ("delete", "delete-char-left"),
     ("ctrl-h", "delete-char-left"),
     ("ctrl-d", "delete-char-right"),
@@ -228,8 +229,9 @@ fn init_key_map() -> KeyMap {
 ///
 /// Canonical names are used for the runtime binding of keys to editing operations,
 /// which themselves are named and well known.
-const EDIT_MAPPINGS: [(&'static str, Binding); 16] = [
+const EDIT_MAPPINGS: [(&'static str, Binding); 17] = [
     ("insert-char", do_insert_char),
+    ("insert-line", do_insert_line),
     ("delete-char-left", do_delete_char_left),
     ("delete-char-right", do_delete_char_right),
     ("move-up", do_move_up),
@@ -270,6 +272,12 @@ fn do_insert_char(editor: &mut Editor, key: &Key) -> Result<()> {
         }
         _ => Err(format!("{key:?}: expecting Key::Char").into()),
     }
+}
+
+/// insert-line
+fn do_insert_line(editor: &mut Editor, _: &Key) -> Result<()> {
+    editor.insert_char('\n');
+    Ok(())
 }
 
 /// delete-char-left
