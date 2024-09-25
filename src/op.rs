@@ -1,4 +1,11 @@
 //! Editing operations.
+//!
+//! A collection of functions intended to be associated with canonical names of
+//! editing operatins. These functions serve as the glue between [`Key`]s and
+//! their respective action in the context of the editing experience.
+//!
+//! See [`BindingMap`](crate::bind::BindingMap) for further details on binding keys
+//! at runtime.
 
 use crate::editor::{Editor, Focus};
 use crate::error::Result;
@@ -109,6 +116,12 @@ pub fn move_end_line(editor: &mut Editor, _: &Key) -> Result<()> {
 
 /// redraw
 pub fn redraw(editor: &mut Editor, _: &Key) -> Result<()> {
-    editor.align_cursor(Focus::Auto);
+    editor.redraw();
+    Ok(())
+}
+
+/// redraw-and-center
+pub fn redraw_and_center(editor: &mut Editor, _: &Key) -> Result<()> {
+    editor.redraw_focus(Focus::Auto);
     Ok(())
 }

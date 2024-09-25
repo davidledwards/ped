@@ -1,6 +1,6 @@
 //! Main controller.
 
-use crate::bind::Bindings;
+use crate::bind::BindingMap;
 use crate::editor::Editor;
 use crate::error::Result;
 use crate::key::{Key, Keyboard};
@@ -105,51 +105,11 @@ use crate::workspace::Workspace;
 // no longer becomes visible, yet the editing context is still retained by the editor.
 //
 
-// key map concept:
-// - map of "action" -> function
-//   - example: "cursor-up" -> move_cursor_up()
-//   - essentially a static map
-//   - used to build the actual key map at runtime
-//
-// - map of Key -> function
-//   - example: Key::Control(1) -> move_beg_of_line()
-//   - gets built at runtime
-//   - keys are well-known and finite, used to drive construction of the map
-//
-// struct KeyName {
-//    id: &'static str,
-//    key: Key,
-// }
-//
-// key map is essentially: KeyMap<KeyName, Fn>
-//
-// construct the map by iterating through array of KeyName, find key.id in the action
-// map, which returns a Fn, then add (key.key, fn) to the key map.
-// - if any key.id is not found, then panic since this would indicaate an inconsistent
-//   state.
-//
-// in practice, a user may want to rebind a "key" to an "action". for example, a user may
-// change the keys used for moving to beg and end of line.
-// ^A -> "move-beg-of-line"
-// ^E -> "move-end-of-line"
-//
-// these would be loaded from an external file and bound at runtime using the same
-// method described above.
-//
-// what do we bind by default? should this be externalized? or, embedded in the code?
-// it seems we would want a default keymap in case the externalized bindings could not
-// be located at runtime.
-//
-// KeyMap::new() -> KeyMap -- creates default keymap
-// KeyMap::load(file) -> KeyMap -- create keymap using bindings from file
-//
-// key::keys -> &'static [KeyName]
-
 pub struct Controller {
     keyboard: Keyboard,
     workspace: Workspace,
     editor: Editor,
-    bindings: Bindings,
+    bindings: BindingMap,
 }
 
 impl Controller {
@@ -157,7 +117,7 @@ impl Controller {
         keyboard: Keyboard,
         workspace: Workspace,
         editor: Editor,
-        bindings: Bindings,
+        bindings: BindingMap,
     ) -> Controller {
         Controller {
             keyboard,
@@ -178,10 +138,6 @@ impl Controller {
                     }
                     // ctrl-X
                     Key::Control(24) => break,
-                    // ctrl-R
-                    Key::Control(18) => {
-                        self.editor.render();
-                    }
                     // "1"
                     Key::Char('1') => {
                         let cs = "^lorem-ipsum$".chars().collect();

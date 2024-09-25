@@ -45,7 +45,7 @@ impl Window {
         self.color
     }
 
-    /// Set value at [[`row`, `col`]] to `cell`.
+    /// Set value of \[`row`, `col`\] to `cell`.
     pub fn set_cell(&mut self, row: u32, col: u32, cell: Cell) {
         debug_assert!(row < self.rows);
         debug_assert!(col < self.cols);
@@ -189,9 +189,9 @@ impl Window {
         }
     }
 
-    /// Forces entire window to be redrawn on display.
-    pub fn redraw(&mut self) {
+    /// Clears the front canvas such that a subsequent [`draw`](Self::draw) will effectively
+    /// render the entire display.
+    pub fn clear(&mut self) {
         self.front.clear();
-        self.draw();
     }
 }

@@ -43,7 +43,7 @@ impl Editor {
             row_pos: 0,
             cursor: Point::ORIGIN,
         };
-        editor.align_cursor(Focus::Auto);
+        editor.redraw_focus(Focus::Auto);
         editor
     }
 
@@ -243,14 +243,15 @@ impl Editor {
         // could move up or down
     }
 
-    pub fn render(&mut self) {
+    pub fn redraw(&mut self) {
         let (top_pos, _) = self.find_up(self.row_pos, self.cursor.row);
         self.render_rows_from(0, top_pos);
-        self.window.redraw();
+        self.window.clear();
+        self.window.draw();
         self.window.set_cursor(self.cursor);
     }
 
-    pub fn align_cursor(&mut self, focus: Focus) {
+    pub fn redraw_focus(&mut self, focus: Focus) {
         // Determine ideal row where cursor would like to be focused, though this should
         // be considered a hint.
         let row = match focus {
@@ -264,6 +265,7 @@ impl Editor {
         self.row_pos = self.cur_pos - col as usize;
         let (top_pos, row) = self.find_up(self.row_pos, row);
         self.render_rows_from(0, top_pos);
+        self.window.clear();
         self.window.draw();
         self.set_cursor(row, col);
     }

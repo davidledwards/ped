@@ -168,9 +168,9 @@ impl Buffer {
     /// Returns either the position of the end of line relative to `pos` or `n` characters
     /// forward, whichever comes first.
     ///
-    /// This function behaves similar to [find_end_line], but stops searching if `n`
-    /// characters are scanned before `\n` is encountered, essentially placing a bound on
-    /// the search range.
+    /// This function behaves similar to [`find_end_line`](Self::find_end_line), but stops
+    /// searching if `n` characters are scanned before `\n` is encountered, essentially
+    /// placing a bound on the search range.
     pub fn find_end_line_or(&self, pos: usize, n: usize) -> usize {
         self.forward(pos)
             .index()

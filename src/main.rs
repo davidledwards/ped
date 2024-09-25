@@ -14,13 +14,13 @@ mod term;
 mod window;
 mod workspace;
 
-use bind::Bindings;
-use buffer::Buffer;
-use control::Controller;
-use editor::Editor;
-use error::Result;
-use key::Keyboard;
-use workspace::Workspace;
+use crate::bind::BindingMap;
+use crate::buffer::Buffer;
+use crate::control::Controller;
+use crate::editor::Editor;
+use crate::error::Result;
+use crate::key::Keyboard;
+use crate::workspace::Workspace;
 
 use std::process::ExitCode;
 
@@ -37,7 +37,7 @@ fn main() -> ExitCode {
 fn run() -> Result<()> {
     term::init()?;
 
-    let bindings = Bindings::default();
+    let bindings = BindingMap::new();
 
     let mut buffer = Buffer::new();
     let _ = io::read_file("TEST", &mut buffer)?;
