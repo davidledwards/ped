@@ -1,8 +1,9 @@
 //! Key bindings.
 
-use crate::editor::{Editor, Focus};
+use crate::editor::Editor;
 use crate::error::Result;
 use crate::key::{Ctrl, Key, Shift};
+use crate::op;
 use std::collections::{HashMap, HashSet};
 
 /// A function pointer that implements an editing operation.
@@ -230,23 +231,23 @@ fn init_key_map() -> KeyMap {
 /// Canonical names are used for the runtime binding of keys to editing operations,
 /// which themselves are named and well known.
 const EDIT_MAPPINGS: [(&'static str, Binding); 17] = [
-    ("insert-char", do_insert_char),
-    ("insert-line", do_insert_line),
-    ("delete-char-left", do_delete_char_left),
-    ("delete-char-right", do_delete_char_right),
-    ("move-up", do_move_up),
-    ("move-down", do_move_down),
-    ("move-left", do_move_left),
-    ("move-right", do_move_right),
-    ("move-page-up", do_move_page_up),
-    ("move-page-down", do_move_page_down),
-    ("move-top", do_move_top),
-    ("move-bottom", do_move_bottom),
-    ("scroll-up", do_scroll_up),
-    ("scroll-down", do_scroll_down),
-    ("move-begin-line", do_move_begin_line),
-    ("move-end-line", do_move_end_line),
-    ("redraw", do_redraw),
+    ("insert-char", op::insert_char),
+    ("insert-line", op::insert_line),
+    ("delete-char-left", op::delete_char_left),
+    ("delete-char-right", op::delete_char_right),
+    ("move-up", op::move_up),
+    ("move-down", op::move_down),
+    ("move-left", op::move_left),
+    ("move-right", op::move_right),
+    ("move-page-up", op::move_page_up),
+    ("move-page-down", op::move_page_down),
+    ("move-top", op::move_top),
+    ("move-bottom", op::move_bottom),
+    ("scroll-up", op::scroll_up),
+    ("scroll-down", op::scroll_down),
+    ("move-begin-line", op::move_begin_line),
+    ("move-end-line", op::move_end_line),
+    ("redraw", op::redraw),
 ];
 
 fn init_edit_map() -> EditMap {
@@ -255,119 +256,4 @@ fn init_edit_map() -> EditMap {
         edit_map.insert(op, edit);
     }
     edit_map
-}
-
-// Below is a collection of functions that get associated with canonocal names of editing
-// operations.
-//
-// These functions are the glue between keys and editing operations, which are configurable
-// and bound at runtime.
-
-/// insert-char
-fn do_insert_char(editor: &mut Editor, key: &Key) -> Result<()> {
-    match key {
-        Key::Char(c) => {
-            editor.insert_char(*c);
-            Ok(())
-        }
-        _ => Err(format!("{key:?}: expecting Key::Char").into()),
-    }
-}
-
-/// insert-line
-fn do_insert_line(editor: &mut Editor, _: &Key) -> Result<()> {
-    editor.insert_char('\n');
-    Ok(())
-}
-
-/// delete-char-left
-fn do_delete_char_left(editor: &mut Editor, _: &Key) -> Result<()> {
-    // todo: should we return deleted char in result?
-    let _ = editor.delete_left();
-    Ok(())
-}
-
-/// delete-char-right
-fn do_delete_char_right(editor: &mut Editor, _: &Key) -> Result<()> {
-    // todo: should we return deleted char in result?
-    let _ = editor.delete_right();
-    Ok(())
-}
-
-/// move-up
-fn do_move_up(editor: &mut Editor, _: &Key) -> Result<()> {
-    editor.move_up();
-    Ok(())
-}
-
-/// move-down
-fn do_move_down(editor: &mut Editor, _: &Key) -> Result<()> {
-    editor.move_down();
-    Ok(())
-}
-
-/// move-left
-fn do_move_left(editor: &mut Editor, _: &Key) -> Result<()> {
-    editor.move_left();
-    Ok(())
-}
-
-/// move-right
-fn do_move_right(editor: &mut Editor, _: &Key) -> Result<()> {
-    editor.move_right();
-    Ok(())
-}
-
-/// move-page-up
-fn do_move_page_up(editor: &mut Editor, _: &Key) -> Result<()> {
-    editor.move_page_up();
-    Ok(())
-}
-
-/// move-page-down
-fn do_move_page_down(editor: &mut Editor, _: &Key) -> Result<()> {
-    editor.move_page_down();
-    Ok(())
-}
-
-/// move-top
-fn do_move_top(editor: &mut Editor, _: &Key) -> Result<()> {
-    editor.move_top();
-    Ok(())
-}
-
-/// move-bottom
-fn do_move_bottom(editor: &mut Editor, _: &Key) -> Result<()> {
-    editor.move_bottom();
-    Ok(())
-}
-
-/// scroll-up
-fn do_scroll_up(editor: &mut Editor, _: &Key) -> Result<()> {
-    editor.scroll_up();
-    Ok(())
-}
-
-/// scroll-down
-fn do_scroll_down(editor: &mut Editor, _: &Key) -> Result<()> {
-    editor.scroll_down();
-    Ok(())
-}
-
-/// move-begin-line
-fn do_move_begin_line(editor: &mut Editor, _: &Key) -> Result<()> {
-    editor.move_beg();
-    Ok(())
-}
-
-/// move-end-line
-fn do_move_end_line(editor: &mut Editor, _: &Key) -> Result<()> {
-    editor.move_end();
-    Ok(())
-}
-
-/// redraw
-fn do_redraw(editor: &mut Editor, _: &Key) -> Result<()> {
-    editor.align_cursor(Focus::Auto);
-    Ok(())
 }
