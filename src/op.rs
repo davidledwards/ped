@@ -1,8 +1,8 @@
 //! Editing operations.
 //!
 //! A collection of functions intended to be associated with canonical names of
-//! editing operatins. These functions serve as the glue between [`Key`]s and
-//! their respective action in the context of the editing experience.
+//! editing operations. These functions serve as the glue between a [`Key`] and
+//! its respective action in the context of the editing experience.
 //!
 //! See [`BindingMap`](crate::bind::BindingMap) for further details on binding keys
 //! at runtime.

@@ -32,7 +32,7 @@ pub struct BindingMap {
 impl BindingMap {
     /// Constructs the default binding of keys.
     ///
-    /// Unlike [`with_bindings`](BindingMap::with_bindings), this function always succeeds.
+    /// Unlike [`with_bindings`](Self::with_bindings), this function always succeeds.
     pub fn new() -> BindingMap {
         let bindings: Vec<(String, String)> = DEFAULT_BINDINGS
             .iter()
