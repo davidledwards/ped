@@ -1,6 +1,6 @@
 //! Keyboard reader.
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 use std::io::{self, Bytes, Read, Stdin};
 use std::str;
 
@@ -40,19 +40,22 @@ pub enum Ctrl {
 
 /// A keyboard that reads bytes from the terminal and produces corresponding [`Key`]s.
 pub struct Keyboard {
-    term: Bytes<Stdin>,
+    stdin: Bytes<Stdin>,
 }
 
 impl Keyboard {
     /// Creates a new keyboard reader.
     pub fn new() -> Keyboard {
         Keyboard {
-            term: io::stdin().bytes(),
+            stdin: io::stdin().bytes(),
         }
     }
 
     fn next(&mut self) -> Result<Option<u8>> {
-        Ok(self.term.next().transpose()?)
+        self.stdin
+            .next()
+            .transpose()
+            .map_err(|e| Error::io(Some("/dev/stdin"), e))
     }
 
     /// Reads the next key.
@@ -179,7 +182,7 @@ impl Keyboard {
                     return Ok(Key::None);
                 }
             }
-            match str::from_utf8(&buf[..n])?.chars().next() {
+            match to_utf8(&buf[..n])?.chars().next() {
                 Some(c) => Key::Char(c),
                 None => Key::None,
             }
@@ -247,4 +250,9 @@ fn modifiers(key_mod: u8) -> (Shift, Ctrl) {
         MOD_ALL_MASK => (Shift::On, Ctrl::On),
         _ => (Shift::Off, Ctrl::Off),
     }
+}
+
+/// Converts the UTF-8 sequence in `buf` to a valid string slice.
+fn to_utf8(buf: &[u8]) -> Result<&str> {
+    str::from_utf8(buf).map_err(|e| Error::utf8(buf, e))
 }

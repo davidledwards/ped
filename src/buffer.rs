@@ -1,6 +1,6 @@
 //! Gap buffer.
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 use std::alloc::{self, Layout};
 use std::cmp;
 use std::io::{BufRead, Write};
@@ -217,7 +217,9 @@ impl Buffer {
         let mut count = 0;
 
         loop {
-            let n = reader.read_line(&mut chunk)?;
+            let n = reader
+                .read_line(&mut chunk)
+                .map_err(|e| Error::io(None, e))?;
             if (n > 0 && chunk.len() >= READ_CHUNK_SIZE) || n == 0 {
                 // Inserts chunk into buffer when either condition occurs:
                 // - enough characters have been read to reach trigger, or
@@ -253,7 +255,9 @@ impl Buffer {
                 // Sends chunk of encoded characters to writer when either condition occurs:
                 // - enough bytes have been encoded to reach trigger, or
                 // - end of buffer
-                let _ = writer.write_all(chunk.as_slice())?;
+                let _ = writer
+                    .write_all(chunk.as_slice())
+                    .map_err(|e| Error::io(None, e))?;
                 count += chunk.len();
                 chunk.clear();
             }

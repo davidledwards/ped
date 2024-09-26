@@ -87,7 +87,7 @@ fn default_term() -> Result<termios> {
     });
     match def_term {
         Ok(term) => Ok(term.clone()),
-        Err(Error::OS(e)) => Err(Error::os_cloning(e)),
+        Err(Error::OS { cause }) => Err(Error::os_cloning(cause)),
         Err(e) => panic!("unexpected error: {e}"),
     }
 }
