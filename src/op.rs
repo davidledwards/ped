@@ -18,7 +18,7 @@ pub fn insert_char(editor: &mut Editor, key: &Key) -> Result<()> {
             editor.insert_char(*c);
             Ok(())
         }
-        _ => Err(format!("{key:?}: expecting Key::Char").into()),
+        _ => panic!("{key:?}: expecting Key::Char"),
     }
 }
 

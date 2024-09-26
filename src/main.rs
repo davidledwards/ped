@@ -31,7 +31,7 @@ use std::process::ExitCode;
 fn main() -> ExitCode {
     match run() {
         Err(e) => {
-            println!("{e:?}");
+            println!("{e}");
             ExitCode::from(1)
         }
         Ok(_) => ExitCode::SUCCESS,
@@ -43,7 +43,7 @@ struct Reset;
 impl Drop for Reset {
     fn drop(&mut self) {
         if let Err(e) = term::restore() {
-            println!("error resetting terminal");
+            println!("error resetting terminal: {e:?}");
         }
     }
 }

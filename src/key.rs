@@ -2,7 +2,7 @@
 
 use crate::error::Result;
 use std::io::{self, Bytes, Read, Stdin};
-use std::str::from_utf8;
+use std::str;
 
 /// The set of keys recognized by [`Keyboard`]s.
 #[derive(Eq, PartialEq, Hash, Debug)]
@@ -179,7 +179,7 @@ impl Keyboard {
                     return Ok(Key::None);
                 }
             }
-            match from_utf8(&buf[..n])?.chars().next() {
+            match str::from_utf8(&buf[..n])?.chars().next() {
                 Some(c) => Key::Char(c),
                 None => Key::None,
             }

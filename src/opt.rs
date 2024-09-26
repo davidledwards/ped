@@ -1,6 +1,6 @@
 //! Options parser.
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 
 pub struct Options {
     pub help: bool,
@@ -26,9 +26,7 @@ impl Options {
         while let Some(arg) = it.next() {
             match arg.as_str() {
                 "--help" => opts.help = true,
-                arg if arg.starts_with("--") => {
-                    return Err(format!("{arg}: unexpected argument").into())
-                }
+                arg if arg.starts_with("--") => return Err(Error::unexpected_arg(arg)),
                 _ => opts.files.push(arg),
             }
         }

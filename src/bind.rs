@@ -40,7 +40,7 @@ impl BindingMap {
             .collect();
         Self::with_bindings(&bindings).unwrap_or_else(|e| {
             // If this condition occurs, there is an invariant violation.
-            panic!("{e:?}")
+            panic!("{e}")
         })
     }
 
@@ -92,21 +92,13 @@ impl BindingMap {
                 if let Some((op, _)) = self.edit_map.get_key_value(op.as_str()) {
                     self.bind_map.insert(name, op);
                 } else {
-                    return Err(Self::unknown_op(name, op));
+                    return Err(Error::bind_op(op));
                 }
             } else {
-                return Err(Self::unknown_key(name, op));
+                return Err(Error::bind_key(name));
             }
         }
         Ok(())
-    }
-
-    fn unknown_key(name: &str, op: &str) -> Error {
-        format!("key binding ({name} -> {op}): {name}: unknown key").into()
-    }
-
-    fn unknown_op(name: &str, op: &str) -> Error {
-        format!("key binding ({name} -> {op}): {op}: unknown operation").into()
     }
 }
 
