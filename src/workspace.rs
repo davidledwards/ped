@@ -98,13 +98,22 @@ pub struct Workspace {
     windows: [Option<Window>; MAX_WINDOWS],
 }
 
+const FG_COLOR: u8 = 15;
+// const FG_COLOR: u8 = 46;
+const BG_COLOR: u8 = 233;
+
 impl Workspace {
     pub fn new(rows: u32, cols: u32) -> Result<Workspace> {
         // create window to occupy workspace
         // must always have 1 window
 
         let mut windows = [const { None }; MAX_WINDOWS];
-        let win = Window::new(Point::new(0, 0), rows - 1, cols, Color::new(46, 232));
+        let win = Window::new(
+            Point::new(0, 0),
+            rows - 1,
+            cols,
+            Color::new(FG_COLOR, BG_COLOR),
+        );
         windows[0] = Some(win);
         Ok(Workspace {
             rows,
@@ -136,7 +145,7 @@ impl Workspace {
             Point::new(0, 0),
             self.rows - 1,
             self.cols,
-            Color::new(46, 232),
+            Color::new(FG_COLOR, BG_COLOR),
         )
     }
 }
