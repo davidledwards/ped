@@ -1,14 +1,13 @@
 //! Window management.
 
-use crate::canvas::{Canvas, Cell, Point};
+use crate::canvas::Canvas;
 use crate::color::Color;
-use crate::display::Display;
+use crate::display::{Cell, Display, Point, Size};
 use std::cmp;
 
 pub struct Window {
     origin: Point,
-    rows: u32,
-    cols: u32,
+    size: Size,
     color: Color,
     back: Canvas,
     front: Canvas,
@@ -17,28 +16,31 @@ pub struct Window {
 }
 
 impl Window {
-    pub fn new(origin: Point, rows: u32, cols: u32, color: Color) -> Window {
-        debug_assert!(rows > 0);
-        debug_assert!(cols > 0);
+    pub fn new(origin: Point, size: Size, color: Color) -> Window {
+        debug_assert!(size.rows > 0);
+        debug_assert!(size.cols > 0);
 
         Window {
             origin,
-            rows,
-            cols,
+            size,
             color,
-            back: Canvas::new(rows, cols),
-            front: Canvas::new(rows, cols),
-            display: Display::new(rows, cols, origin),
+            back: Canvas::new(size),
+            front: Canvas::new(size),
+            display: Display::new(origin, size),
             blank: Cell::new(' ', color),
         }
     }
 
+    pub fn size(&self) -> Size {
+        self.size
+    }
+
     pub fn rows(&self) -> u32 {
-        self.rows
+        self.size.rows
     }
 
     pub fn cols(&self) -> u32 {
-        self.cols
+        self.size.cols
     }
 
     pub fn color(&self) -> Color {
@@ -47,23 +49,23 @@ impl Window {
 
     /// Set value of \[`row`, `col`\] to `cell`.
     pub fn set_cell(&mut self, row: u32, col: u32, cell: Cell) {
-        debug_assert!(row < self.rows);
-        debug_assert!(col < self.cols);
+        debug_assert!(row < self.size.rows);
+        debug_assert!(col < self.size.cols);
         *self.back.cell_mut(row, col) = cell;
     }
 
     /// Clears all cells in the column range [`start_col`..`end_col`) for the given `row`.
     pub fn clear_row_range(&mut self, row: u32, start_col: u32, end_col: u32) {
-        debug_assert!(row < self.rows);
+        debug_assert!(row < self.size.rows);
         debug_assert!(start_col < end_col);
-        debug_assert!(end_col <= self.cols);
+        debug_assert!(end_col <= self.size.cols);
         let cells = self.back.row_mut(row);
         cells[(start_col as usize)..(end_col as usize)].fill(self.blank);
     }
 
     /// Clears all cells in the column range [`start_col`..) for the given `row`.
     pub fn clear_row_from(&mut self, row: u32, start_col: u32) {
-        self.clear_row_range(row, start_col, self.cols);
+        self.clear_row_range(row, start_col, self.size.cols);
     }
 
     /// Clears all cells for the given `row`.
@@ -106,7 +108,7 @@ impl Window {
     ///    -----
     /// ```
     pub fn scroll_up(&mut self, row: u32, rows: u32) {
-        debug_assert!(row <= self.rows);
+        debug_assert!(row <= self.size.rows);
 
         if rows > 0 {
             // Start row of move is maximally bounded by number of rows to scroll.
@@ -150,15 +152,15 @@ impl Window {
     ///    -----
     /// ```
     pub fn scroll_down(&mut self, row: u32, rows: u32) {
-        debug_assert!(row < self.rows);
+        debug_assert!(row < self.size.rows);
 
         if rows > 0 {
             // Target row of move is maximally bounded by total number of rows.
-            let to_row = cmp::min(row + rows, self.rows);
+            let to_row = cmp::min(row + rows, self.size.rows);
 
             // Move rows to bottom of canvas.
-            if to_row < self.rows {
-                self.back.move_rows(row, to_row, self.rows - to_row);
+            if to_row < self.size.rows {
+                self.back.move_rows(row, to_row, self.size.rows - to_row);
             }
 
             // Clears rows vacated by scroll.
@@ -168,8 +170,8 @@ impl Window {
 
     /// Sets the cursor position in the window to `cursor`.
     pub fn set_cursor(&mut self, cursor: Point) {
-        debug_assert!(cursor.row < self.rows);
-        debug_assert!(cursor.col < self.cols);
+        debug_assert!(cursor.row < self.size.rows);
+        debug_assert!(cursor.col < self.size.cols);
         self.display.write_cursor(cursor);
         self.display.send();
     }

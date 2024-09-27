@@ -1,7 +1,7 @@
 //! Editor.
 
 use crate::buffer::Buffer;
-use crate::canvas::{Cell, Point};
+use crate::display::{Cell, Point};
 use crate::window::Window;
 use std::cmp;
 

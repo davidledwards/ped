@@ -4,7 +4,6 @@ use crate::bind::BindingMap;
 use crate::editor::Editor;
 use crate::error::Result;
 use crate::key::{Key, Keyboard};
-use crate::workspace::Workspace;
 
 //
 // this is the controller that loops indefinitely over keystrokes, modifies the buffer,
@@ -107,21 +106,14 @@ use crate::workspace::Workspace;
 
 pub struct Controller {
     keyboard: Keyboard,
-    workspace: Workspace,
     editor: Editor,
     bindings: BindingMap,
 }
 
 impl Controller {
-    pub fn new(
-        keyboard: Keyboard,
-        workspace: Workspace,
-        editor: Editor,
-        bindings: BindingMap,
-    ) -> Controller {
+    pub fn new(keyboard: Keyboard, editor: Editor, bindings: BindingMap) -> Controller {
         Controller {
             keyboard,
-            workspace,
             editor,
             bindings,
         }
