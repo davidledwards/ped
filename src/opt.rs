@@ -1,5 +1,4 @@
 //! Options parser.
-
 use crate::error::{Error, Result};
 
 pub struct Options {

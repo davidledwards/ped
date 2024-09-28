@@ -1,5 +1,4 @@
 //! Error types.
-
 use std::error;
 use std::fmt::{self, Display, Formatter};
 use std::io;

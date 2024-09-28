@@ -1,5 +1,4 @@
 //! ANSI escape sequences.
-
 use crate::color::Color;
 use crate::display::Point;
 

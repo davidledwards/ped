@@ -1,5 +1,4 @@
 //! Main controller.
-
 use crate::bind::BindingMap;
 use crate::editor::Editor;
 use crate::error::Result;

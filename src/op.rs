@@ -6,7 +6,6 @@
 //!
 //! See [`BindingMap`](crate::bind::BindingMap) for further details on binding keys
 //! at runtime.
-
 use crate::editor::{Editor, Focus};
 use crate::error::Result;
 use crate::key::Key;

@@ -1,10 +1,12 @@
 //! Gap buffer.
-
 use crate::error::{Error, Result};
+
 use std::alloc::{self, Layout};
+use std::cell::RefCell;
 use std::cmp;
 use std::io::{BufRead, Write};
 use std::ptr::NonNull;
+use std::rc::Rc;
 
 #[derive(Debug)]
 pub struct Buffer {
@@ -15,21 +17,27 @@ pub struct Buffer {
     gap_len: usize,
 }
 
-// Buffer capacity increments and bounds.
-const INIT_CAPACITY: usize = 65_536;
-const GROW_CAPACITY: usize = 65_536;
-const MAX_CAPACITY: usize = 2_147_483_648;
+pub type BufferRef = Rc<RefCell<Buffer>>;
 
 impl Buffer {
+    const INIT_CAPACITY: usize = 65_536;
+    const GROW_CAPACITY: usize = 65_536;
+    const MAX_CAPACITY: usize = 2_147_483_648;
+
     pub fn new() -> Buffer {
-        Buffer::with_capacity(INIT_CAPACITY)
+        Buffer::with_capacity(Self::INIT_CAPACITY)
+    }
+
+    /// Turns `buffer` into a [`BufferRef`].
+    pub fn to_ref(buffer: Buffer) -> BufferRef {
+        Rc::new(RefCell::new(buffer))
     }
 
     pub fn with_capacity(capacity: usize) -> Buffer {
         let n = if capacity > 0 {
             capacity
         } else {
-            INIT_CAPACITY
+            Self::INIT_CAPACITY
         };
         Buffer {
             buf: Buffer::alloc(n),
@@ -313,13 +321,14 @@ impl Buffer {
 
     /// Increase buffer capacity by at least `need` bytes.
     fn grow(&mut self, need: usize) {
-        let capacity = if need > MAX_CAPACITY {
+        let capacity = if need > Self::MAX_CAPACITY {
             panic!("incremental allocation too large: {} bytes", need);
         } else {
             // This calculation is safe from panic since capacity is always <= MAX_CAPACITY
             // and addition would never overflow because result is sufficiently smaller than
             // usize::MAX.
-            (self.capacity + need + GROW_CAPACITY - 1) / GROW_CAPACITY * GROW_CAPACITY
+            (self.capacity + need + Self::GROW_CAPACITY - 1) / Self::GROW_CAPACITY
+                * Self::GROW_CAPACITY
         };
 
         // Allocate new buffer and copy contents of old buffer.
@@ -345,7 +354,7 @@ impl Buffer {
     }
 
     fn alloc(capacity: usize) -> NonNull<char> {
-        if capacity > MAX_CAPACITY {
+        if capacity > Self::MAX_CAPACITY {
             panic!("allocation too large: {} bytes", capacity);
         }
         let layout = Layout::array::<char>(capacity).unwrap();
@@ -448,7 +457,7 @@ mod tests {
     #[test]
     fn new_buffer() {
         let buf = Buffer::new();
-        assert_eq!(buf.capacity, INIT_CAPACITY);
+        assert_eq!(buf.capacity, Buffer::INIT_CAPACITY);
         assert_eq!(buf.size, 0);
         assert_eq!(buf.gap, 0);
         assert_eq!(buf.gap_len, buf.capacity);
@@ -473,7 +482,7 @@ mod tests {
         for c in iter::repeat('*').take(CAP + 1) {
             buf.insert_char(c);
         }
-        assert_eq!(buf.capacity, GROW_CAPACITY);
+        assert_eq!(buf.capacity, Buffer::GROW_CAPACITY);
         assert_eq!(buf.size, CAP + 1);
     }
 

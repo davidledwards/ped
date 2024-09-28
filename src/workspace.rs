@@ -1,14 +1,8 @@
 //! Workspace management.
-
 use crate::color::Color;
 use crate::display::{Point, Size};
 use crate::error::Result;
-use crate::window::Window;
-
-use std::cell::RefCell;
-use std::rc::Rc;
-
-type WindowRef = Rc<RefCell<Window>>;
+use crate::window::{Window, WindowRef};
 
 #[derive(Debug)]
 pub enum Placement {
@@ -31,7 +25,7 @@ impl View {
             id,
             origin,
             size,
-            window: Rc::new(RefCell::new(window)),
+            window: Window::to_ref(window),
         }
     }
 
@@ -46,16 +40,23 @@ impl View {
     pub fn size(&self) -> Size {
         self.size
     }
+
+    pub fn window(&self) -> &WindowRef {
+        &self.window
+    }
 }
 
 pub struct Views<'a> {
-    ws: &'a Workspace,
+    views: &'a Vec<View>,
     index: usize,
 }
 
 impl Views<'_> {
     fn new(ws: &Workspace) -> Views {
-        Views { ws, index: 0 }
+        Views {
+            views: &ws.views,
+            index: 0,
+        }
     }
 }
 
@@ -63,8 +64,8 @@ impl<'a> Iterator for Views<'a> {
     type Item = &'a View;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.index < self.ws.views.len() {
-            let r = &self.ws.views[self.index];
+        if self.index < self.views.len() {
+            let r = &self.views[self.index];
             self.index += 1;
             Some(r)
         } else {
@@ -82,15 +83,14 @@ pub struct Workspace {
     views: Vec<View>,
 }
 
-const MIN_ROWS: u32 = 3;
-
-const VIEW_ORIGIN_OFFSET: Size = Size::new(0, 0);
-const VIEW_SIZE_LESS: Size = Size::new(1, 0);
-
 impl Workspace {
+    const VIEW_ORIGIN_OFFSET: Size = Size::new(0, 0);
+    const VIEW_SIZE_ADJUST: Size = Size::new(1, 0);
+    const MIN_ROWS: u32 = 3;
+
     pub fn new(origin: Point, size: Size) -> Result<Workspace> {
-        let view_origin = origin + VIEW_ORIGIN_OFFSET;
-        let view_size = size - VIEW_SIZE_LESS;
+        let view_origin = origin + Self::VIEW_ORIGIN_OFFSET;
+        let view_size = size - Self::VIEW_SIZE_ADJUST;
         let mut this = Workspace {
             origin,
             size,
@@ -110,7 +110,7 @@ impl Workspace {
         let view_count = self.views.len() + 1;
         let view_rows = self.view_size.rows / view_count as u32;
 
-        if view_rows < MIN_ROWS {
+        if view_rows < Self::MIN_ROWS {
             None
         } else {
             // Generate unique id for new view.

@@ -1,7 +1,7 @@
 //! Sends display instructions to terminal.
-
 use crate::ansi;
 use crate::color::Color;
+
 use std::io::{self, Write};
 use std::ops::{Add, Sub};
 

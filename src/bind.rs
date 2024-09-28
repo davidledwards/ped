@@ -1,9 +1,9 @@
 //! Key bindings.
-
 use crate::editor::Editor;
 use crate::error::{Error, Result};
 use crate::key::{Ctrl, Key, Shift};
 use crate::op;
+
 use std::collections::{HashMap, HashSet};
 
 /// A function pointer that implements an editing operation.

@@ -1,5 +1,4 @@
 //! Represents visible content of buffers.
-
 use crate::display::{Cell, Point, Size};
 
 #[derive(Debug)]

@@ -1,9 +1,11 @@
 //! Window management.
-
 use crate::canvas::Canvas;
 use crate::color::Color;
 use crate::display::{Cell, Display, Point, Size};
+
+use std::cell::RefCell;
 use std::cmp;
+use std::rc::Rc;
 
 pub struct Window {
     origin: Point,
@@ -14,6 +16,8 @@ pub struct Window {
     display: Display,
     blank: Cell,
 }
+
+pub type WindowRef = Rc<RefCell<Window>>;
 
 impl Window {
     pub fn new(origin: Point, size: Size, color: Color) -> Window {
@@ -31,16 +35,12 @@ impl Window {
         }
     }
 
+    pub fn to_ref(window: Window) -> WindowRef {
+        Rc::new(RefCell::new(window))
+    }
+
     pub fn size(&self) -> Size {
         self.size
-    }
-
-    pub fn rows(&self) -> u32 {
-        self.size.rows
-    }
-
-    pub fn cols(&self) -> u32 {
-        self.size.cols
     }
 
     pub fn color(&self) -> Color {

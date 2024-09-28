@@ -65,30 +65,13 @@ fn run() -> Result<()> {
         };
 
         let (rows, cols) = term::size()?;
-
-        let mut workspace = Workspace::new(Point::ORIGIN, Size::new(rows, cols))?;
-        let _ = workspace.add_view(Placement::Top);
-        let _ = workspace.add_view(Placement::Bottom);
-        let _ = workspace.add_view(Placement::Above(1));
-        let _ = workspace.add_view(Placement::Below(1));
-        for view in workspace.views() {
-            println!(
-                "id: {}, origin: {:?}, size: {:?}",
-                view.id(),
-                view.origin(),
-                view.size()
-            );
-        }
-
         term::init()?;
         let _reset = Reset;
         let keyboard = Keyboard::new();
-        let window = Window::new(
-            Point::new(0, 0),
-            Size::new(rows - 1, cols),
-            Color::new(15, 233),
-        );
-        let editor = Editor::new(buffer, window);
+        let mut workspace = Workspace::new(Point::ORIGIN, Size::new(rows, cols))?;
+        let _ = workspace.add_view(Placement::Top);
+        let window = workspace.views().next().unwrap().window().clone();
+        let editor = Editor::new(Buffer::to_ref(buffer), window);
         let mut controller = Controller::new(keyboard, editor, bindings);
         controller.run()?
     }

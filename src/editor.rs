@@ -1,19 +1,23 @@
 //! Editor.
+use crate::buffer::{Buffer, BufferRef};
+use crate::display::{Cell, Point, Size};
+use crate::window::{Window, WindowRef};
 
-use crate::buffer::Buffer;
-use crate::display::{Cell, Point};
-use crate::window::Window;
+use std::cell::{Ref, RefMut};
 use std::cmp;
 
 pub struct Editor {
-    /// Gap buffer containing the contents of this editor.
-    buffer: Buffer,
-
-    /// Window attached to this editor.
-    window: Window,
+    /// Buffer containing the contents of this editor.
+    buffer: BufferRef,
 
     /// Buffer position corresponding to the cursor.
     cur_pos: usize,
+
+    /// Window attached to this editor.
+    window: WindowRef,
+
+    /// Cached value of window size.
+    size: Size,
 
     /// Buffer position corresponding to the first character of the `cursor` row.
     row_pos: usize,
@@ -34,12 +38,14 @@ pub enum Focus {
 //
 
 impl Editor {
-    pub fn new(buffer: Buffer, window: Window) -> Editor {
-        let cur_pos = buffer.get_pos();
+    pub fn new(buffer: BufferRef, window: WindowRef) -> Editor {
+        let cur_pos = buffer.borrow().get_pos();
+        let size = window.borrow().size();
         let mut editor = Editor {
             buffer,
-            window,
             cur_pos,
+            window,
+            size,
             row_pos: 0,
             cursor: Point::ORIGIN,
         };
@@ -51,8 +57,20 @@ impl Editor {
         (self.cursor, self.cur_pos)
     }
 
-    pub fn buffer(&self) -> &Buffer {
-        &self.buffer
+    fn buffer(&self) -> Ref<'_, Buffer> {
+        self.buffer.borrow()
+    }
+
+    fn buffer_mut(&self) -> RefMut<'_, Buffer> {
+        self.buffer.borrow_mut()
+    }
+
+    fn window(&self) -> Ref<'_, Window> {
+        self.window.borrow()
+    }
+
+    fn window_mut(&self) -> RefMut<'_, Window> {
+        self.window.borrow_mut()
     }
 
     pub fn insert_char(&mut self, c: char) {
@@ -63,8 +81,8 @@ impl Editor {
         // Knowing number of wrapping rows prior to insertion helps optimize rendering
         // when resulting cursor remains on same row.
         let wrap_rows = self.wrapped_rows(self.row_pos);
-        self.buffer.set_pos(self.cur_pos);
-        let cur_pos = self.buffer.insert_chars(cs);
+        self.buffer_mut().set_pos(self.cur_pos);
+        let cur_pos = self.buffer_mut().insert_chars(cs);
 
         // Locate resulting cursor position and render accordingly.
         let (maybe_row, col, row_pos) = self.find_cursor(cur_pos);
@@ -80,7 +98,7 @@ impl Editor {
                         // rendering to only those rows that wrap. Note that number of
                         // wrapping rows could extend beyond bottom of window, so ensure
                         // that number is appropriately bounded.
-                        let rows = cmp::min(wrap_rows + 1, self.window.rows() - row);
+                        let rows = cmp::min(wrap_rows + 1, self.size.rows - row);
                         self.render_rows(row, rows, self.row_pos);
                     }
                     row
@@ -94,12 +112,12 @@ impl Editor {
             None => {
                 // New cursor position not visible, so find top of buffer and render entire
                 // window.
-                let (top_pos, _) = self.find_up(row_pos, self.window.rows() - 1);
+                let (top_pos, _) = self.find_up(row_pos, self.size.rows - 1);
                 self.render_rows_from(0, top_pos);
-                self.window.rows() - 1
+                self.size.rows - 1
             }
         };
-        self.window.draw();
+        self.window_mut().draw();
 
         self.cur_pos = cur_pos;
         self.row_pos = row_pos;
@@ -116,7 +134,7 @@ impl Editor {
     }
 
     pub fn delete_right(&mut self) -> Option<char> {
-        if self.cur_pos < self.buffer.size() {
+        if self.cur_pos < self.buffer().size() {
             let cs = self.remove_to(self.cur_pos + 1);
             Some(cs[0])
         } else {
@@ -140,8 +158,11 @@ impl Editor {
 
             // This unwrap should never panic since condition of entering this block
             // is that > 0 characters will be removed.
-            self.buffer.set_pos(from_pos);
-            let text = self.buffer.remove_chars(self.cur_pos - from_pos).unwrap();
+            self.buffer_mut().set_pos(from_pos);
+            let text = self
+                .buffer_mut()
+                .remove_chars(self.cur_pos - from_pos)
+                .unwrap();
 
             let row = match maybe_row {
                 Some(row) => {
@@ -155,7 +176,7 @@ impl Editor {
                             // limit rendering to only those rows that wrap. Note that number
                             // of wrapping rows could extend beyond bottom of window, so
                             // ensure that number is appropriately bounded.
-                            let rows = cmp::min(wrap_rows + 1, self.window.rows() - row);
+                            let rows = cmp::min(wrap_rows + 1, self.size.rows - row);
                             self.render_rows(row, rows, row_pos);
                         }
                         row
@@ -173,7 +194,7 @@ impl Editor {
                     0
                 }
             };
-            self.window.draw();
+            self.window_mut().draw();
             self.cur_pos = from_pos;
             self.row_pos = row_pos;
             self.set_cursor(row, col);
@@ -189,11 +210,11 @@ impl Editor {
     /// if `to_pos` is greater than `self.cur_pos`, otherwise the operation is ignored
     /// and an empty vector is returned.
     pub fn remove_to(&mut self, to_pos: usize) -> Vec<char> {
-        let to_pos = cmp::min(to_pos, self.buffer.size());
+        let to_pos = cmp::min(to_pos, self.buffer().size());
         if to_pos > self.cur_pos {
             // Possibly capture number of wrapping rows prior to text removal, but only
             // if from and to positions share same beginning of line.
-            let wrap_rows = if self.buffer.find_beg_line(to_pos) <= self.cur_pos {
+            let wrap_rows = if self.buffer().find_beg_line(to_pos) <= self.cur_pos {
                 Some(self.wrapped_rows(self.row_pos))
             } else {
                 None
@@ -201,8 +222,11 @@ impl Editor {
 
             // This unwrap should never panic since condition of entering this block
             // is that > 0 characters will be removed.
-            self.buffer.set_pos(self.cur_pos);
-            let text = self.buffer.remove_chars(to_pos - self.cur_pos).unwrap();
+            self.buffer_mut().set_pos(self.cur_pos);
+            let text = self
+                .buffer_mut()
+                .remove_chars(to_pos - self.cur_pos)
+                .unwrap();
 
             match wrap_rows {
                 Some(wrap_rows) => {
@@ -218,7 +242,7 @@ impl Editor {
                         // rendering to only those rows that wrap. Note that number of
                         // wrapping rows could extend beyond bottom of window, so ensure
                         // that number is appropriately bounded.
-                        let rows = cmp::min(wrap_rows + 1, self.window.rows() - self.cursor.row);
+                        let rows = cmp::min(wrap_rows + 1, self.size.rows - self.cursor.row);
                         self.render_rows(self.cursor.row, rows, self.row_pos);
                     }
                 }
@@ -228,8 +252,8 @@ impl Editor {
                     self.render_rows_from(self.cursor.row, self.row_pos);
                 }
             }
-            self.window.draw();
-            self.window.set_cursor(self.cursor);
+            self.window_mut().draw();
+            self.window_mut().set_cursor(self.cursor);
             text
         } else {
             vec![]
@@ -246,17 +270,17 @@ impl Editor {
     pub fn redraw(&mut self) {
         let (top_pos, _) = self.find_up(self.row_pos, self.cursor.row);
         self.render_rows_from(0, top_pos);
-        self.window.clear();
-        self.window.draw();
-        self.window.set_cursor(self.cursor);
+        self.window_mut().clear();
+        self.window_mut().draw();
+        self.window_mut().set_cursor(self.cursor);
     }
 
     pub fn redraw_focus(&mut self, focus: Focus) {
         // Determine ideal row where cursor would like to be focused, though this should
         // be considered a hint.
         let row = match focus {
-            Focus::Auto => self.window.rows() / 2,
-            Focus::Row(row) => cmp::min(row, self.window.rows() - 1),
+            Focus::Auto => self.size.rows / 2,
+            Focus::Row(row) => cmp::min(row, self.size.rows - 1),
         };
 
         // Tries to position cursor on target row, but no guarantee depending on proximity
@@ -265,8 +289,8 @@ impl Editor {
         self.row_pos = self.cur_pos - col as usize;
         let (top_pos, row) = self.find_up(self.row_pos, row);
         self.render_rows_from(0, top_pos);
-        self.window.clear();
-        self.window.draw();
+        self.window_mut().clear();
+        self.window_mut().draw();
         self.set_cursor(row, col);
     }
 
@@ -281,9 +305,9 @@ impl Editor {
             let row = if self.cursor.row > 0 {
                 self.cursor.row - 1
             } else {
-                self.window.scroll_down(0, 1);
+                self.window_mut().scroll_down(0, 1);
                 self.render_rows(0, 1, row_pos);
-                self.window.draw();
+                self.window_mut().draw();
                 0
             };
 
@@ -301,12 +325,12 @@ impl Editor {
 
             // Changes to canvas only occur when cursor is already at bottow row of
             // window, otherwise just change position of cursor on display.
-            let row = if self.cursor.row < self.window.rows() - 1 {
+            let row = if self.cursor.row < self.size.rows - 1 {
                 self.cursor.row + 1
             } else {
-                self.window.scroll_up(self.window.rows(), 1);
+                self.window_mut().scroll_up(self.size.rows, 1);
                 self.render_rows(self.cursor.row, 1, row_pos);
-                self.window.draw();
+                self.window_mut().draw();
                 self.cursor.row
             };
 
@@ -319,7 +343,7 @@ impl Editor {
     pub fn move_left(&mut self) {
         // Tries to move buffer position left by 1 character, though it may already be
         // at beginning of buffer.
-        let left = self.buffer.backward(self.cur_pos).index().next();
+        let left = self.buffer().backward(self.cur_pos).index().next();
 
         if let Some((cur_pos, c)) = left {
             let (row, col) = if self.cursor.col > 0 {
@@ -337,10 +361,7 @@ impl Editor {
                     // Prior row must be at least as long as window width because
                     // character before cursor is not \n, which means prior row must
                     // have soft wrapped.
-                    (
-                        cur_pos + 1 - self.window.cols() as usize,
-                        self.window.cols() - 1,
-                    )
+                    (cur_pos + 1 - self.size.cols as usize, self.size.cols - 1)
                 };
 
                 // Changes to canvas only occur when cursor is already at top row of
@@ -348,9 +369,9 @@ impl Editor {
                 let row = if self.cursor.row > 0 {
                     self.cursor.row - 1
                 } else {
-                    self.window.scroll_down(0, 1);
+                    self.window_mut().scroll_down(0, 1);
                     self.render_rows(0, 1, row_pos);
-                    self.window.draw();
+                    self.window_mut().draw();
                     0
                 };
                 self.row_pos = row_pos;
@@ -365,7 +386,7 @@ impl Editor {
     pub fn move_right(&mut self) {
         // Tries to move buffer position right by 1 character, though it may already be
         // at end of buffer.
-        let right = self.buffer.forward(self.cur_pos).index().next();
+        let right = self.buffer().forward(self.cur_pos).index().next();
 
         if let Some((cur_pos, c)) = right {
             // Calculate new column number based on adjacent character and current
@@ -373,7 +394,7 @@ impl Editor {
             let col = if c == '\n' {
                 0
             } else {
-                if self.cursor.col < self.window.cols() - 1 {
+                if self.cursor.col < self.size.cols - 1 {
                     self.cursor.col + 1
                 } else {
                     0
@@ -384,12 +405,12 @@ impl Editor {
             // next row, which may require changes to canvas.
             let row = if col == 0 {
                 self.row_pos = cur_pos + 1;
-                if self.cursor.row < self.window.rows() - 1 {
+                if self.cursor.row < self.size.rows - 1 {
                     self.cursor.row + 1
                 } else {
-                    self.window.scroll_up(self.window.rows(), 1);
+                    self.window_mut().scroll_up(self.size.rows, 1);
                     self.render_rows(self.cursor.row, 1, self.row_pos);
-                    self.window.draw();
+                    self.window_mut().draw();
                     self.cursor.row
                 }
             } else {
@@ -404,7 +425,7 @@ impl Editor {
     pub fn move_page_up(&mut self) {
         // Tries to move cursor up by number of rows equal to size of window, though top of
         // buffer could be reached first.
-        let (row_pos, rows) = self.find_up(self.row_pos, self.window.rows());
+        let (row_pos, rows) = self.find_up(self.row_pos, self.size.rows);
         if rows > 0 {
             // Tries to maintain current location of cursor on display by moving up
             // additional rows, though again, top of buffer could be reached first.
@@ -414,7 +435,7 @@ impl Editor {
             // Since entire display likely changed in most cases, perform full rendering of
             // canvas before drawing.
             self.render_rows_from(0, top_pos);
-            self.window.draw();
+            self.window_mut().draw();
 
             self.cur_pos = cur_pos;
             self.row_pos = row_pos;
@@ -425,7 +446,7 @@ impl Editor {
     pub fn move_page_down(&mut self) {
         // Tries to move cursor down by number of rows equal to size of window, though
         // bottom of buffer could be reached first.
-        let (row_pos, rows) = self.find_down(self.row_pos, self.window.rows());
+        let (row_pos, rows) = self.find_down(self.row_pos, self.size.rows);
         if rows > 0 {
             // Tries to maintain current location of cursor on display by moving down
             // additional rows, though again, bottom of buffer could be reached first.
@@ -435,7 +456,7 @@ impl Editor {
             // Since entire display likely changed in most cases, perform full rendering of
             // canvas before drawing.
             self.render_rows_from(0, top_pos);
-            self.window.draw();
+            self.window_mut().draw();
 
             self.cur_pos = cur_pos;
             self.row_pos = row_pos;
@@ -456,8 +477,8 @@ impl Editor {
     pub fn move_end(&mut self) {
         // Try moving forward in buffer to find end of line, though stop if distance
         // between current column and right edge of window reached.
-        let n = (self.window.cols() - self.cursor.col - 1) as usize;
-        let cur_pos = self.buffer.find_end_line_or(self.cur_pos, n);
+        let n = (self.size.cols - self.cursor.col - 1) as usize;
+        let cur_pos = self.buffer().find_end_line_or(self.cur_pos, n);
 
         // Adjust cursor position and column if cursor not already at end of row.
         if cur_pos > self.cur_pos {
@@ -473,7 +494,7 @@ impl Editor {
         if self.row_pos > 0 {
             self.row_pos = 0;
             self.render_rows_from(0, self.row_pos);
-            self.window.draw();
+            self.window_mut().draw();
         }
 
         self.cur_pos = 0;
@@ -483,15 +504,16 @@ impl Editor {
     /// Moves the cursor to the bottom of the buffer.
     pub fn move_bottom(&mut self) {
         // Determine column number at end of buffer.
-        self.cur_pos = self.buffer.size();
+        let cur_pos = self.buffer().size();
+        self.cur_pos = cur_pos;
         let col = self.column_of(self.cur_pos);
 
         // Try to position cursor on last row of window, though this is only advisory
         // since buffer contents could be smaller than window.
         self.row_pos = self.cur_pos - col as usize;
-        let (top_pos, row) = self.find_up(self.row_pos, self.window.rows() - 1);
+        let (top_pos, row) = self.find_up(self.row_pos, self.size.rows - 1);
         self.render_rows_from(0, top_pos);
-        self.window.draw();
+        self.window_mut().draw();
         self.set_cursor(row, col);
     }
 
@@ -502,14 +524,14 @@ impl Editor {
     /// is moved to the next row, essentially staying on the top row.
     pub fn scroll_up(&mut self) {
         // Try to find position of row following bottom row.
-        let try_rows = self.window.rows() - self.cursor.row;
+        let try_rows = self.size.rows - self.cursor.row;
         let (row_pos, rows) = self.find_down(self.row_pos, try_rows);
 
         // Only need to scroll if following row exiats.
         if rows == try_rows {
-            self.window.scroll_up(self.window.rows(), 1);
-            self.render_rows(self.window.rows() - 1, 1, row_pos);
-            self.window.draw();
+            self.window_mut().scroll_up(self.size.rows, 1);
+            self.render_rows(self.size.rows - 1, 1, row_pos);
+            self.window_mut().draw();
 
             let (row, col) = if self.cursor.row > 0 {
                 // Indicates that cursor is not yet on top row.
@@ -539,11 +561,11 @@ impl Editor {
 
         // Only need to scroll if preceding row exists.
         if rows == try_rows {
-            self.window.scroll_down(0, 1);
+            self.window_mut().scroll_down(0, 1);
             self.render_rows(0, 1, row_pos);
-            self.window.draw();
+            self.window_mut().draw();
 
-            let (row, col) = if self.cursor.row < self.window.rows() - 1 {
+            let (row, col) = if self.cursor.row < self.size.rows - 1 {
                 // Indicates that cursor is not yet on bottom row.
                 (self.cursor.row + 1, self.cursor.col)
             } else {
@@ -562,7 +584,7 @@ impl Editor {
     /// Sets the cursor to (`row`, `col`) and updates the window.
     fn set_cursor(&mut self, row: u32, col: u32) {
         self.cursor = Point::new(row, col);
-        self.window.set_cursor(self.cursor);
+        self.window_mut().set_cursor(self.cursor);
     }
 
     /// Sets the cursor column to `col`, retaining the current row, and updates the
@@ -574,24 +596,24 @@ impl Editor {
     /// Writes the contents of the buffer to the window, where `row` is the beginning row,
     /// `rows` is the number of rows, and `row_pos` is the buffer position of `row`.
     fn render_rows(&mut self, row: u32, rows: u32, row_pos: usize) {
-        debug_assert!(row < self.window.rows());
-        debug_assert!(row + rows <= self.window.rows());
+        debug_assert!(row < self.size.rows);
+        debug_assert!(row + rows <= self.size.rows);
 
         // Objective of this loop is to write specified range of rows to window.
         let end_row = row + rows;
         let mut row = row;
         let mut col = 0;
 
-        for c in self.buffer.forward(row_pos) {
+        for c in self.buffer.borrow().forward(row_pos) {
             if c == '\n' {
-                self.window.clear_row_from(row, col);
-                col = self.window.cols();
+                self.window_mut().clear_row_from(row, col);
+                col = self.size.cols;
             } else {
-                self.window
-                    .set_cell(row, col, Cell::new(c, self.window.color()));
+                let color = self.window().color();
+                self.window_mut().set_cell(row, col, Cell::new(c, color));
                 col += 1;
             }
-            if col == self.window.cols() {
+            if col == self.size.cols {
                 row += 1;
                 col = 0;
             }
@@ -603,15 +625,15 @@ impl Editor {
         // Blanks out any remaining cells if end of buffer is reached for all rows not yet
         // processed.
         if row < end_row {
-            self.window.clear_row_from(row, col);
-            self.window.clear_rows(row + 1, end_row);
+            self.window_mut().clear_row_from(row, col);
+            self.window_mut().clear_rows(row + 1, end_row);
         }
     }
 
     /// Writes the contents of the buffer to the window, where `row` is the beginning row
     /// and `row_pos` is the buffer position of `row`.
     fn render_rows_from(&mut self, row: u32, row_pos: usize) {
-        self.render_rows(row, self.window.rows() - row, row_pos);
+        self.render_rows(row, self.size.rows - row, row_pos);
     }
 
     /// Finds the buffer position of `rows` preceding `row_pos`.
@@ -658,22 +680,22 @@ impl Editor {
     /// Returns `None` if the current row is already at the top of the buffer.
     fn prev_row(&self, row_pos: usize) -> Option<usize> {
         if row_pos > 0 {
-            let offset = match self.buffer.get_char(row_pos - 1) {
+            let offset = match self.buffer().get_char(row_pos - 1) {
                 // Indicates that current row position is also beginning of line, so
                 // determine offset to prior row by finding beginning of prior line.
                 Some('\n') => {
-                    let pos = self.buffer.find_beg_line(row_pos - 1);
-                    let offset = (row_pos - pos) % self.window.cols() as usize;
+                    let pos = self.buffer().find_beg_line(row_pos - 1);
+                    let offset = (row_pos - pos) % self.size.cols as usize;
                     if offset > 0 {
                         offset
                     } else {
-                        self.window.cols() as usize
+                        self.size.cols as usize
                     }
                 }
                 // Indicates that current row position is not beginning of line, which
                 // means it wrapped, making offset to prior row trivially equal to width
                 // of window.
-                _ => self.window.cols() as usize,
+                _ => self.size.cols as usize,
             };
             Some(row_pos - offset)
         } else {
@@ -688,12 +710,12 @@ impl Editor {
     fn next_row(&self, row_pos: usize) -> Option<usize> {
         // Scans forward until \n encountered or number of characters not to exceed
         // width of window.
-        self.buffer
-            .find_next_line_or(row_pos, self.window.cols() as usize)
+        self.buffer()
+            .find_next_line_or(row_pos, self.size.cols as usize)
     }
 
     fn find_row_pos(&self, pos: usize) -> usize {
-        pos - ((pos - self.buffer.find_beg_line(pos)) % self.window.cols() as usize)
+        pos - ((pos - self.buffer().find_beg_line(pos)) % self.size.cols as usize)
     }
 
     /// Finds the buffer position of `col` relative to `row_pos`, which is assumed to be
@@ -705,7 +727,7 @@ impl Editor {
     fn find_col(&self, row_pos: usize, col: u32) -> (usize, u32) {
         // Scans forward until \n encountered or number of characters processed reaches
         // specified column.
-        let col_pos = self.buffer.find_end_line_or(row_pos, col as usize);
+        let col_pos = self.buffer().find_end_line_or(row_pos, col as usize);
         (col_pos, (col_pos - row_pos) as u32)
     }
 
@@ -713,13 +735,13 @@ impl Editor {
     fn column_of(&self, pos: usize) -> u32 {
         // Column number is derived by calculating distance between given position
         // and beginning of line, though bounded by width of window.
-        (pos - self.buffer.find_beg_line(pos)) as u32 % self.window.cols()
+        (pos - self.buffer().find_beg_line(pos)) as u32 % self.size.cols
     }
 
     /// Returns the number of rows that wrap beyond the current row designated by
     /// `row_pos`.
     fn wrapped_rows(&self, row_pos: usize) -> u32 {
-        (self.buffer.find_end_line(row_pos) - row_pos) as u32 / self.window.cols()
+        (self.buffer().find_end_line(row_pos) - row_pos) as u32 / self.size.cols
     }
 
     /// Finds the cursor and corresponding row position at the given cursor `pos`, returning
@@ -735,14 +757,14 @@ impl Editor {
     fn find_cursor(&self, pos: usize) -> (Option<u32>, u32, usize) {
         if pos > self.cur_pos {
             let (row, col, row_pos) = self
-                .buffer
+                .buffer()
                 .forward(self.cur_pos)
                 .index()
                 .take(pos - self.cur_pos)
                 .fold(
                     (self.cursor.row, self.cursor.col, self.row_pos),
                     |(row, col, row_pos), (pos, c)| {
-                        if c == '\n' || col == self.window.cols() - 1 {
+                        if c == '\n' || col == self.size.cols - 1 {
                             // Move to next row when \n is encountered or cursor at right edge of
                             // window, nothing that next row position always follows the current
                             // character.
@@ -752,7 +774,7 @@ impl Editor {
                         }
                     },
                 );
-            let maybe_row = if row < self.window.rows() {
+            let maybe_row = if row < self.size.rows {
                 Some(row)
             } else {
                 None
@@ -760,13 +782,13 @@ impl Editor {
             (maybe_row, col, row_pos)
         } else if pos < self.cur_pos {
             let (rows, _) = self
-                .buffer
+                .buffer()
                 .backward(self.cur_pos)
                 .index()
                 .take(self.cur_pos - pos)
                 .fold((0, self.cursor.col), |(rows, col), (_, c)| {
                     if c == '\n' || col == 0 {
-                        (rows + 1, self.window.cols() - 1)
+                        (rows + 1, self.size.cols - 1)
                     } else {
                         (rows, col - 1)
                     }

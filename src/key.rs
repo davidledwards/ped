@@ -1,6 +1,6 @@
 //! Keyboard reader.
-
 use crate::error::{Error, Result};
+
 use std::io::{self, Bytes, Read, Stdin};
 use std::str;
 

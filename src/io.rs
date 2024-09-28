@@ -1,7 +1,7 @@
 //! I/O operations with buffers.
-
 use crate::buffer::Buffer;
 use crate::error::{Error, Result};
+
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
 use std::path::Path;
