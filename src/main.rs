@@ -1,6 +1,7 @@
 mod ansi;
 mod bind;
 mod buffer;
+mod canvas;
 mod color;
 mod control;
 mod display;

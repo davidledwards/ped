@@ -84,18 +84,13 @@ impl Default for Cell {
 
 pub struct Display {
     origin: Point,
-    size: Size,
     out: String,
 }
 
 impl Display {
-    pub fn new(origin: Point, size: Size) -> Display {
-        debug_assert!(size.rows > 0);
-        debug_assert!(size.cols > 0);
-
+    pub fn new(origin: Point) -> Display {
         Display {
             origin,
-            size,
             out: String::new(),
         }
     }
@@ -108,26 +103,43 @@ impl Display {
         }
     }
 
-    pub fn write_cell(&mut self, p: Point, cell: Cell, hint: Option<(Point, Cell)>) {
+    pub fn set_cursor(&mut self, cursor: Point) -> &mut Display {
+        self.out
+            .push_str(ansi::set_cursor(self.origin + cursor).as_str());
+        self
+    }
+
+    pub fn set_color(&mut self, color: Color) -> &mut Display {
+        self.out.push_str(ansi::set_color(color).as_str());
+        self
+    }
+
+    pub fn write_str(&mut self, text: &str) -> &mut Display {
+        self.out.push_str(text);
+        self
+    }
+
+    pub fn write_cell(
+        &mut self,
+        p: Point,
+        cell: Cell,
+        hint: Option<(Point, Cell)>,
+    ) -> &mut Display {
         match hint {
             Some((prev_p, prev_cell)) => {
                 if p.row != prev_p.row || p.col != prev_p.col + 1 {
-                    self.write_cursor(p);
+                    self.set_cursor(p);
                 }
                 if cell.color != prev_cell.color {
                     self.out.push_str(ansi::set_color(cell.color).as_str());
                 }
             }
             None => {
-                self.write_cursor(p);
+                self.set_cursor(p);
                 self.out.push_str(ansi::set_color(cell.color).as_str());
             }
         }
         self.out.push(cell.value);
-    }
-
-    pub fn write_cursor(&mut self, cursor: Point) {
-        self.out
-            .push_str(ansi::set_cursor(self.origin + cursor).as_str());
+        self
     }
 }

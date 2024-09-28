@@ -1,7 +1,8 @@
 //! Editor.
 use crate::buffer::{Buffer, BufferRef};
+use crate::canvas::{Canvas, CanvasRef};
 use crate::display::{Cell, Point, Size};
-use crate::window::{Window, WindowRef};
+use crate::window::WindowRef;
 
 use std::cell::{Ref, RefMut};
 use std::cmp;
@@ -16,7 +17,9 @@ pub struct Editor {
     /// Window attached to this editor.
     window: WindowRef,
 
-    /// Cached value of window size.
+    canvas: CanvasRef,
+
+    /// Cached value of canvas size.
     size: Size,
 
     /// Buffer position corresponding to the first character of the `cursor` row.
@@ -40,11 +43,13 @@ pub enum Focus {
 impl Editor {
     pub fn new(buffer: BufferRef, window: WindowRef) -> Editor {
         let cur_pos = buffer.borrow().get_pos();
-        let size = window.borrow().size();
+        let canvas = window.borrow().canvas().clone();
+        let size = canvas.borrow().size();
         let mut editor = Editor {
             buffer,
             cur_pos,
             window,
+            canvas,
             size,
             row_pos: 0,
             cursor: Point::ORIGIN,
@@ -65,12 +70,12 @@ impl Editor {
         self.buffer.borrow_mut()
     }
 
-    fn window(&self) -> Ref<'_, Window> {
-        self.window.borrow()
+    fn canvas(&self) -> Ref<'_, Canvas> {
+        self.canvas.borrow()
     }
 
-    fn window_mut(&self) -> RefMut<'_, Window> {
-        self.window.borrow_mut()
+    fn canvas_mut(&self) -> RefMut<'_, Canvas> {
+        self.canvas.borrow_mut()
     }
 
     pub fn insert_char(&mut self, c: char) {
@@ -117,7 +122,7 @@ impl Editor {
                 self.size.rows - 1
             }
         };
-        self.window_mut().draw();
+        self.canvas_mut().draw();
 
         self.cur_pos = cur_pos;
         self.row_pos = row_pos;
@@ -194,7 +199,7 @@ impl Editor {
                     0
                 }
             };
-            self.window_mut().draw();
+            self.canvas_mut().draw();
             self.cur_pos = from_pos;
             self.row_pos = row_pos;
             self.set_cursor(row, col);
@@ -252,8 +257,8 @@ impl Editor {
                     self.render_rows_from(self.cursor.row, self.row_pos);
                 }
             }
-            self.window_mut().draw();
-            self.window_mut().set_cursor(self.cursor);
+            self.canvas_mut().draw();
+            self.canvas_mut().set_cursor(self.cursor);
             text
         } else {
             vec![]
@@ -270,9 +275,9 @@ impl Editor {
     pub fn redraw(&mut self) {
         let (top_pos, _) = self.find_up(self.row_pos, self.cursor.row);
         self.render_rows_from(0, top_pos);
-        self.window_mut().clear();
-        self.window_mut().draw();
-        self.window_mut().set_cursor(self.cursor);
+        self.canvas_mut().clear();
+        self.canvas_mut().draw();
+        self.canvas_mut().set_cursor(self.cursor);
     }
 
     pub fn redraw_focus(&mut self, focus: Focus) {
@@ -289,8 +294,8 @@ impl Editor {
         self.row_pos = self.cur_pos - col as usize;
         let (top_pos, row) = self.find_up(self.row_pos, row);
         self.render_rows_from(0, top_pos);
-        self.window_mut().clear();
-        self.window_mut().draw();
+        self.canvas_mut().clear();
+        self.canvas_mut().draw();
         self.set_cursor(row, col);
     }
 
@@ -305,9 +310,9 @@ impl Editor {
             let row = if self.cursor.row > 0 {
                 self.cursor.row - 1
             } else {
-                self.window_mut().scroll_down(0, 1);
+                self.canvas_mut().scroll_down(0, 1);
                 self.render_rows(0, 1, row_pos);
-                self.window_mut().draw();
+                self.canvas_mut().draw();
                 0
             };
 
@@ -328,9 +333,9 @@ impl Editor {
             let row = if self.cursor.row < self.size.rows - 1 {
                 self.cursor.row + 1
             } else {
-                self.window_mut().scroll_up(self.size.rows, 1);
+                self.canvas_mut().scroll_up(self.size.rows, 1);
                 self.render_rows(self.cursor.row, 1, row_pos);
-                self.window_mut().draw();
+                self.canvas_mut().draw();
                 self.cursor.row
             };
 
@@ -369,9 +374,9 @@ impl Editor {
                 let row = if self.cursor.row > 0 {
                     self.cursor.row - 1
                 } else {
-                    self.window_mut().scroll_down(0, 1);
+                    self.canvas_mut().scroll_down(0, 1);
                     self.render_rows(0, 1, row_pos);
-                    self.window_mut().draw();
+                    self.canvas_mut().draw();
                     0
                 };
                 self.row_pos = row_pos;
@@ -408,9 +413,9 @@ impl Editor {
                 if self.cursor.row < self.size.rows - 1 {
                     self.cursor.row + 1
                 } else {
-                    self.window_mut().scroll_up(self.size.rows, 1);
+                    self.canvas_mut().scroll_up(self.size.rows, 1);
                     self.render_rows(self.cursor.row, 1, self.row_pos);
-                    self.window_mut().draw();
+                    self.canvas_mut().draw();
                     self.cursor.row
                 }
             } else {
@@ -435,7 +440,7 @@ impl Editor {
             // Since entire display likely changed in most cases, perform full rendering of
             // canvas before drawing.
             self.render_rows_from(0, top_pos);
-            self.window_mut().draw();
+            self.canvas_mut().draw();
 
             self.cur_pos = cur_pos;
             self.row_pos = row_pos;
@@ -456,7 +461,7 @@ impl Editor {
             // Since entire display likely changed in most cases, perform full rendering of
             // canvas before drawing.
             self.render_rows_from(0, top_pos);
-            self.window_mut().draw();
+            self.canvas_mut().draw();
 
             self.cur_pos = cur_pos;
             self.row_pos = row_pos;
@@ -494,7 +499,7 @@ impl Editor {
         if self.row_pos > 0 {
             self.row_pos = 0;
             self.render_rows_from(0, self.row_pos);
-            self.window_mut().draw();
+            self.canvas_mut().draw();
         }
 
         self.cur_pos = 0;
@@ -513,7 +518,7 @@ impl Editor {
         self.row_pos = self.cur_pos - col as usize;
         let (top_pos, row) = self.find_up(self.row_pos, self.size.rows - 1);
         self.render_rows_from(0, top_pos);
-        self.window_mut().draw();
+        self.canvas_mut().draw();
         self.set_cursor(row, col);
     }
 
@@ -529,9 +534,9 @@ impl Editor {
 
         // Only need to scroll if following row exiats.
         if rows == try_rows {
-            self.window_mut().scroll_up(self.size.rows, 1);
+            self.canvas_mut().scroll_up(self.size.rows, 1);
             self.render_rows(self.size.rows - 1, 1, row_pos);
-            self.window_mut().draw();
+            self.canvas_mut().draw();
 
             let (row, col) = if self.cursor.row > 0 {
                 // Indicates that cursor is not yet on top row.
@@ -561,9 +566,9 @@ impl Editor {
 
         // Only need to scroll if preceding row exists.
         if rows == try_rows {
-            self.window_mut().scroll_down(0, 1);
+            self.canvas_mut().scroll_down(0, 1);
             self.render_rows(0, 1, row_pos);
-            self.window_mut().draw();
+            self.canvas_mut().draw();
 
             let (row, col) = if self.cursor.row < self.size.rows - 1 {
                 // Indicates that cursor is not yet on bottom row.
@@ -584,7 +589,7 @@ impl Editor {
     /// Sets the cursor to (`row`, `col`) and updates the window.
     fn set_cursor(&mut self, row: u32, col: u32) {
         self.cursor = Point::new(row, col);
-        self.window_mut().set_cursor(self.cursor);
+        self.canvas_mut().set_cursor(self.cursor);
     }
 
     /// Sets the cursor column to `col`, retaining the current row, and updates the
@@ -606,11 +611,11 @@ impl Editor {
 
         for c in self.buffer.borrow().forward(row_pos) {
             if c == '\n' {
-                self.window_mut().clear_row_from(row, col);
+                self.canvas_mut().clear_row_from(row, col);
                 col = self.size.cols;
             } else {
-                let color = self.window().color();
-                self.window_mut().set_cell(row, col, Cell::new(c, color));
+                let color = self.canvas().color();
+                self.canvas_mut().set_cell(row, col, Cell::new(c, color));
                 col += 1;
             }
             if col == self.size.cols {
@@ -625,8 +630,8 @@ impl Editor {
         // Blanks out any remaining cells if end of buffer is reached for all rows not yet
         // processed.
         if row < end_row {
-            self.window_mut().clear_row_from(row, col);
-            self.window_mut().clear_rows(row + 1, end_row);
+            self.canvas_mut().clear_row_from(row, col);
+            self.canvas_mut().clear_rows(row + 1, end_row);
         }
     }
 

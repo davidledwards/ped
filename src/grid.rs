@@ -1,4 +1,4 @@
-//! Grid of cells for displaying text.
+//! Grid of cells for arranging text.
 use crate::display::{Cell, Point, Size};
 
 pub struct Grid {
