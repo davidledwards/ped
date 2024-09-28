@@ -1,12 +1,12 @@
 mod ansi;
 mod bind;
 mod buffer;
-mod canvas;
 mod color;
 mod control;
 mod display;
 mod editor;
 mod error;
+mod grid;
 mod io;
 mod key;
 mod op;
@@ -17,14 +17,12 @@ mod workspace;
 
 use crate::bind::BindingMap;
 use crate::buffer::Buffer;
-use crate::color::Color;
 use crate::control::Controller;
 use crate::display::{Point, Size};
 use crate::editor::Editor;
 use crate::error::Result;
 use crate::key::Keyboard;
 use crate::opt::Options;
-use crate::window::Window;
 use crate::workspace::{Placement, Workspace};
 
 use std::env;

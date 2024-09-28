@@ -1,7 +1,7 @@
 //! Window management.
-use crate::canvas::Canvas;
 use crate::color::Color;
 use crate::display::{Cell, Display, Point, Size};
+use crate::grid::Grid;
 
 use std::cell::RefCell;
 use std::cmp;
@@ -11,8 +11,8 @@ pub struct Window {
     origin: Point,
     size: Size,
     color: Color,
-    back: Canvas,
-    front: Canvas,
+    back: Grid,
+    front: Grid,
     display: Display,
     blank: Cell,
 }
@@ -28,8 +28,8 @@ impl Window {
             origin,
             size,
             color,
-            back: Canvas::new(size),
-            front: Canvas::new(size),
+            back: Grid::new(size),
+            front: Grid::new(size),
             display: Display::new(origin, size),
             blank: Cell::new(' ', color),
         }
@@ -114,7 +114,7 @@ impl Window {
             // Start row of move is maximally bounded by number of rows to scroll.
             let from_row = cmp::min(rows, row);
 
-            // Move rows to top of canvas.
+            // Move rows to top of grid.
             if from_row < row {
                 self.back.move_rows(from_row, 0, row - from_row);
             }
@@ -158,7 +158,7 @@ impl Window {
             // Target row of move is maximally bounded by total number of rows.
             let to_row = cmp::min(row + rows, self.size.rows);
 
-            // Move rows to bottom of canvas.
+            // Move rows to bottom of grid.
             if to_row < self.size.rows {
                 self.back.move_rows(row, to_row, self.size.rows - to_row);
             }
@@ -178,7 +178,7 @@ impl Window {
 
     /// Draw pending window modifications on display.
     pub fn draw(&mut self) {
-        // Determine which cells changed in back canvas, if any, which then results in
+        // Determine which cells changed in back grid, if any, which then results in
         // constructing series of instructions to update display.
         let changes = self.front.reconcile(&self.back);
         if changes.len() > 0 {
@@ -191,7 +191,7 @@ impl Window {
         }
     }
 
-    /// Clears the front canvas such that a subsequent [`draw`](Self::draw) will effectively
+    /// Clears the front grid such that a subsequent [`draw`](Self::draw) will effectively
     /// render the entire display.
     pub fn clear(&mut self) {
         self.front.clear();

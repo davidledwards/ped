@@ -1,17 +1,16 @@
-//! Represents visible content of buffers.
+//! Grid of cells for displaying text.
 use crate::display::{Cell, Point, Size};
 
-#[derive(Debug)]
-pub struct Canvas {
+pub struct Grid {
     size: Size,
     content: Vec<Cell>,
 }
 
-impl Canvas {
-    pub fn new(size: Size) -> Canvas {
+impl Grid {
+    pub fn new(size: Size) -> Grid {
         debug_assert!(size.rows > 0);
         debug_assert!(size.cols > 0);
-        Canvas {
+        Grid {
             size,
             content: vec![Cell::EMPTY; (size.rows * size.cols) as usize],
         }
@@ -41,11 +40,12 @@ impl Canvas {
         self.content.fill(Cell::EMPTY);
     }
 
-    // Apply differences in other with respect to this canvas and return a vector of
-    // those differences.
+    // Apply differences in `other` with respect to this grid and return a vector
+    // of those differences.
     //
-    // Note that this canvas will be equivalent to other upon return.
-    pub fn reconcile(&mut self, other: &Canvas) -> Vec<(Point, Cell)> {
+    // Note that a side effect is that this grid will be equivalent to `other` upon
+    // return.
+    pub fn reconcile(&mut self, other: &Grid) -> Vec<(Point, Cell)> {
         debug_assert!(self.size.rows == other.size.rows);
         debug_assert!(self.size.cols == other.size.cols);
 
@@ -89,7 +89,7 @@ impl Canvas {
 
     pub fn iter(&self) -> Iter<'_> {
         Iter {
-            canvas: &self,
+            grid: &self,
             row: 0,
             col: 0,
             index: 0,
@@ -98,19 +98,19 @@ impl Canvas {
 
     pub fn row_iter(&self) -> RowIter<'_> {
         RowIter {
-            canvas: &self,
+            grid: &self,
             row: 0,
         }
     }
 }
 
 pub struct RowIter<'a> {
-    canvas: &'a Canvas,
+    grid: &'a Grid,
     row: u32,
 }
 
 pub struct ColIter<'a> {
-    canvas: &'a Canvas,
+    grid: &'a Grid,
     row_start: usize,
     col: u32,
 }
@@ -119,14 +119,14 @@ impl<'a> Iterator for RowIter<'a> {
     type Item = (u32, ColIter<'a>);
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.row < self.canvas.size.rows {
+        if self.row < self.grid.size.rows {
             let row = self.row;
             self.row += 1;
             Some((
                 row,
                 ColIter {
-                    canvas: &self.canvas,
-                    row_start: (row * self.canvas.size.cols) as usize,
+                    grid: &self.grid,
+                    row_start: (row * self.grid.size.cols) as usize,
                     col: 0,
                 },
             ))
@@ -140,10 +140,10 @@ impl<'a> Iterator for ColIter<'a> {
     type Item = (u32, Cell);
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.col < self.canvas.size.cols {
+        if self.col < self.grid.size.cols {
             let col = self.col;
             self.col += 1;
-            Some((col, self.canvas.content[self.row_start + (col as usize)]))
+            Some((col, self.grid.content[self.row_start + (col as usize)]))
         } else {
             None
         }
@@ -151,7 +151,7 @@ impl<'a> Iterator for ColIter<'a> {
 }
 
 pub struct Iter<'a> {
-    canvas: &'a Canvas,
+    grid: &'a Grid,
     row: u32,
     col: u32,
     index: usize,
@@ -161,13 +161,13 @@ impl<'a> Iterator for Iter<'a> {
     type Item = (Point, Cell);
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.row < self.canvas.size.rows {
+        if self.row < self.grid.size.rows {
             let item = Some((
                 Point::new(self.row, self.col),
-                self.canvas.content[self.index],
+                self.grid.content[self.index],
             ));
             self.col += 1;
-            if self.col == self.canvas.size.cols {
+            if self.col == self.grid.size.cols {
                 self.row += 1;
                 self.col = 0;
             }
