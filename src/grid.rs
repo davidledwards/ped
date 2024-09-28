@@ -1,67 +1,68 @@
-//! Grid of cells for arranging text.
-use crate::display::{Cell, Point, Size};
+//! Grid of cells for arranging characters.
+use crate::color::Color;
+use crate::display::{Point, Size};
 
+/// A 2-dimensional array of [`Cell`]s.
 pub struct Grid {
     size: Size,
     content: Vec<Cell>,
 }
 
+/// A pair containing a [`char`] and a [`Color`].
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub struct Cell {
+    pub value: char,
+    pub color: Color,
+}
+
+impl Cell {
+    pub const EMPTY: Cell = Cell::new('\0', Color::ZERO);
+
+    pub const fn new(value: char, color: Color) -> Cell {
+        Cell { value, color }
+    }
+}
+
+impl Default for Cell {
+    fn default() -> Cell {
+        Cell::EMPTY
+    }
+}
+
 impl Grid {
+    /// Creates a `size` grid with all cells set to [`Cell::EMPTY`].
     pub fn new(size: Size) -> Grid {
-        debug_assert!(size.rows > 0);
-        debug_assert!(size.cols > 0);
         Grid {
             size,
             content: vec![Cell::EMPTY; (size.rows * size.cols) as usize],
         }
     }
 
-    pub fn row(&self, row: u32) -> &[Cell] {
-        debug_assert!(row < self.size.rows);
-        let start = row * self.size.cols;
-        let end = start + self.size.cols;
-        &self.content[(start as usize)..(end as usize)]
-    }
-
-    pub fn row_mut(&mut self, row: u32) -> &mut [Cell] {
-        debug_assert!(row < self.size.rows);
-        let start = row * self.size.cols;
-        let end = start + self.size.cols;
-        &mut self.content[(start as usize)..(end as usize)]
-    }
-
-    pub fn cell_mut(&mut self, row: u32, col: u32) -> &mut Cell {
+    /// Sets the `row`:`col` cell to `cell`.
+    pub fn set_cell(&mut self, row: u32, col: u32, cell: Cell) {
         debug_assert!(row < self.size.rows);
         debug_assert!(col < self.size.cols);
-        &mut self.content[(row * self.size.cols + col) as usize]
+
+        self.content[(row * self.size.cols + col) as usize] = cell;
     }
 
-    pub fn clear(&mut self) {
-        self.content.fill(Cell::EMPTY);
+    /// Fills all cells in `row` in the range [`start_col`, `end_col`) to `cell`.
+    pub fn fill_range(&mut self, row: u32, start_col: u32, end_col: u32, cell: Cell) {
+        debug_assert!(row < self.size.rows);
+        debug_assert!(start_col < end_col);
+        debug_assert!(end_col <= self.size.cols);
+
+        let row_index = row * self.size.cols;
+        let start = (row_index + start_col) as usize;
+        let end = (row_index + end_col) as usize;
+        self.content[start..end].fill(cell);
     }
 
-    // Apply differences in `other` with respect to this grid and return a vector
-    // of those differences.
-    //
-    // Note that a side effect is that this grid will be equivalent to `other` upon
-    // return.
-    pub fn reconcile(&mut self, other: &Grid) -> Vec<(Point, Cell)> {
-        debug_assert!(self.size.rows == other.size.rows);
-        debug_assert!(self.size.cols == other.size.cols);
-
-        let mut changes = Vec::new();
-        for i in 0..self.content.len() {
-            if self.content[i] != other.content[i] {
-                changes.push((
-                    Point::new((i as u32) / self.size.cols, (i as u32) % self.size.cols),
-                    other.content[i],
-                ));
-                self.content[i] = other.content[i];
-            }
-        }
-        changes
-    }
-
+    /// Moves `rows` rows starting from `from_row` to `to_row`.
+    ///
+    /// This function is safe to move overlapping rows. However, if the range of rows
+    /// relative to either `from_row` or `to_row` would extend beyond the grid size, then
+    /// this function will panic.
     pub fn move_rows(&mut self, from_row: u32, to_row: u32, rows: u32) {
         debug_assert!(from_row < self.size.rows);
         debug_assert!(to_row < self.size.rows);
@@ -77,6 +78,13 @@ impl Grid {
         self.content.copy_within(start..end, dest);
     }
 
+    /// Sets all cells to [`Cell::EMPTY`].
+    pub fn clear(&mut self) {
+        self.content.fill(Cell::EMPTY);
+    }
+
+    /// Sets the cells of all rows in the range [`start_row`, `end_row`) to
+    /// [`Cell::EMPTY`].
     pub fn clear_rows(&mut self, start_row: u32, end_row: u32) {
         debug_assert!(start_row < self.size.rows);
         debug_assert!(end_row <= self.size.rows);
@@ -87,94 +95,31 @@ impl Grid {
         self.content[start..end].fill(Cell::EMPTY);
     }
 
-    pub fn iter(&self) -> Iter<'_> {
-        Iter {
-            grid: &self,
-            row: 0,
-            col: 0,
-            index: 0,
-        }
-    }
+    // Apply differences in `other` grid with respect to this grid and return a vector
+    // of those differences.
+    //
+    // Note that a side effect is that this grid will be equivalent to `other` upon
+    // return.
+    //
+    // Both grids must have equivalent sizes, otherwise the function panics.
+    pub fn reconcile(&mut self, other: &Grid) -> Vec<(Point, Cell)> {
+        debug_assert!(self.size.rows == other.size.rows);
+        debug_assert!(self.size.cols == other.size.cols);
 
-    pub fn row_iter(&self) -> RowIter<'_> {
-        RowIter {
-            grid: &self,
-            row: 0,
-        }
-    }
-}
-
-pub struct RowIter<'a> {
-    grid: &'a Grid,
-    row: u32,
-}
-
-pub struct ColIter<'a> {
-    grid: &'a Grid,
-    row_start: usize,
-    col: u32,
-}
-
-impl<'a> Iterator for RowIter<'a> {
-    type Item = (u32, ColIter<'a>);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.row < self.grid.size.rows {
-            let row = self.row;
-            self.row += 1;
-            Some((
-                row,
-                ColIter {
-                    grid: &self.grid,
-                    row_start: (row * self.grid.size.cols) as usize,
-                    col: 0,
-                },
-            ))
-        } else {
-            None
-        }
-    }
-}
-
-impl<'a> Iterator for ColIter<'a> {
-    type Item = (u32, Cell);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.col < self.grid.size.cols {
-            let col = self.col;
-            self.col += 1;
-            Some((col, self.grid.content[self.row_start + (col as usize)]))
-        } else {
-            None
-        }
-    }
-}
-
-pub struct Iter<'a> {
-    grid: &'a Grid,
-    row: u32,
-    col: u32,
-    index: usize,
-}
-
-impl<'a> Iterator for Iter<'a> {
-    type Item = (Point, Cell);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.row < self.grid.size.rows {
-            let item = Some((
-                Point::new(self.row, self.col),
-                self.grid.content[self.index],
-            ));
-            self.col += 1;
-            if self.col == self.grid.size.cols {
-                self.row += 1;
-                self.col = 0;
-            }
-            self.index += 1;
-            item
-        } else {
-            None
-        }
+        self.content
+            .iter_mut()
+            .enumerate()
+            .filter_map(|(i, this_cell)| {
+                let other_cell = other.content[i];
+                if *this_cell != other_cell {
+                    *this_cell = other_cell;
+                    let row = (i as u32) / self.size.cols;
+                    let col = (i as u32) % self.size.cols;
+                    Some((Point::new(row, col), other_cell))
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>()
     }
 }

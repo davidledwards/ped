@@ -24,10 +24,13 @@ impl Window {
         let canvas = Canvas::new(canvas_origin, canvas_size, color);
 
         // temp for now, just showing border to verify working
+        let tag = format!("{}", size);
         Display::new(origin)
             .set_cursor(Point::new(size.rows - 1, 0))
             .set_color(Color::new(233, 15))
-            .write_str("-".repeat(size.cols as usize).as_str())
+            .write_str("--")
+            .write_str(tag.as_str())
+            .write_str("-".repeat((size.cols as usize) - tag.len() - 2).as_str())
             .send();
 
         Window {

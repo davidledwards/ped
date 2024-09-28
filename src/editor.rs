@@ -1,7 +1,8 @@
 //! Editor.
 use crate::buffer::{Buffer, BufferRef};
 use crate::canvas::{Canvas, CanvasRef};
-use crate::display::{Cell, Point, Size};
+use crate::display::{Point, Size};
+use crate::grid::Cell;
 use crate::window::WindowRef;
 
 use std::cell::{Ref, RefMut};

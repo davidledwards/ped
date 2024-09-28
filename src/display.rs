@@ -2,9 +2,11 @@
 use crate::ansi;
 use crate::color::Color;
 
+use std::fmt;
 use std::io::{self, Write};
 use std::ops::{Add, Sub};
 
+/// Represents the size of a 2-dimensional space expressed as `rows` and `cols`.
 #[derive(Copy, Clone, Debug)]
 pub struct Size {
     pub rows: u32,
@@ -21,6 +23,12 @@ impl Size {
     }
 }
 
+impl fmt::Display for Size {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "[{}:{}]", self.rows, self.cols)
+    }
+}
+
 impl Sub<Size> for Size {
     type Output = Size;
 
@@ -29,6 +37,7 @@ impl Sub<Size> for Size {
     }
 }
 
+/// Represent a point in a 2-dimensional space expressed as `row` and `col`.
 #[derive(Copy, Clone, Debug)]
 pub struct Point {
     pub row: u32,
@@ -36,10 +45,16 @@ pub struct Point {
 }
 
 impl Point {
-    pub const ORIGIN: Point = Point { row: 0, col: 0 };
+    pub const ORIGIN: Point = Point::new(0, 0);
 
-    pub fn new(row: u32, col: u32) -> Point {
+    pub const fn new(row: u32, col: u32) -> Point {
         Point { row, col }
+    }
+}
+
+impl fmt::Display for Point {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "({}, {})", self.row, self.col)
     }
 }
 
@@ -59,35 +74,18 @@ impl Add<Size> for Point {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub struct Cell {
-    pub value: char,
-    pub color: Color,
-}
-
-impl Cell {
-    pub const EMPTY: Cell = Cell {
-        value: '\0',
-        color: Color::ZERO,
-    };
-
-    pub fn new(value: char, color: Color) -> Cell {
-        Cell { value, color }
-    }
-}
-
-impl Default for Cell {
-    fn default() -> Cell {
-        Cell::EMPTY
-    }
-}
-
+/// A buffered abstraction over standard output that supports sending content to the
+/// display in a structured way.
+///
+/// Cursor operations are relative to an [origin](`Point`) that is provided during
+/// instantiation of the display.
 pub struct Display {
     origin: Point,
     out: String,
 }
 
 impl Display {
+    /// Creates a display with `origin` as its reference point for cursor operations.
     pub fn new(origin: Point) -> Display {
         Display {
             origin,
@@ -95,6 +93,7 @@ impl Display {
         }
     }
 
+    /// Sends buffered changes to standard output.
     pub fn send(&mut self) {
         if self.out.len() > 0 {
             print!("{}", self.out);
@@ -114,32 +113,13 @@ impl Display {
         self
     }
 
-    pub fn write_str(&mut self, text: &str) -> &mut Display {
-        self.out.push_str(text);
+    pub fn write(&mut self, c: char) -> &mut Display {
+        self.out.push(c);
         self
     }
 
-    pub fn write_cell(
-        &mut self,
-        p: Point,
-        cell: Cell,
-        hint: Option<(Point, Cell)>,
-    ) -> &mut Display {
-        match hint {
-            Some((prev_p, prev_cell)) => {
-                if p.row != prev_p.row || p.col != prev_p.col + 1 {
-                    self.set_cursor(p);
-                }
-                if cell.color != prev_cell.color {
-                    self.out.push_str(ansi::set_color(cell.color).as_str());
-                }
-            }
-            None => {
-                self.set_cursor(p);
-                self.out.push_str(ansi::set_color(cell.color).as_str());
-            }
-        }
-        self.out.push(cell.value);
+    pub fn write_str(&mut self, text: &str) -> &mut Display {
+        self.out.push_str(text);
         self
     }
 }

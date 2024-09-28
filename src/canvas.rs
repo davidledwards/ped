@@ -1,6 +1,7 @@
 //! Canvas.
 use crate::color::Color;
-use crate::display::{Cell, Display, Point, Size};
+use crate::display::{Display, Point, Size};
+use crate::grid::Cell;
 use crate::grid::Grid;
 
 use std::cell::RefCell;
@@ -49,7 +50,8 @@ impl Canvas {
     pub fn set_cell(&mut self, row: u32, col: u32, cell: Cell) {
         debug_assert!(row < self.size.rows);
         debug_assert!(col < self.size.cols);
-        *self.back.cell_mut(row, col) = cell;
+
+        self.back.set_cell(row, col, cell);
     }
 
     /// Clears all cells in the column range [`start_col`..`end_col`) for the given `row`.
@@ -57,8 +59,8 @@ impl Canvas {
         debug_assert!(row < self.size.rows);
         debug_assert!(start_col < end_col);
         debug_assert!(end_col <= self.size.cols);
-        let cells = self.back.row_mut(row);
-        cells[(start_col as usize)..(end_col as usize)].fill(self.blank);
+
+        self.back.fill_range(row, start_col, end_col, self.blank);
     }
 
     /// Clears all cells in the column range [`start_col`..) for the given `row`.
@@ -78,7 +80,7 @@ impl Canvas {
         }
     }
 
-    /// Scrolls _up_ the contents of the window above `row` by the number of `rows`, and
+    /// Scrolls _up_ the contents of the canvas above `row` by the number of `rows`, and
     /// clears the vacated rows.
     ///
     /// # Example
@@ -122,7 +124,7 @@ impl Canvas {
         }
     }
 
-    /// Scrolls _down_ the contents of the window at `row` by the number of `rows`, and
+    /// Scrolls _down_ the contents of the canvas at `row` by the number of `rows`, and
     /// clears the vacated rows.
     ///
     /// # Example
@@ -166,15 +168,16 @@ impl Canvas {
         }
     }
 
-    /// Sets the cursor position in the window to `cursor`.
+    /// Sets the cursor position on the canvas to `cursor`.
     pub fn set_cursor(&mut self, cursor: Point) {
         debug_assert!(cursor.row < self.size.rows);
         debug_assert!(cursor.col < self.size.cols);
+
         self.display.set_cursor(cursor);
         self.display.send();
     }
 
-    /// Draw pending window modifications on display.
+    /// Draw pending canvas modifications to display.
     pub fn draw(&mut self) {
         // Determine which cells changed in back grid, if any, which then results in
         // constructing series of instructions to update display.
@@ -182,7 +185,7 @@ impl Canvas {
         if changes.len() > 0 {
             let mut hint = None;
             for (p, cell) in changes {
-                self.display.write_cell(p, cell, hint);
+                self.draw_cell(p, cell, hint);
                 hint = Some((p, cell));
             }
             self.display.send();
@@ -193,5 +196,26 @@ impl Canvas {
     /// render the entire display.
     pub fn clear(&mut self) {
         self.front.clear();
+    }
+
+    /// Draws `cell` at point `p`.
+    ///
+    /// An optional `hint` is used optimize display output, where the hint is the last
+    /// cell drawn.
+    fn draw_cell(&mut self, p: Point, cell: Cell, hint: Option<(Point, Cell)>) {
+        match hint {
+            Some((prev_p, prev_cell)) => {
+                if p.row != prev_p.row || p.col != prev_p.col + 1 {
+                    self.display.set_cursor(p);
+                }
+                if cell.color != prev_cell.color {
+                    self.display.set_color(cell.color);
+                }
+            }
+            None => {
+                self.display.set_cursor(p).set_color(cell.color);
+            }
+        }
+        self.display.write(cell.value);
     }
 }
