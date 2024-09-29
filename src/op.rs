@@ -6,7 +6,7 @@
 //!
 //! See [`BindingMap`](crate::bind::BindingMap) for further details on binding keys
 //! at runtime.
-use crate::editor::{Editor, Focus};
+use crate::editor::{Align, Editor};
 use crate::error::Result;
 use crate::key::Key;
 
@@ -115,12 +115,13 @@ pub fn move_end_line(editor: &mut Editor, _: &Key) -> Result<()> {
 
 /// redraw
 pub fn redraw(editor: &mut Editor, _: &Key) -> Result<()> {
-    editor.redraw();
+    editor.draw();
     Ok(())
 }
 
 /// redraw-and-center
 pub fn redraw_and_center(editor: &mut Editor, _: &Key) -> Result<()> {
-    editor.redraw_focus(Focus::Auto);
+    editor.align_cursor(Align::Center);
+    editor.draw();
     Ok(())
 }

@@ -24,7 +24,7 @@ use crate::editor::Editor;
 use crate::error::Result;
 use crate::key::Keyboard;
 use crate::opt::Options;
-use crate::workspace::{Placement, Workspace};
+use crate::workspace::Workspace;
 
 use std::env;
 use std::ops::Drop;
@@ -55,23 +55,24 @@ fn run() -> Result<()> {
     if opts.help {
         println!("usage: ped");
     } else {
-        let bindings = BindingMap::new();
-
-        let mut buffer = Buffer::new();
-        if let Some(file) = opts.files.iter().next() {
+        let editors = if let Some(file) = opts.files.iter().next() {
+            let mut buffer = Buffer::new();
             let _ = io::read_file(file, &mut buffer)?;
             buffer.set_pos(0);
+            vec![Editor::new(buffer.to_ref()).to_ref()]
+        } else {
+            Vec::new()
         };
+
+        let bindings = BindingMap::new();
 
         let (rows, cols) = term::size()?;
         term::init()?;
         let _reset = Reset;
+
         let keyboard = Keyboard::new();
-        let mut workspace = Workspace::new(Point::ORIGIN, Size::new(rows, cols))?;
-        let _ = workspace.add_view(Placement::Top);
-        let window = workspace.views().next().unwrap().window().clone();
-        let editor = Editor::new(Buffer::to_ref(buffer), window);
-        let mut controller = Controller::new(keyboard, editor, bindings);
+        let workspace = Workspace::new(Point::ORIGIN, Size::new(rows, cols))?;
+        let mut controller = Controller::new(keyboard, bindings, workspace, editors);
         controller.run()?
     }
     Ok(())

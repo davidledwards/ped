@@ -25,7 +25,7 @@ impl View {
             id,
             origin,
             size,
-            window: Window::to_ref(window),
+            window: window.to_ref(),
         }
     }
 
@@ -103,7 +103,13 @@ impl Workspace {
         Ok(this)
     }
 
-    pub fn add_view(&mut self, place: Placement) -> Option<u32> {
+    pub fn default_view(&self) -> &View {
+        self.views
+            .get(0)
+            .unwrap_or_else(|| panic!("invariant violation: > 0 views must exist"))
+    }
+
+    pub fn add_view(&mut self, place: Placement) -> Option<&View> {
         // Calculate effective number of rows to be allocated to each view given addition
         // of new view, which must satisfy MIN_ROWS requirement, otherwise operation is
         // rejected.
@@ -167,8 +173,12 @@ impl Workspace {
                     (views, origin + Size::rows(rows))
                 });
             self.views = views;
-            Some(view_id)
+            self.find_view(view_id)
         }
+    }
+
+    pub fn find_view(&self, id: u32) -> Option<&View> {
+        self.views.iter().find(|view| view.id == id)
     }
 
     pub fn views(&self) -> Views {

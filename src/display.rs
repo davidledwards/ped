@@ -7,13 +7,15 @@ use std::io::{self, Write};
 use std::ops::{Add, Sub};
 
 /// Represents the size of a 2-dimensional space expressed as `rows` and `cols`.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct Size {
     pub rows: u32,
     pub cols: u32,
 }
 
 impl Size {
+    pub const ZERO: Size = Size::new(0, 0);
+
     pub const fn new(rows: u32, cols: u32) -> Size {
         Size { rows, cols }
     }
@@ -38,7 +40,7 @@ impl Sub<Size> for Size {
 }
 
 /// Represent a point in a 2-dimensional space expressed as `row` and `col`.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct Point {
     pub row: u32,
     pub col: u32,

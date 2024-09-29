@@ -28,11 +28,6 @@ impl Buffer {
         Buffer::with_capacity(Self::INIT_CAPACITY)
     }
 
-    /// Turns `buffer` into a [`BufferRef`].
-    pub fn to_ref(buffer: Buffer) -> BufferRef {
-        Rc::new(RefCell::new(buffer))
-    }
-
     pub fn with_capacity(capacity: usize) -> Buffer {
         let n = if capacity > 0 {
             capacity
@@ -46,6 +41,11 @@ impl Buffer {
             gap: 0,
             gap_len: n,
         }
+    }
+
+    /// Turns the buffer into a [`BufferRef`].
+    pub fn to_ref(self: Buffer) -> BufferRef {
+        Rc::new(RefCell::new(self))
     }
 
     pub fn capacity(&self) -> usize {

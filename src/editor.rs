@@ -3,10 +3,11 @@ use crate::buffer::{Buffer, BufferRef};
 use crate::canvas::{Canvas, CanvasRef};
 use crate::display::{Point, Size};
 use crate::grid::Cell;
-use crate::window::WindowRef;
+use crate::window::{Window, WindowRef};
 
-use std::cell::{Ref, RefMut};
+use std::cell::{Ref, RefCell, RefMut};
 use std::cmp;
+use std::rc::Rc;
 
 pub struct Editor {
     /// Buffer containing the contents of this editor.
@@ -30,23 +31,28 @@ pub struct Editor {
     cursor: Point,
 }
 
-pub enum Focus {
+pub type EditorRef = Rc<RefCell<Editor>>;
+
+/// Various cursor alignment directives.
+pub enum Align {
+    /// Try using the current cursor position captured by [`Editor::cursor`].
     Auto,
+
+    /// Try aligning the cursor in the center of the window.
+    Center,
+
+    /// Try aligning the cursor to a specific row.
     Row(u32),
 }
 
-// TODO
-// - determine best way to represent cursor publicly
-// - should buffer be borrowed?
-// - column anchor when moving vertically
-//
-
 impl Editor {
-    pub fn new(buffer: BufferRef, window: WindowRef) -> Editor {
+    pub fn new(buffer: BufferRef) -> Editor {
         let cur_pos = buffer.borrow().get_pos();
+        let window = Window::zombie().to_ref();
         let canvas = window.borrow().canvas().clone();
         let size = canvas.borrow().size();
-        let mut editor = Editor {
+
+        Editor {
             buffer,
             cur_pos,
             window,
@@ -54,9 +60,31 @@ impl Editor {
             size,
             row_pos: 0,
             cursor: Point::ORIGIN,
-        };
-        editor.redraw_focus(Focus::Auto);
-        editor
+        }
+    }
+
+    /// Turns the editor into a [`EditorRef`].
+    pub fn to_ref(self: Editor) -> EditorRef {
+        Rc::new(RefCell::new(self))
+    }
+
+    pub fn attach(&mut self, window: WindowRef) {
+        self.window = window;
+        self.canvas = self.window.borrow().canvas().clone();
+        self.size = self.canvas.borrow().size();
+
+        if !self.window.borrow().is_zombie() {
+            self.align_cursor(Align::Auto);
+            self.draw();
+        }
+    }
+
+    pub fn draw(&mut self) {
+        let (top_pos, _) = self.find_up(self.row_pos, self.cursor.row);
+        self.render_rows_from(0, top_pos);
+        self.canvas_mut().clear();
+        self.canvas_mut().draw();
+        self.canvas_mut().set_cursor(self.cursor);
     }
 
     pub fn cursor(&self) -> (Point, usize) {
@@ -273,31 +301,21 @@ impl Editor {
         // could move up or down
     }
 
-    pub fn redraw(&mut self) {
-        let (top_pos, _) = self.find_up(self.row_pos, self.cursor.row);
-        self.render_rows_from(0, top_pos);
-        self.canvas_mut().clear();
-        self.canvas_mut().draw();
-        self.canvas_mut().set_cursor(self.cursor);
-    }
-
-    pub fn redraw_focus(&mut self, focus: Focus) {
+    pub fn align_cursor(&mut self, align: Align) {
         // Determine ideal row where cursor would like to be focused, though this should
         // be considered a hint.
-        let row = match focus {
-            Focus::Auto => self.size.rows / 2,
-            Focus::Row(row) => cmp::min(row, self.size.rows - 1),
+        let row = match align {
+            Align::Auto => cmp::min(self.cursor.row, self.size.rows - 1),
+            Align::Center => self.size.rows / 2,
+            Align::Row(row) => cmp::min(row, self.size.rows - 1),
         };
 
         // Tries to position cursor on target row, but no guarantee depending on proximity
         // of row to top of buffer.
         let col = self.column_of(self.cur_pos);
         self.row_pos = self.cur_pos - col as usize;
-        let (top_pos, row) = self.find_up(self.row_pos, row);
-        self.render_rows_from(0, top_pos);
-        self.canvas_mut().clear();
-        self.canvas_mut().draw();
-        self.set_cursor(row, col);
+        let (_, row) = self.find_up(self.row_pos, row);
+        self.cursor = Point::new(row, col);
     }
 
     pub fn move_up(&mut self) {

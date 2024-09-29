@@ -38,6 +38,14 @@ impl Grid {
         }
     }
 
+    /// Creats a grid of size [`Size::ZERO`].
+    pub fn zero() -> Grid {
+        Grid {
+            size: Size::ZERO,
+            content: Vec::new(),
+        }
+    }
+
     /// Sets the `row`:`col` cell to `cell`.
     pub fn set_cell(&mut self, row: u32, col: u32, cell: Cell) {
         debug_assert!(row < self.size.rows);

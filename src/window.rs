@@ -40,8 +40,20 @@ impl Window {
         }
     }
 
-    pub fn to_ref(window: Window) -> WindowRef {
-        Rc::new(RefCell::new(window))
+    pub fn zombie() -> Window {
+        Window {
+            origin: Point::ORIGIN,
+            size: Size::ZERO,
+            canvas: Canvas::zero().to_ref(),
+        }
+    }
+
+    pub fn is_zombie(&self) -> bool {
+        self.size == Size::ZERO
+    }
+
+    pub fn to_ref(self: Window) -> WindowRef {
+        Rc::new(RefCell::new(self))
     }
 
     pub fn size(&self) -> Size {

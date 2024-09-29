@@ -33,9 +33,21 @@ impl Canvas {
         }
     }
 
-    /// Turns `canvas` into a [`CanvasRef`].
-    pub fn to_ref(canvas: Canvas) -> CanvasRef {
-        Rc::new(RefCell::new(canvas))
+    pub fn zero() -> Canvas {
+        Canvas {
+            origin: Point::ORIGIN,
+            size: Size::ZERO,
+            color: Color::ZERO,
+            back: Grid::zero(),
+            front: Grid::zero(),
+            display: Display::new(Point::ORIGIN),
+            blank: Cell::EMPTY,
+        }
+    }
+
+    /// Turns the canvas into a [`CanvasRef`].
+    pub fn to_ref(self: Canvas) -> CanvasRef {
+        Rc::new(RefCell::new(self))
     }
 
     pub fn size(&self) -> Size {
