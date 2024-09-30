@@ -27,7 +27,7 @@ impl Size {
 
 impl fmt::Display for Size {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "[{}:{}]", self.rows, self.cols)
+        write!(f, "{}/{}", self.rows, self.cols)
     }
 }
 
@@ -56,7 +56,7 @@ impl Point {
 
 impl fmt::Display for Point {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "({}, {})", self.row, self.col)
+        write!(f, "{}:{}", self.row, self.col)
     }
 }
 
@@ -73,6 +73,14 @@ impl Add<Size> for Point {
 
     fn add(self, rhs: Size) -> Point {
         Point::new(self.row + rhs.rows, self.col + rhs.cols)
+    }
+}
+
+impl Add<(u32, u32)> for Point {
+    type Output = Point;
+
+    fn add(self, rhs: (u32, u32)) -> Point {
+        self + Point::new(rhs.0, rhs.1)
     }
 }
 

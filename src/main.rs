@@ -28,6 +28,7 @@ use crate::workspace::Workspace;
 
 use std::env;
 use std::ops::Drop;
+use std::path::PathBuf;
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
@@ -59,7 +60,7 @@ fn run() -> Result<()> {
             let mut buffer = Buffer::new();
             let _ = io::read_file(file, &mut buffer)?;
             buffer.set_pos(0);
-            vec![Editor::new(buffer.to_ref()).to_ref()]
+            vec![Editor::new(Some(PathBuf::from(file)), buffer.to_ref()).to_ref()]
         } else {
             Vec::new()
         };

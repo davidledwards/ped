@@ -1,25 +1,28 @@
 //! Editor.
+use libc::dirfd;
+
 use crate::buffer::{Buffer, BufferRef};
 use crate::canvas::{Canvas, CanvasRef};
 use crate::display::{Point, Size};
 use crate::grid::Cell;
-use crate::window::{Window, WindowRef};
+use crate::window::{BannerRef, Window, WindowRef};
 
 use std::cell::{Ref, RefCell, RefMut};
 use std::cmp;
+use std::path::PathBuf;
 use std::rc::Rc;
 
 pub struct Editor {
+    path: Option<PathBuf>,
+
     /// Buffer containing the contents of this editor.
     buffer: BufferRef,
 
     /// Buffer position corresponding to the cursor.
     cur_pos: usize,
 
-    /// Window attached to this editor.
-    window: WindowRef,
-
     canvas: CanvasRef,
+    banner: BannerRef,
 
     /// Cached value of canvas size.
     size: Size,
@@ -35,29 +38,24 @@ pub type EditorRef = Rc<RefCell<Editor>>;
 
 /// Various cursor alignment directives.
 pub enum Align {
-    /// Try using the current cursor position captured by [`Editor::cursor`].
+    /// Try aligning to the current cursor position captured by [`Editor::cursor`].
     Auto,
 
     /// Try aligning the cursor in the center of the window.
     Center,
-
-    /// Try aligning the cursor to a specific row.
-    Row(u32),
 }
 
 impl Editor {
-    pub fn new(buffer: BufferRef) -> Editor {
+    pub fn new(path: Option<PathBuf>, buffer: BufferRef) -> Editor {
         let cur_pos = buffer.borrow().get_pos();
-        let window = Window::zombie().to_ref();
-        let canvas = window.borrow().canvas().clone();
-        let size = canvas.borrow().size();
-
+        let window = Window::zombie();
         Editor {
+            path,
             buffer,
             cur_pos,
-            window,
-            canvas,
-            size,
+            canvas: window.canvas().clone(),
+            banner: window.banner().clone(),
+            size: Size::ZERO,
             row_pos: 0,
             cursor: Point::ORIGIN,
         }
@@ -68,15 +66,43 @@ impl Editor {
         Rc::new(RefCell::new(self))
     }
 
+    /// Attaches `window` to this editor.
     pub fn attach(&mut self, window: WindowRef) {
-        self.window = window;
-        self.canvas = self.window.borrow().canvas().clone();
+        self.canvas = window.borrow().canvas().clone();
+        self.banner = window.borrow().banner().clone();
         self.size = self.canvas.borrow().size();
 
-        if !self.window.borrow().is_zombie() {
+        if !window.borrow().is_zombie() {
+            let title = match self.path {
+                Some(ref path) => path.to_string_lossy().to_string(),
+                None => "new".to_string(),
+            };
+
+            self.banner
+                .borrow_mut()
+                .set_title(title)
+                .set_cursor(self.cursor)
+                .draw();
+
             self.align_cursor(Align::Auto);
             self.draw();
         }
+    }
+
+    pub fn align_cursor(&mut self, align: Align) {
+        // Determine ideal row where cursor would like to be focused, though this should
+        // be considered a hint.
+        let row = match align {
+            Align::Auto => cmp::min(self.cursor.row, self.size.rows - 1),
+            Align::Center => self.size.rows / 2,
+        };
+
+        // Tries to position cursor on target row, but no guarantee depending on proximity
+        // of row to top of buffer.
+        let col = self.column_of(self.cur_pos);
+        self.row_pos = self.cur_pos - col as usize;
+        let (_, row) = self.find_up(self.row_pos, row);
+        self.cursor = Point::new(row, col);
     }
 
     pub fn draw(&mut self) {
@@ -85,26 +111,6 @@ impl Editor {
         self.canvas_mut().clear();
         self.canvas_mut().draw();
         self.canvas_mut().set_cursor(self.cursor);
-    }
-
-    pub fn cursor(&self) -> (Point, usize) {
-        (self.cursor, self.cur_pos)
-    }
-
-    fn buffer(&self) -> Ref<'_, Buffer> {
-        self.buffer.borrow()
-    }
-
-    fn buffer_mut(&self) -> RefMut<'_, Buffer> {
-        self.buffer.borrow_mut()
-    }
-
-    fn canvas(&self) -> Ref<'_, Canvas> {
-        self.canvas.borrow()
-    }
-
-    fn canvas_mut(&self) -> RefMut<'_, Canvas> {
-        self.canvas.borrow_mut()
     }
 
     pub fn insert_char(&mut self, c: char) {
@@ -299,23 +305,6 @@ impl Editor {
         // set row, col, row_pos accordingly
         // render screen
         // could move up or down
-    }
-
-    pub fn align_cursor(&mut self, align: Align) {
-        // Determine ideal row where cursor would like to be focused, though this should
-        // be considered a hint.
-        let row = match align {
-            Align::Auto => cmp::min(self.cursor.row, self.size.rows - 1),
-            Align::Center => self.size.rows / 2,
-            Align::Row(row) => cmp::min(row, self.size.rows - 1),
-        };
-
-        // Tries to position cursor on target row, but no guarantee depending on proximity
-        // of row to top of buffer.
-        let col = self.column_of(self.cur_pos);
-        self.row_pos = self.cur_pos - col as usize;
-        let (_, row) = self.find_up(self.row_pos, row);
-        self.cursor = Point::new(row, col);
     }
 
     pub fn move_up(&mut self) {
@@ -827,5 +816,21 @@ impl Editor {
         } else {
             (Some(self.cursor.row), self.cursor.col, self.row_pos)
         }
+    }
+
+    fn buffer(&self) -> Ref<'_, Buffer> {
+        self.buffer.borrow()
+    }
+
+    fn buffer_mut(&self) -> RefMut<'_, Buffer> {
+        self.buffer.borrow_mut()
+    }
+
+    fn canvas(&self) -> Ref<'_, Canvas> {
+        self.canvas.borrow()
+    }
+
+    fn canvas_mut(&self) -> RefMut<'_, Canvas> {
+        self.canvas.borrow_mut()
     }
 }

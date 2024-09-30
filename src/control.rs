@@ -24,7 +24,7 @@ impl Controller {
         editors: Vec<EditorRef>,
     ) -> Controller {
         let editors = if editors.len() == 0 {
-            let editor = Editor::new(Buffer::new().to_ref());
+            let editor = Editor::new(None, Buffer::new().to_ref());
             vec![editor.to_ref()]
         } else {
             editors
