@@ -20,7 +20,7 @@ impl Size {
         Size { rows, cols }
     }
 
-    pub fn rows(rows: u32) -> Size {
+    pub const fn rows(rows: u32) -> Size {
         Size { rows, cols: 0 }
     }
 }

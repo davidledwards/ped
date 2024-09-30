@@ -4,7 +4,6 @@ use crate::color::Color;
 use crate::display::{Display, Point, Size};
 
 use std::cell::RefCell;
-use std::io::Cursor;
 use std::rc::Rc;
 
 pub struct Banner {

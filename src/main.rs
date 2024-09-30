@@ -60,7 +60,7 @@ fn run() -> Result<()> {
             let mut buffer = Buffer::new();
             let _ = io::read_file(file, &mut buffer)?;
             buffer.set_pos(0);
-            vec![Editor::new(Some(PathBuf::from(file)), buffer.to_ref()).to_ref()]
+            vec![Editor::with_buffer(Some(PathBuf::from(file)), buffer.to_ref()).to_ref()]
         } else {
             Vec::new()
         };
@@ -72,7 +72,7 @@ fn run() -> Result<()> {
         let _reset = Reset;
 
         let keyboard = Keyboard::new();
-        let workspace = Workspace::new(Point::ORIGIN, Size::new(rows, cols))?;
+        let workspace = Workspace::new(Point::ORIGIN, Size::new(rows, cols));
         let mut controller = Controller::new(keyboard, bindings, workspace, editors);
         controller.run()?
     }

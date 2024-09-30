@@ -1,6 +1,4 @@
 //! Editor.
-use libc::dirfd;
-
 use crate::buffer::{Buffer, BufferRef};
 use crate::canvas::{Canvas, CanvasRef};
 use crate::display::{Point, Size};
@@ -46,15 +44,26 @@ pub enum Align {
 }
 
 impl Editor {
-    pub fn new(path: Option<PathBuf>, buffer: BufferRef) -> Editor {
+    pub fn new() -> Editor {
+        Self::with_path(None)
+    }
+
+    pub fn with_path(path: Option<PathBuf>) -> Editor {
+        Self::with_buffer(path, Buffer::new().to_ref())
+    }
+
+    pub fn with_buffer(path: Option<PathBuf>, buffer: BufferRef) -> Editor {
         let cur_pos = buffer.borrow().get_pos();
         let window = Window::zombie();
+        let canvas = window.canvas().clone();
+        let banner = window.banner().clone();
+
         Editor {
             path,
             buffer,
             cur_pos,
-            canvas: window.canvas().clone(),
-            banner: window.banner().clone(),
+            canvas,
+            banner,
             size: Size::ZERO,
             row_pos: 0,
             cursor: Point::ORIGIN,
