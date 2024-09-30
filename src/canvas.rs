@@ -1,5 +1,4 @@
 //! Canvas.
-use crate::color::Color;
 use crate::display::{Display, Point, Size};
 use crate::grid::Cell;
 use crate::grid::Grid;
@@ -11,25 +10,21 @@ use std::rc::Rc;
 pub struct Canvas {
     origin: Point,
     size: Size,
-    color: Color,
     back: Grid,
     front: Grid,
     display: Display,
-    blank: Cell,
 }
 
 pub type CanvasRef = Rc<RefCell<Canvas>>;
 
 impl Canvas {
-    pub fn new(origin: Point, size: Size, color: Color) -> Canvas {
+    pub fn new(origin: Point, size: Size) -> Canvas {
         Canvas {
             origin,
             size,
-            color,
             back: Grid::new(size),
             front: Grid::new(size),
             display: Display::new(origin),
-            blank: Cell::new(' ', color),
         }
     }
 
@@ -37,25 +32,19 @@ impl Canvas {
         Canvas {
             origin: Point::ORIGIN,
             size: Size::ZERO,
-            color: Color::ZERO,
             back: Grid::zero(),
             front: Grid::zero(),
             display: Display::new(Point::ORIGIN),
-            blank: Cell::EMPTY,
         }
     }
 
     /// Turns the canvas into a [`CanvasRef`].
-    pub fn to_ref(self: Canvas) -> CanvasRef {
+    pub fn to_ref(self) -> CanvasRef {
         Rc::new(RefCell::new(self))
     }
 
     pub fn size(&self) -> Size {
         self.size
-    }
-
-    pub fn color(&self) -> Color {
-        self.color
     }
 
     /// Set value of \[`row`, `col`\] to `cell`.
@@ -66,29 +55,31 @@ impl Canvas {
         self.back.set_cell(row, col, cell);
     }
 
-    /// Clears all cells in the column range [`start_col`..`end_col`) for the given `row`.
-    pub fn clear_row_range(&mut self, row: u32, start_col: u32, end_col: u32) {
+    /// Fills all cells with `cell` in the column range [`start_col`, `end_col`)
+    /// for the given `row`.
+    pub fn fill_row_range(&mut self, row: u32, start_col: u32, end_col: u32, cell: Cell) {
         debug_assert!(row < self.size.rows);
         debug_assert!(start_col < end_col);
         debug_assert!(end_col <= self.size.cols);
 
-        self.back.fill_range(row, start_col, end_col, self.blank);
+        self.back.fill_range(row, start_col, end_col, cell);
     }
 
-    /// Clears all cells in the column range [`start_col`..) for the given `row`.
-    pub fn clear_row_from(&mut self, row: u32, start_col: u32) {
-        self.clear_row_range(row, start_col, self.size.cols);
+    /// Fills all cells with `cell` in the column range [`start_col`, ..) for the
+    /// given `row`.
+    pub fn fill_row_from(&mut self, row: u32, start_col: u32, cell: Cell) {
+        self.fill_row_range(row, start_col, self.size.cols, cell);
     }
 
-    /// Clears all cells for the given `row`.
-    pub fn clear_row(&mut self, row: u32) {
-        self.clear_row_from(row, 0);
+    /// Fills all cells with `cell` for the given `row`.
+    pub fn fill_row(&mut self, row: u32, cell: Cell) {
+        self.fill_row_from(row, 0, cell);
     }
 
-    /// Clears all cells for rows in the range [`start_row`..`end_row`).
-    pub fn clear_rows(&mut self, start_row: u32, end_row: u32) {
+    /// Fills all cells with `cell` for rows in the range [`start_row`, `end_row`).
+    pub fn fill_rows(&mut self, start_row: u32, end_row: u32, cell: Cell) {
         for row in start_row..end_row {
-            self.clear_row(row);
+            self.fill_row(row, cell);
         }
     }
 

@@ -1,7 +1,7 @@
 //! Window management.
 use crate::canvas::{Canvas, CanvasRef};
-use crate::color::Color;
 use crate::display::{Display, Point, Size};
+use crate::theme::{Theme, ThemeRef};
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -9,6 +9,7 @@ use std::rc::Rc;
 pub struct Banner {
     origin: Point,
     cols: u32,
+    theme: ThemeRef,
     title: String,
     dirty: bool,
     cursor: Point,
@@ -30,10 +31,11 @@ impl Banner {
     /// Number of columns for whitespace between title and cursor.
     const GAP_SIZE: usize = 2;
 
-    fn new(origin: Point, cols: u32) -> Banner {
+    fn new(origin: Point, cols: u32, theme: ThemeRef) -> Banner {
         Banner {
             origin,
             cols,
+            theme,
             title: String::new(),
             dirty: false,
             cursor: Point::ORIGIN,
@@ -45,6 +47,7 @@ impl Banner {
         Banner {
             origin: Point::ORIGIN,
             cols: 0,
+            theme: Theme::default().to_ref(),
             title: String::new(),
             dirty: false,
             cursor: Point::ORIGIN,
@@ -53,14 +56,14 @@ impl Banner {
     }
 
     /// Turns the banner into a [`BannerRef`].
-    pub fn to_ref(self: Banner) -> BannerRef {
+    pub fn to_ref(self) -> BannerRef {
         Rc::new(RefCell::new(self))
     }
 
     pub fn draw(&mut self) {
         self.display
             .set_cursor(Point::ORIGIN)
-            .set_color(Color::new(232, 253));
+            .set_color(self.theme.banner_color);
 
         if self.cols < Self::MIN_COLS {
             self.display
@@ -124,6 +127,7 @@ impl Banner {
 pub struct Window {
     origin: Point,
     size: Size,
+    theme: ThemeRef,
     canvas: CanvasRef,
     banner: BannerRef,
 }
@@ -131,18 +135,20 @@ pub struct Window {
 pub type WindowRef = Rc<RefCell<Window>>;
 
 impl Window {
-    const CANVAS_ORIGIN_OFFSET: Size = Size::new(0, 0);
-    const CANVAS_SIZE_ADJUST: Size = Size::new(1, 0);
+    const CANVAS_ORIGIN_OFFSET: Size = Size::ZERO;
+    const CANVAS_SIZE_ADJUST: Size = Size::rows(1);
 
-    pub fn new(origin: Point, size: Size, color: Color) -> Window {
+    pub fn new(origin: Point, size: Size, theme: ThemeRef) -> Window {
         let canvas_origin = origin + Self::CANVAS_ORIGIN_OFFSET;
         let canvas_size = size - Self::CANVAS_SIZE_ADJUST;
-        let canvas = Canvas::new(canvas_origin, canvas_size, color);
-        let banner = Banner::new(origin + (size.rows - 1, 0), size.cols);
+        let banner_origin = origin + Size::rows(size.rows - 1);
+        let canvas = Canvas::new(canvas_origin, canvas_size);
+        let banner = Banner::new(banner_origin, size.cols, theme.clone());
 
         let mut this = Window {
             origin,
             size,
+            theme,
             canvas: canvas.to_ref(),
             banner: banner.to_ref(),
         };
@@ -154,6 +160,7 @@ impl Window {
         Window {
             origin: Point::ORIGIN,
             size: Size::ZERO,
+            theme: Theme::default().to_ref(),
             canvas: Canvas::zero().to_ref(),
             banner: Banner::none().to_ref(),
         }
@@ -163,12 +170,16 @@ impl Window {
         self.size == Size::ZERO
     }
 
-    pub fn to_ref(self: Window) -> WindowRef {
+    pub fn to_ref(self) -> WindowRef {
         Rc::new(RefCell::new(self))
     }
 
     pub fn size(&self) -> Size {
         self.size
+    }
+
+    pub fn theme(&self) -> &ThemeRef {
+        &self.theme
     }
 
     pub fn canvas(&self) -> &CanvasRef {

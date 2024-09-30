@@ -44,7 +44,7 @@ impl Buffer {
     }
 
     /// Turns the buffer into a [`BufferRef`].
-    pub fn to_ref(self: Buffer) -> BufferRef {
+    pub fn to_ref(self) -> BufferRef {
         Rc::new(RefCell::new(self))
     }
 

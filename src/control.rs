@@ -100,7 +100,7 @@ impl Controller {
                                 self.editing = (id, editor.clone());
                             }
                             None => {
-                                self.workspace.message("no space for new window");
+                                self.workspace.alert("no space for new window");
                             }
                         }
                     }
@@ -131,7 +131,7 @@ impl Controller {
                                 self.editing = (id, editor.clone());
                             }
                             None => {
-                                self.workspace.message("cannot remove only window");
+                                self.workspace.alert("cannot remove only window");
                             }
                         }
                     }

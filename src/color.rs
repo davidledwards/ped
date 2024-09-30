@@ -1,18 +1,27 @@
 //! Text colors.
+//!
+//! Colors follow the ANSI 8-bit standard, which is referenced
+//! [here](https://en.wikipedia.org/wiki/ANSI_escape_code#CSI_(Control_Sequence_Introducer)_sequences).
+use std::collections::HashMap;
 
-// plan is to follow the ANSI 8-bit standard. see article on Wikipedia.
-// https://en.wikipedia.org/wiki/ANSI_escape_code#CSI_(Control_Sequence_Introducer)_sequences
-
+/// An encapsulation of *foreground* and *background* colors.
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct Color {
     pub fg: u8,
     pub bg: u8,
 }
 
-impl Color {
-    pub const ZERO: Color = Color { fg: 0, bg: 0 };
+/// Map of canonical color names to ANSI color values.
+type Colors = HashMap<&'static str, u8>;
 
-    pub fn new(fg: u8, bg: u8) -> Color {
+pub struct ColorMap {
+    colors: Colors,
+}
+
+impl Color {
+    pub const ZERO: Color = Color::new(0, 0);
+
+    pub const fn new(fg: u8, bg: u8) -> Color {
         Color { fg, bg }
     }
 }
@@ -23,21 +32,42 @@ impl Default for Color {
     }
 }
 
-// predefined colors
+impl ColorMap {
+    pub fn new() -> ColorMap {
+        ColorMap {
+            colors: init_colors(),
+        }
+    }
 
-pub const BLACK: u8 = 0;
-pub const RED: u8 = 1;
-pub const GREEN: u8 = 2;
-pub const YELLOW: u8 = 3;
-pub const BLUE: u8 = 4;
-pub const MAGENTA: u8 = 5;
-pub const CYAN: u8 = 6;
-pub const WHITE: u8 = 7;
-pub const GRAY: u8 = 8;
-pub const BRIGHT_RED: u8 = 9;
-pub const BRIGHT_GREEN: u8 = 10;
-pub const BRIGHT_YELLOW: u8 = 11;
-pub const BRIGHT_BLUE: u8 = 12;
-pub const BRIGHT_MAGENTA: u8 = 13;
-pub const BRIGHT_CYAN: u8 = 14;
-pub const BRIGHT_WHITE: u8 = 15;
+    pub fn find(&self, name: &str) -> Option<u8> {
+        self.colors.get(name).copied()
+    }
+}
+
+/// Predefined color mappings that associate canonical names to ANSI color values.
+const COLOR_MAPPINGS: [(&'static str, u8); 16] = [
+    ("black", 0),
+    ("red", 1),
+    ("green", 2),
+    ("yellow", 3),
+    ("blue", 4),
+    ("magenta", 5),
+    ("cyan", 6),
+    ("white", 7),
+    ("gray", 8),
+    ("bright-red", 9),
+    ("bright-green", 10),
+    ("bright-yellow", 11),
+    ("bright-blue", 12),
+    ("bright-magenta", 13),
+    ("bright-cyan", 14),
+    ("bright-white", 15),
+];
+
+fn init_colors() -> Colors {
+    let mut colors = Colors::new();
+    for (name, value) in COLOR_MAPPINGS {
+        colors.insert(name, value);
+    }
+    colors
+}

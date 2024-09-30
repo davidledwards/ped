@@ -13,6 +13,7 @@ mod key;
 mod op;
 mod opt;
 mod term;
+mod theme;
 mod window;
 mod workspace;
 
@@ -24,6 +25,7 @@ use crate::editor::Editor;
 use crate::error::Result;
 use crate::key::Keyboard;
 use crate::opt::Options;
+use crate::theme::Theme;
 use crate::workspace::Workspace;
 
 use std::env;
@@ -72,7 +74,9 @@ fn run() -> Result<()> {
         let _reset = Reset;
 
         let keyboard = Keyboard::new();
-        let workspace = Workspace::new(Point::ORIGIN, Size::new(rows, cols));
+        let size = Size::new(rows, cols);
+        let theme = Theme::new();
+        let workspace = Workspace::new(Point::ORIGIN, size, theme);
         let mut controller = Controller::new(keyboard, bindings, workspace, editors);
         controller.run()?
     }

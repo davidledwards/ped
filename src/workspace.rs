@@ -1,6 +1,6 @@
 //! Workspace management.
-use crate::color::Color;
 use crate::display::{Display, Point, Size};
+use crate::theme::{Theme, ThemeRef};
 use crate::window::{Window, WindowRef};
 
 /// Placement directive when adding new [`View`]s to a [`Workspace`].
@@ -28,8 +28,7 @@ pub struct View {
 }
 
 impl View {
-    fn new(id: u32, origin: Point, size: Size) -> View {
-        let window = Window::new(origin, size, Color::new(15, 233)).to_ref();
+    fn new(id: u32, origin: Point, size: Size, window: WindowRef) -> View {
         View {
             id,
             origin,
@@ -98,6 +97,7 @@ impl<'a> Iterator for Views<'a> {
 pub struct Workspace {
     origin: Point,
     size: Size,
+    theme: ThemeRef,
     views_origin: Point,
     views_size: Size,
     id_seq: u32,
@@ -114,14 +114,13 @@ impl Workspace {
     /// Minimum number of rows assigned to a view.
     const MIN_ROWS: u32 = 3;
 
-    pub fn new(origin: Point, size: Size) -> Workspace {
-        let views_origin = origin + Self::VIEWS_ORIGIN_OFFSET;
-        let views_size = size - Self::VIEWS_SIZE_ADJUST;
+    pub fn new(origin: Point, size: Size, theme: Theme) -> Workspace {
         let mut this = Workspace {
             origin,
             size,
-            views_origin,
-            views_size,
+            theme: theme.to_ref(),
+            views_origin: origin + Self::VIEWS_ORIGIN_OFFSET,
+            views_size: size - Self::VIEWS_SIZE_ADJUST,
             id_seq: 0,
             views: vec![],
         };
@@ -278,7 +277,7 @@ impl Workspace {
         Views::new(self)
     }
 
-    pub fn message(&mut self, text: &str) {
+    pub fn alert(&mut self, text: &str) {
         let text = if text.len() > self.size.cols as usize {
             &text[..self.size.cols as usize]
         } else {
@@ -286,7 +285,7 @@ impl Workspace {
         };
         Display::new(self.origin + Size::rows(self.size.rows - 1))
             .set_cursor(Point::ORIGIN)
-            .set_color(Color::new(2, 232))
+            .set_color(self.theme.alert_color)
             .write_str(text)
             .write_str(" ".repeat(self.size.cols as usize - text.len()).as_str())
             .send();
@@ -300,6 +299,7 @@ impl Workspace {
 
     fn create_view(&self, id: u32, origin: Point, rows: u32) -> View {
         let size = Size::new(rows, self.views_size.cols);
-        View::new(id, origin, size)
+        let window = Window::new(origin, size, self.theme.clone());
+        View::new(id, origin, size, window.to_ref())
     }
 }
