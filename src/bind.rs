@@ -1,16 +1,12 @@
 //! Key bindings.
-use crate::editor::Editor;
 use crate::error::{Error, Result};
 use crate::key::{Ctrl, Key, Shift};
-use crate::op;
+use crate::op::{self, OpFn};
 
 use std::collections::{HashMap, HashSet};
 
-/// A function pointer that implements an editing operation.
-pub type BindingFn = fn(&mut Editor, &Key) -> Result<()>;
-
 /// Map of canonical editing operations to editing functions.
-type EditMap = HashMap<&'static str, BindingFn>;
+type OpMap = HashMap<&'static str, OpFn>;
 
 /// Map of keys to canonical names.
 type KeyMap = HashMap<Key, &'static str>;
@@ -25,7 +21,7 @@ type BindMap = HashMap<&'static str, &'static str>;
 /// bindings.
 pub struct BindingMap {
     key_map: KeyMap,
-    edit_map: EditMap,
+    op_map: OpMap,
     bind_map: BindMap,
 }
 
@@ -48,7 +44,7 @@ impl BindingMap {
     /// pairs.
     ///
     /// Both _key-name_ and _op-name_ must match the value of an entry in [`KEY_MAPPINGS`] and
-    /// and the key of an entry in [`EDIT_MAPPINGS`], respectively. Otherwise, construction of
+    /// and the key of an entry in [`OP_MAPPINGS`], respectively. Otherwise, construction of
     /// the map fails.
     ///
     /// # Errors
@@ -58,7 +54,7 @@ impl BindingMap {
     pub fn with_bindings(bindings: &[(String, String)]) -> Result<BindingMap> {
         let mut this = BindingMap {
             key_map: init_key_map(),
-            edit_map: init_edit_map(),
+            op_map: init_op_map(),
             bind_map: BindMap::new(),
         };
         this.bind(bindings)?;
@@ -66,10 +62,10 @@ impl BindingMap {
     }
 
     /// Return the function pointer bound to [`Key`], otherwise `None`.
-    pub fn lookup(&self, key: &Key) -> Option<&BindingFn> {
+    pub fn lookup(&self, key: &Key) -> Option<&OpFn> {
         self.map_key(key)
             .and_then(|name| self.bind_map.get(name))
-            .and_then(|op| self.edit_map.get(op as &str))
+            .and_then(|op| self.op_map.get(op as &str))
     }
 
     fn map_key(&self, key: &Key) -> Option<&'static str> {
@@ -80,7 +76,7 @@ impl BindingMap {
     }
 
     fn bind(&mut self, bindings: &[(String, String)]) -> Result<()> {
-        // Extract canonical key names so provided bindings can be verified to exist
+        // Extract canonical key names so given bindings can be verified to exist
         // before actually trying to bind. A special "char" name is added since this needs to
         // be resolved, but cannot exist in predefined key mappings because all characters
         // map to this name.
@@ -89,7 +85,7 @@ impl BindingMap {
 
         for (name, op) in bindings {
             if let Some(name) = key_names.get(name.as_str()) {
-                if let Some((op, _)) = self.edit_map.get_key_value(op.as_str()) {
+                if let Some((op, _)) = self.op_map.get_key_value(op.as_str()) {
                     self.bind_map.insert(name, op);
                 } else {
                     return Err(Error::bind_op(op));
@@ -103,7 +99,7 @@ impl BindingMap {
 }
 
 /// Default key bindings that associate canonical key names to canonical editing operations.
-const DEFAULT_BINDINGS: [(&'static str, &'static str); 25] = [
+const DEFAULT_BINDINGS: [(&'static str, &'static str); 27] = [
     ("char", "insert-char"),
     ("ctrl-m", "insert-line"),
     ("delete", "delete-char-left"),
@@ -129,6 +125,9 @@ const DEFAULT_BINDINGS: [(&'static str, &'static str); 25] = [
     ("ctrl-e", "move-end-line"),
     ("ctrl-r", "redraw"),
     ("ctrl-l", "redraw-and-center"),
+    ("ctrl-x", "quit"),
+    // FIXME: for testing
+    ("ctrl-c", "special"),
 ];
 
 /// Predefined key mappings that associate well known [`Key`]s with canonical names.
@@ -236,12 +235,12 @@ fn init_key_map() -> KeyMap {
     key_map
 }
 
-/// Predefined edit mappings that associate the canonical names of well known editing
-/// operations with function pointers that carry out those operations.
+/// Predefined operation mappings that associate the canonical names of well known
+/// editing operations with function pointers that carry out those operations.
 ///
 /// Canonical names are used for the runtime binding of keys to editing operations,
 /// which themselves are named and well known.
-const EDIT_MAPPINGS: [(&'static str, BindingFn); 18] = [
+const OP_MAPPINGS: [(&'static str, OpFn); 20] = [
     ("insert-char", op::insert_char),
     ("insert-line", op::insert_line),
     ("delete-char-left", op::delete_char_left),
@@ -260,12 +259,15 @@ const EDIT_MAPPINGS: [(&'static str, BindingFn); 18] = [
     ("move-end-line", op::move_end_line),
     ("redraw", op::redraw),
     ("redraw-and-center", op::redraw_and_center),
+    ("quit", op::quit),
+    // FIXME: for testing
+    ("special", op::special),
 ];
 
-fn init_edit_map() -> EditMap {
-    let mut edit_map = EditMap::new();
-    for (op, edit) in EDIT_MAPPINGS {
-        edit_map.insert(op, edit);
+fn init_op_map() -> OpMap {
+    let mut op_map = OpMap::new();
+    for (op, edit) in OP_MAPPINGS {
+        op_map.insert(op, edit);
     }
-    edit_map
+    op_map
 }

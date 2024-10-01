@@ -6,122 +6,153 @@
 //!
 //! See [`BindingMap`](crate::bind::BindingMap) for further details on binding keys
 //! at runtime.
-use crate::editor::{Align, Editor};
+use crate::control::Controller;
+use crate::editor::Align;
 use crate::error::Result;
 use crate::key::Key;
 
+/// A function type that implements an editing operation.
+pub type OpFn = fn(&mut Controller, &Key) -> Result<Action>;
+
+/// A function type that implements a continuation of an editing operation.
+pub type ContinueFn = Box<dyn FnMut(&mut Controller, &Key) -> Result<Action>>;
+
+/// An action returned by an editing operation that is to be carried out by the
+/// [`Controller`].
+pub enum Action {
+    Nothing,
+    Quit,
+    Continue(ContinueFn),
+}
+
+pub fn special(con: &mut Controller, key: &Key) -> Result<Action> {
+    con.workspace().alert("ctrl-c");
+    Ok(Action::Continue(Box::new(special_cont)))
+}
+
+fn special_cont(con: &mut Controller, key: &Key) -> Result<Action> {
+    con.workspace().alert(format!("ctrl-c {key:?}").as_str());
+    Ok(Action::Nothing)
+}
+
 /// insert-char
-pub fn insert_char(editor: &mut Editor, key: &Key) -> Result<()> {
+pub fn insert_char(con: &mut Controller, key: &Key) -> Result<Action> {
     match key {
         Key::Char(c) => {
-            editor.insert_char(*c);
-            Ok(())
+            con.editor().insert_char(*c);
+            Ok(Action::Nothing)
         }
         _ => panic!("{key:?}: expecting Key::Char"),
     }
 }
 
 /// insert-line
-pub fn insert_line(editor: &mut Editor, _: &Key) -> Result<()> {
-    editor.insert_char('\n');
-    Ok(())
+pub fn insert_line(con: &mut Controller, _: &Key) -> Result<Action> {
+    con.editor().insert_char('\n');
+    Ok(Action::Nothing)
 }
 
 /// delete-char-left
-pub fn delete_char_left(editor: &mut Editor, _: &Key) -> Result<()> {
+pub fn delete_char_left(con: &mut Controller, _: &Key) -> Result<Action> {
     // todo: should we return deleted char in result?
-    let _ = editor.delete_left();
-    Ok(())
+    let _ = con.editor().delete_left();
+    Ok(Action::Nothing)
 }
 
 /// delete-char-right
-pub fn delete_char_right(editor: &mut Editor, _: &Key) -> Result<()> {
+pub fn delete_char_right(con: &mut Controller, _: &Key) -> Result<Action> {
     // todo: should we return deleted char in result?
-    let _ = editor.delete_right();
-    Ok(())
+    let _ = con.editor().delete_right();
+    Ok(Action::Nothing)
 }
 
 /// move-up
-pub fn move_up(editor: &mut Editor, _: &Key) -> Result<()> {
-    editor.move_up();
-    Ok(())
+pub fn move_up(con: &mut Controller, _: &Key) -> Result<Action> {
+    con.editor().move_up();
+    Ok(Action::Nothing)
 }
 
 /// move-down
-pub fn move_down(editor: &mut Editor, _: &Key) -> Result<()> {
-    editor.move_down();
-    Ok(())
+pub fn move_down(con: &mut Controller, _: &Key) -> Result<Action> {
+    con.editor().move_down();
+    Ok(Action::Nothing)
 }
 
 /// move-left
-pub fn move_left(editor: &mut Editor, _: &Key) -> Result<()> {
-    editor.move_left();
-    Ok(())
+pub fn move_left(con: &mut Controller, _: &Key) -> Result<Action> {
+    con.editor().move_left();
+    Ok(Action::Nothing)
 }
 
 /// move-right
-pub fn move_right(editor: &mut Editor, _: &Key) -> Result<()> {
-    editor.move_right();
-    Ok(())
+pub fn move_right(con: &mut Controller, _: &Key) -> Result<Action> {
+    con.editor().move_right();
+    Ok(Action::Nothing)
 }
 
 /// move-page-up
-pub fn move_page_up(editor: &mut Editor, _: &Key) -> Result<()> {
-    editor.move_page_up();
-    Ok(())
+pub fn move_page_up(con: &mut Controller, _: &Key) -> Result<Action> {
+    con.editor().move_page_up();
+    Ok(Action::Nothing)
 }
 
 /// move-page-down
-pub fn move_page_down(editor: &mut Editor, _: &Key) -> Result<()> {
-    editor.move_page_down();
-    Ok(())
+pub fn move_page_down(con: &mut Controller, _: &Key) -> Result<Action> {
+    con.editor().move_page_down();
+    Ok(Action::Nothing)
 }
 
 /// move-top
-pub fn move_top(editor: &mut Editor, _: &Key) -> Result<()> {
-    editor.move_top();
-    Ok(())
+pub fn move_top(con: &mut Controller, _: &Key) -> Result<Action> {
+    con.editor().move_top();
+    Ok(Action::Nothing)
 }
 
 /// move-bottom
-pub fn move_bottom(editor: &mut Editor, _: &Key) -> Result<()> {
-    editor.move_bottom();
-    Ok(())
+pub fn move_bottom(con: &mut Controller, _: &Key) -> Result<Action> {
+    con.editor().move_bottom();
+    Ok(Action::Nothing)
 }
 
 /// scroll-up
-pub fn scroll_up(editor: &mut Editor, _: &Key) -> Result<()> {
-    editor.scroll_up();
-    Ok(())
+pub fn scroll_up(con: &mut Controller, _: &Key) -> Result<Action> {
+    con.editor().scroll_up();
+    Ok(Action::Nothing)
 }
 
 /// scroll-down
-pub fn scroll_down(editor: &mut Editor, _: &Key) -> Result<()> {
-    editor.scroll_down();
-    Ok(())
+pub fn scroll_down(con: &mut Controller, _: &Key) -> Result<Action> {
+    con.editor().scroll_down();
+    Ok(Action::Nothing)
 }
 
 /// move-begin-line
-pub fn move_begin_line(editor: &mut Editor, _: &Key) -> Result<()> {
-    editor.move_beg();
-    Ok(())
+pub fn move_begin_line(con: &mut Controller, _: &Key) -> Result<Action> {
+    con.editor().move_beg();
+    Ok(Action::Nothing)
 }
 
 /// move-end-line
-pub fn move_end_line(editor: &mut Editor, _: &Key) -> Result<()> {
-    editor.move_end();
-    Ok(())
+pub fn move_end_line(con: &mut Controller, _: &Key) -> Result<Action> {
+    con.editor().move_end();
+    Ok(Action::Nothing)
 }
 
 /// redraw
-pub fn redraw(editor: &mut Editor, _: &Key) -> Result<()> {
-    editor.draw();
-    Ok(())
+pub fn redraw(con: &mut Controller, _: &Key) -> Result<Action> {
+    con.editor().draw();
+    Ok(Action::Nothing)
 }
 
 /// redraw-and-center
-pub fn redraw_and_center(editor: &mut Editor, _: &Key) -> Result<()> {
-    editor.align_cursor(Align::Center);
-    editor.draw();
-    Ok(())
+pub fn redraw_and_center(con: &mut Controller, _: &Key) -> Result<Action> {
+    con.editor().align_cursor(Align::Center);
+    con.editor().draw();
+    Ok(Action::Nothing)
+}
+
+/// quit
+pub fn quit(_: &mut Controller, _: &Key) -> Result<Action> {
+    // FIXME: ask to save dirty buffers
+    Ok(Action::Quit)
 }

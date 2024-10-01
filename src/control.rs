@@ -3,9 +3,11 @@ use crate::bind::BindingMap;
 use crate::editor::{Editor, EditorRef};
 use crate::error::Result;
 use crate::key::{Key, Keyboard};
+use crate::op::{Action, ContinueFn};
 use crate::window::Window;
 use crate::workspace::{Placement, Workspace};
 
+use std::cell::RefMut;
 use std::collections::HashMap;
 
 type ViewMap = HashMap<u32, EditorRef>;
@@ -19,9 +21,16 @@ pub struct Controller {
     editing: (u32, EditorRef),
 }
 
-const CTRL_X: u8 = 24;
-
 impl Controller {
+    pub fn editor(&self) -> RefMut<'_, Editor> {
+        let (_, editor) = &self.editing;
+        editor.borrow_mut()
+    }
+
+    pub fn workspace(&mut self) -> &mut Workspace {
+        &mut self.workspace
+    }
+
     pub fn new(
         keyboard: Keyboard,
         bindings: BindingMap,
@@ -65,78 +74,95 @@ impl Controller {
     }
 
     pub fn run(&mut self) -> Result<()> {
+        let mut continue_fn: Option<ContinueFn> = None;
         loop {
             let key = self.keyboard.read()?;
-            match self.bindings.lookup(&key) {
-                Some(binding) => {
-                    let (_, editor) = &self.editing;
-                    binding(&mut editor.borrow_mut(), &key)?
+            match key {
+                Key::None => {
+                    // do background stuff here
                 }
-                None => match key {
-                    Key::None => {
-                        // check for change in terminal size and update workspace
-                    }
-                    Key::Control(CTRL_X) => break,
-                    Key::Function(1) => {
-                        // HACK: add window to bottom
-                        match self.workspace.add_view(Placement::Bottom) {
-                            Some(id) => {
-                                // need to reattach windows to existing editors
-                                for (id, e) in self.views.iter() {
-                                    let view = self.workspace.get_view(*id);
-                                    e.borrow_mut().attach(view.window().clone());
-                                }
-
-                                // create new editor and attach window from new view
-                                let mut editor = Editor::new();
-                                editor.attach(self.workspace.get_view(id).window().clone());
-                                let editor = editor.to_ref();
-                                self.editors.push(editor.clone());
-
-                                // add view/editor map of views
-                                self.views.insert(id, editor.clone());
-
-                                // make this new editor the area of focus
-                                self.editing = (id, editor.clone());
-                            }
+                _ => {
+                    let action = if let Some(mut cont_fn) = continue_fn.take() {
+                        cont_fn(self, &key)?
+                    } else {
+                        match self.bindings.lookup(&key) {
+                            Some(op_fn) => op_fn(self, &key)?,
                             None => {
-                                self.workspace.alert("no space for new window");
+                                match key {
+                                    Key::Function(1) => {
+                                        // HACK: add window to bottom
+                                        match self.workspace.add_view(Placement::Bottom) {
+                                            Some(id) => {
+                                                // need to reattach windows to existing editors
+                                                for (id, e) in self.views.iter() {
+                                                    let view = self.workspace.get_view(*id);
+                                                    e.borrow_mut().attach(view.window().clone());
+                                                }
+
+                                                // create new editor and attach window from new view
+                                                let mut editor = Editor::new();
+                                                editor.attach(
+                                                    self.workspace.get_view(id).window().clone(),
+                                                );
+                                                let editor = editor.to_ref();
+                                                self.editors.push(editor.clone());
+
+                                                // add view/editor map of views
+                                                self.views.insert(id, editor.clone());
+
+                                                // make this new editor the area of focus
+                                                self.editing = (id, editor.clone());
+                                            }
+                                            None => {
+                                                self.workspace.alert("no space for new window");
+                                            }
+                                        }
+                                    }
+                                    Key::Function(2) => {
+                                        // HACK: remove current window
+                                        let (id, _) = self.editing;
+                                        match self.workspace.remove_view(id) {
+                                            Some(_) => {
+                                                // remove from views
+                                                match self.views.remove(&id) {
+                                                    Some(e) => e
+                                                        .borrow_mut()
+                                                        .attach(Window::zombie().to_ref()),
+                                                    None => panic!("{id}: should exist in views"),
+                                                }
+
+                                                // need to reattach windows
+                                                for (id, e) in self.views.iter() {
+                                                    let view = self.workspace.get_view(*id);
+                                                    e.borrow_mut().attach(view.window().clone());
+                                                }
+
+                                                // need to pick editor for focus
+                                                // FIXME: unwrap?
+                                                let id = self.workspace.bottom_view().id();
+                                                let editor =
+                                                    self.views.get(&id).unwrap_or_else(|| {
+                                                        panic!("{id}: should exist in views")
+                                                    });
+                                                self.editing = (id, editor.clone());
+                                            }
+                                            None => {
+                                                self.workspace.alert("cannot remove only window");
+                                            }
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                                Action::Nothing
                             }
                         }
+                    };
+                    match action {
+                        Action::Nothing => (),
+                        Action::Quit => break,
+                        Action::Continue(cont_fn) => continue_fn = Some(cont_fn),
                     }
-                    Key::Function(2) => {
-                        // HACK: remove current window
-                        let (id, _) = self.editing;
-                        match self.workspace.remove_view(id) {
-                            Some(_) => {
-                                // remove from views
-                                match self.views.remove(&id) {
-                                    Some(e) => e.borrow_mut().attach(Window::zombie().to_ref()),
-                                    None => panic!("{id}: should exist in views"),
-                                }
-
-                                // need to reattach windows
-                                for (id, e) in self.views.iter() {
-                                    let view = self.workspace.get_view(*id);
-                                    e.borrow_mut().attach(view.window().clone());
-                                }
-
-                                // need to pick editor for focus
-                                // FIXME: unwrap?
-                                let id = self.workspace.bottom_view().id();
-                                let editor = self
-                                    .views
-                                    .get(&id)
-                                    .unwrap_or_else(|| panic!("{id}: should exist in views"));
-                                self.editing = (id, editor.clone());
-                            }
-                            None => {
-                                self.workspace.alert("cannot remove only window");
-                            }
-                        }
-                    }
-                    _ => {}
-                },
+                }
             }
         }
         Ok(())
