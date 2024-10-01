@@ -197,7 +197,7 @@ impl Workspace {
     }
 
     /// Removes the view referenced by `id` from the workspace, returning the *id* of
-    /// the view or `None` if the view could not be removed.
+    /// the following view or `None` if the view could not be removed.
     ///
     /// Remaining views will be resized as a side effect of removal. However, the view
     /// will not be removed, and resizing will not occur, if `id` is the only remaining
@@ -239,7 +239,8 @@ impl Workspace {
                 },
             );
             self.views = views;
-            Some(id)
+            let next_id = self.views[if i < self.views.len() { i } else { 0 }].id;
+            Some(next_id)
         } else {
             None
         }
@@ -257,6 +258,32 @@ impl Workspace {
         self.views
             .last()
             .unwrap_or_else(|| panic!("at least one view must always exist"))
+    }
+
+    /// Returns the [`View`] above `id`, which might be itself if only one view exists.
+    pub fn above_view(&self, id: u32) -> &View {
+        let i = self
+            .views
+            .iter()
+            .position(|v| v.id == id)
+            .unwrap_or_else(|| panic!("{id}: view not found"));
+
+        let n = self.views.len();
+        let i = if i == 0 { n - 1 } else { i - 1 };
+        &self.views[i]
+    }
+
+    /// Returns the [`View`] below `id`, which might be itself if only one view exists.
+    pub fn below_view(&self, id: u32) -> &View {
+        let i = self
+            .views
+            .iter()
+            .position(|v| v.id == id)
+            .unwrap_or_else(|| panic!("{id}: view not found"));
+
+        let n = self.views.len();
+        let i = (i + 1) % n;
+        &self.views[i]
     }
 
     /// Returns the view corresponding to `id`, which must exist.

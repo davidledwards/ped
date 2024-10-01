@@ -126,8 +126,7 @@ const DEFAULT_BINDINGS: [(&'static str, &'static str); 27] = [
     ("ctrl-r", "redraw"),
     ("ctrl-l", "redraw-and-center"),
     ("ctrl-x", "quit"),
-    // FIXME: for testing
-    ("ctrl-c", "special"),
+    ("ctrl-w", "window-op"),
 ];
 
 /// Predefined key mappings that associate well known [`Key`]s with canonical names.
@@ -260,8 +259,7 @@ const OP_MAPPINGS: [(&'static str, OpFn); 20] = [
     ("redraw", op::redraw),
     ("redraw-and-center", op::redraw_and_center),
     ("quit", op::quit),
-    // FIXME: for testing
-    ("special", op::special),
+    ("window-op", op::window_op),
 ];
 
 fn init_op_map() -> OpMap {

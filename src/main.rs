@@ -12,6 +12,7 @@ mod io;
 mod key;
 mod op;
 mod opt;
+mod session;
 mod term;
 mod theme;
 mod window;
