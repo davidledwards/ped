@@ -24,13 +24,8 @@ pub enum Action {
     Nothing,
     Continue(Box<ContinueFn>),
     Alert(String),
+    UndefinedKey(Key),
     Quit,
-}
-
-impl Action {
-    fn alert(message: &str) -> Action {
-        Action::Alert(message.to_string())
-    }
 }
 
 /// Canonical name: `insert-char`
@@ -157,38 +152,40 @@ pub fn quit(_: &mut Session, _: &Key) -> Result<Action> {
 }
 
 /// Canonical name: `window-op`
-pub fn window_op(session: &mut Session, key: &Key) -> Result<Action> {
-    Ok(Action::Continue(Box::new(window_op_cont)))
-}
-
-fn window_op_cont(session: &mut Session, key: &Key) -> Result<Action> {
-    match key {
-        k @ (Key::Char('/') | Key::Char('\\') | Key::Char('[') | Key::Char(']')) => {
-            let place = match k {
-                Key::Char('/') => Placement::Top,
-                Key::Char('\\') => Placement::Bottom,
-                Key::Char('[') => Placement::Above(session.active_id()),
-                Key::Char(']') => Placement::Below(session.active_id()),
-                _ => panic!("this should never happen"),
-            };
-            let action = session
-                .add_view(place)
+pub fn window_op(_: &mut Session, _: &Key) -> Result<Action> {
+    let cont_fn = move |session: &mut Session, key: &Key| {
+        let action = match key {
+            Key::Char('/') => session
+                .add_view(Placement::Top)
                 .map(|_| Action::Nothing)
-                .unwrap_or(Action::Nothing);
-            Ok(action)
-        }
-        Key::Char('k') => {
-            let action = session
+                .unwrap_or(Action::Nothing),
+            Key::Char('\\') => session
+                .add_view(Placement::Bottom)
+                .map(|_| Action::Nothing)
+                .unwrap_or(Action::Nothing),
+            Key::Char('[') => session
+                .add_view(Placement::Above(session.active_id()))
+                .map(|_| Action::Nothing)
+                .unwrap_or(Action::Nothing),
+            Key::Char(']') => session
+                .add_view(Placement::Below(session.active_id()))
+                .map(|_| Action::Nothing)
+                .unwrap_or(Action::Nothing),
+            Key::Char('k') => session
                 .remove_view(session.active_id())
                 .map(|_| Action::Nothing)
-                .unwrap_or(Action::Nothing);
-            Ok(action)
-        }
-        _ => Ok(Action::alert(format!("ctrl-w {key:?}: undefined").as_str())),
-    }
-}
-
-fn window_add(session: &mut Session, place: Placement) -> Result<Action> {
-    session.add_view(place);
-    Ok(Action::Nothing)
+                .unwrap_or(Action::Nothing),
+            Key::Char('p') => {
+                session.prev_view();
+                Action::Nothing
+            }
+            Key::Char('n') => {
+                session.next_view();
+                Action::Nothing
+            }
+            _ => Action::UndefinedKey(key.clone()),
+        };
+        Ok(action)
+    };
+    Ok(Action::Continue(Box::new(cont_fn)))
 }

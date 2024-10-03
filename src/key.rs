@@ -1,11 +1,12 @@
 //! Keyboard reader.
 use crate::error::{Error, Result};
 
+use std::fmt;
 use std::io::{self, Bytes, Read, Stdin};
 use std::str;
 
 /// The set of keys recognized by [`Keyboard`]s.
-#[derive(Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum Key {
     None,
     Control(u8),
@@ -15,8 +16,8 @@ pub enum Key {
     ShiftTab,
     Up(Shift, Ctrl),
     Down(Shift, Ctrl),
-    Right(Shift, Ctrl),
     Left(Shift, Ctrl),
+    Right(Shift, Ctrl),
     Home(Shift, Ctrl),
     End(Shift, Ctrl),
     PageUp(Shift, Ctrl),
@@ -25,14 +26,14 @@ pub enum Key {
 }
 
 /// Represents the state of the _SHIFT_ key for certain kinds of [`Key`]s.
-#[derive(Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum Shift {
     Off,
     On,
 }
 
 /// Represents the state of the _CONTROL_ key for certain kinds of [`Key`]s.
-#[derive(Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum Ctrl {
     Off,
     On,
@@ -41,6 +42,64 @@ pub enum Ctrl {
 /// A keyboard that reads bytes from the terminal and produces corresponding [`Key`]s.
 pub struct Keyboard {
     stdin: Bytes<Stdin>,
+}
+
+impl Key {
+    /// Mapping of control number to display character.
+    const CONTROL_CHAR: [char; 32] = [
+        '@', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q',
+        'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '[', '\\', ']', '^', '_',
+    ];
+}
+
+impl fmt::Display for Key {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            Key::None => "".to_string(),
+            Key::Control(n) => {
+                if *n < 32 {
+                    format!("^{}", Self::CONTROL_CHAR[*n as usize])
+                } else {
+                    // This should never happen, but nonetheless, format as number.
+                    format!("^#{n}")
+                }
+            }
+            Key::Char(c) => format!("{c}"),
+            Key::Delete => "DEL".to_string(),
+            Key::Insert => "INS".to_string(),
+            Key::ShiftTab => "\\TAB".to_string(),
+            Key::Up(shift, ctrl) => format!("{shift}{ctrl}UP"),
+            Key::Down(shift, ctrl) => format!("{shift}{ctrl}DOWN"),
+            Key::Left(shift, ctrl) => format!("{shift}{ctrl}LEFT"),
+            Key::Right(shift, ctrl) => format!("{shift}{ctrl}RIGHT"),
+            Key::Home(shift, ctrl) => format!("{shift}{ctrl}HOME"),
+            Key::End(shift, ctrl) => format!("{shift}{ctrl}END"),
+            Key::PageUp(shift, ctrl) => format!("{shift}{ctrl}PAGEUP"),
+            Key::PageDown(shift, ctrl) => format!("{shift}{ctrl}PAGEDOWN"),
+            Key::Function(n) => format!("F{n}"),
+        };
+        write!(f, "{s}")
+    }
+}
+
+impl fmt::Display for Shift {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            Shift::Off => "",
+            Shift::On => "\\",
+        };
+        write!(f, "{s}")
+    }
+}
+
+impl fmt::Display for Ctrl {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            Ctrl::Off => "",
+            Ctrl::On => "^",
+        };
+        write!(f, "{s}")
+    }
 }
 
 impl Keyboard {

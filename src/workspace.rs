@@ -197,7 +197,7 @@ impl Workspace {
     }
 
     /// Removes the view referenced by `id` from the workspace, returning the *id* of
-    /// the following view or `None` if the view could not be removed.
+    /// the view above or `None` if the view could not be removed.
     ///
     /// Remaining views will be resized as a side effect of removal. However, the view
     /// will not be removed, and resizing will not occur, if `id` is the only remaining
@@ -239,8 +239,10 @@ impl Workspace {
                 },
             );
             self.views = views;
-            let next_id = self.views[if i < self.views.len() { i } else { 0 }].id;
-            Some(next_id)
+
+            // Select view above that which was removed.
+            let i = if i > 0 { i - 1 } else { 0 };
+            Some(self.views[i].id)
         } else {
             None
         }

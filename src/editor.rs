@@ -155,6 +155,10 @@ impl Editor {
         self.canvas_mut().set_cursor(self.cursor);
     }
 
+    pub fn show_cursor(&mut self) {
+        self.canvas_mut().set_cursor(self.cursor);
+    }
+
     pub fn insert_char(&mut self, c: char) {
         self.insert_chars(&vec![c])
     }

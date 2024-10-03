@@ -6,13 +6,13 @@ use crate::workspace::{Placement, Workspace};
 use std::cell::RefMut;
 use std::collections::HashMap;
 
-type ViewMap = HashMap<u32, EditorRef>;
+type EditorMap = HashMap<u32, EditorRef>;
 
 pub struct Session {
     pub workspace: Workspace,
     pub editors: Vec<EditorRef>,
-    pub views: ViewMap,
-    pub active: u32,
+    pub editor_map: EditorMap,
+    pub active_id: u32,
 }
 
 impl Session {
@@ -25,7 +25,7 @@ impl Session {
         };
 
         let mut workspace = workspace;
-        let mut views = ViewMap::new();
+        let mut editor_map = EditorMap::new();
         for (i, editor) in editors.iter().enumerate() {
             let view = if i == 0 {
                 workspace.top_view()
@@ -38,34 +38,34 @@ impl Session {
                     })
             };
             editor.borrow_mut().attach(view.window().clone());
-            views.insert(view.id(), editor.clone());
+            editor_map.insert(view.id(), editor.clone());
         }
 
-        let active = workspace.top_view().id();
+        let active_id = workspace.top_view().id();
 
         Session {
             workspace,
             editors,
-            views,
-            active,
+            editor_map,
+            active_id,
         }
     }
 
     pub fn active_id(&self) -> u32 {
-        self.active
+        self.active_id
     }
 
     pub fn active_editor(&self) -> RefMut<'_, Editor> {
-        self.views
-            .get(&self.active)
-            .unwrap_or_else(|| panic!("{}: active editor not found", self.active))
+        self.editor_map
+            .get(&self.active_id)
+            .unwrap_or_else(|| panic!("{}: active editor not found", self.active_id))
             .borrow_mut()
     }
 
     pub fn add_view(&mut self, place: Placement) -> Option<u32> {
         match self.workspace.add_view(place) {
             Some(id) => {
-                for (id, e) in self.views.iter() {
+                for (id, e) in self.editor_map.iter() {
                     let view = self.workspace.get_view(*id);
                     e.borrow_mut().attach(view.window().clone());
                 }
@@ -75,8 +75,9 @@ impl Session {
                 let editor = editor.to_ref();
                 self.editors.push(editor.clone());
 
-                self.views.insert(id, editor);
-                self.active = id;
+                self.editor_map.insert(id, editor);
+                self.active_id = id;
+                self.active_editor().show_cursor();
                 Some(id)
             }
             None => {
@@ -89,21 +90,34 @@ impl Session {
     pub fn remove_view(&mut self, id: u32) -> Option<u32> {
         match self.workspace.remove_view(id) {
             Some(next_id) => {
-                match self.views.remove(&id) {
+                match self.editor_map.remove(&id) {
                     Some(e) => e.borrow_mut().attach(Window::zombie().to_ref()),
                     None => panic!("{}: view not found", id),
                 }
-                for (id, e) in self.views.iter() {
+                for (id, e) in self.editor_map.iter() {
                     let view = self.workspace.get_view(*id);
                     e.borrow_mut().attach(view.window().clone());
                 }
-                self.active = next_id;
-                Some(self.active)
+                self.active_id = next_id;
+                self.active_editor().show_cursor();
+                Some(self.active_id)
             }
             None => {
                 self.workspace.alert("cannot remove only window");
                 None
             }
         }
+    }
+
+    pub fn prev_view(&mut self) -> u32 {
+        self.active_id = self.workspace.above_view(self.active_id).id();
+        self.active_editor().show_cursor();
+        self.active_id
+    }
+
+    pub fn next_view(&mut self) -> u32 {
+        self.active_id = self.workspace.below_view(self.active_id).id();
+        self.active_editor().show_cursor();
+        self.active_id
     }
 }
