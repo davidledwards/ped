@@ -28,6 +28,15 @@ pub enum Action {
     Quit,
 }
 
+/// Canonical name: `meta-key`
+pub fn meta_key(_: &mut Session, _: &Key) -> Result<Action> {
+    let cont_fn = |_: &mut Session, key: &Key| match key {
+        // FIXME: translate to meta key
+        _ => Ok(Action::Nothing),
+    };
+    Ok(Action::Continue(Box::new(cont_fn)))
+}
+
 /// Canonical name: `insert-char`
 pub fn insert_char(session: &mut Session, key: &Key) -> Result<Action> {
     match key {
@@ -151,9 +160,9 @@ pub fn quit(_: &mut Session, _: &Key) -> Result<Action> {
     Ok(Action::Quit)
 }
 
-/// Canonical name: `window-op`
-pub fn window_op(_: &mut Session, _: &Key) -> Result<Action> {
-    let cont_fn = move |session: &mut Session, key: &Key| {
+/// Canonical name: `window-key`
+pub fn window_key(_: &mut Session, _: &Key) -> Result<Action> {
+    let cont_fn = |session: &mut Session, key: &Key| {
         let action = match key {
             Key::Char('/') => session
                 .add_view(Placement::Top)

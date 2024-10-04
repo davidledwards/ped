@@ -111,9 +111,13 @@ impl Controller {
                         self.context.key_stack.clear();
                         key_stack.push(key.clone());
                         let text = format!(
-                            "{}: undefined key{}",
+                            "{}: undefined {}",
                             KeyStack(&key_stack),
-                            if key_stack.len() == 1 { "" } else { "sequence" }
+                            if key_stack.len() == 1 {
+                                "key"
+                            } else {
+                                "key sequence"
+                            }
                         );
                         self.set_alert(text.as_str());
                     }

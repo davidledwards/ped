@@ -99,10 +99,11 @@ impl BindingMap {
 }
 
 /// Default key bindings that associate canonical key names to canonical editing operations.
-const DEFAULT_BINDINGS: [(&'static str, &'static str); 27] = [
+const DEFAULT_BINDINGS: [(&'static str, &'static str); 28] = [
+    ("ctrl-[", "meta-key"),
     ("char", "insert-char"),
     ("ctrl-m", "insert-line"),
-    ("delete", "delete-char-left"),
+    ("ctrl-?", "delete-char-left"),
     ("ctrl-h", "delete-char-left"),
     ("ctrl-d", "delete-char-right"),
     ("up", "move-up"),
@@ -126,7 +127,7 @@ const DEFAULT_BINDINGS: [(&'static str, &'static str); 27] = [
     ("ctrl-r", "redraw"),
     ("ctrl-l", "redraw-and-center"),
     ("ctrl-x", "quit"),
-    ("ctrl-w", "window-op"),
+    ("ctrl-w", "window-key"),
 ];
 
 /// Predefined key mappings that associate well known [`Key`]s with canonical names.
@@ -136,7 +137,7 @@ const DEFAULT_BINDINGS: [(&'static str, &'static str); 27] = [
 ///
 /// Note that [`Key::Char`] is absent from these mappings because of the impracticality
 /// of mapping all possible characters.
-const KEY_MAPPINGS: [(Key, &'static str); 87] = [
+const KEY_MAPPINGS: [(Key, &'static str); 86] = [
     (Key::Control(0), "ctrl-@"),
     (Key::Control(1), "ctrl-a"),
     (Key::Control(2), "ctrl-b"),
@@ -169,8 +170,7 @@ const KEY_MAPPINGS: [(Key, &'static str); 87] = [
     (Key::Control(29), "ctrl-]"),
     (Key::Control(30), "ctrl-^"),
     (Key::Control(31), "ctrl-_"),
-    (Key::Delete, "delete"),
-    (Key::Insert, "insert"),
+    (Key::Control(127), "ctrl-?"),
     (Key::ShiftTab, "shift-tab"),
     (Key::Up(Shift::Off, Ctrl::Off), "up"),
     (Key::Up(Shift::On, Ctrl::Off), "shift-up"),
@@ -239,7 +239,8 @@ fn init_key_map() -> KeyMap {
 ///
 /// Canonical names are used for the runtime binding of keys to editing operations,
 /// which themselves are named and well known.
-const OP_MAPPINGS: [(&'static str, OpFn); 20] = [
+const OP_MAPPINGS: [(&'static str, OpFn); 21] = [
+    ("meta-key", op::meta_key),
     ("insert-char", op::insert_char),
     ("insert-line", op::insert_line),
     ("delete-char-left", op::delete_char_left),
@@ -259,7 +260,7 @@ const OP_MAPPINGS: [(&'static str, OpFn); 20] = [
     ("redraw", op::redraw),
     ("redraw-and-center", op::redraw_and_center),
     ("quit", op::quit),
-    ("window-op", op::window_op),
+    ("window-key", op::window_key),
 ];
 
 fn init_op_map() -> OpMap {

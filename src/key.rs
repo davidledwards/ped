@@ -11,8 +11,6 @@ pub enum Key {
     None,
     Control(u8),
     Char(char),
-    Delete,
-    Insert,
     ShiftTab,
     Up(Shift, Ctrl),
     Down(Shift, Ctrl),
@@ -41,32 +39,19 @@ pub enum Ctrl {
 
 /// A keyboard that reads bytes from the terminal and produces corresponding [`Key`]s.
 pub struct Keyboard {
+    /// A non-blocking stream of bytes from standard input.
     stdin: Bytes<Stdin>,
-}
 
-impl Key {
-    /// Mapping of control number to display character.
-    const CONTROL_CHAR: [char; 32] = [
-        '@', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q',
-        'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '[', '\\', ']', '^', '_',
-    ];
+    /// An optional byte previously read but pushed back for processing.
+    stdin_waiting: Option<u8>,
 }
 
 impl fmt::Display for Key {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
             Key::None => "".to_string(),
-            Key::Control(n) => {
-                if *n < 32 {
-                    format!("^{}", Self::CONTROL_CHAR[*n as usize])
-                } else {
-                    // This should never happen, but nonetheless, format as number.
-                    format!("^#{n}")
-                }
-            }
+            Key::Control(b) => format!("{}", Control(*b)),
             Key::Char(c) => format!("{c}"),
-            Key::Delete => "DEL".to_string(),
-            Key::Insert => "INS".to_string(),
             Key::ShiftTab => "\\TAB".to_string(),
             Key::Up(shift, ctrl) => format!("{shift}{ctrl}UP"),
             Key::Down(shift, ctrl) => format!("{shift}{ctrl}DOWN"),
@@ -102,19 +87,49 @@ impl fmt::Display for Ctrl {
     }
 }
 
+/// Wrapper used only for formatting [`Key::Control`] values.
+struct Control(u8);
+
+impl Control {
+    /// Mapping of control codes to display character, excluding DEL, which is handled separately.
+    const CONTROL_CHAR: [char; 32] = [
+        '@', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q',
+        'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '[', '\\', ']', '^', '_',
+    ];
+}
+
+impl fmt::Display for Control {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.0 {
+            27 => write!(f, "ESC"),
+            127 => write!(f, "DEL"),
+            b @ 0..32 => write!(f, "^{}", Self::CONTROL_CHAR[b as usize]),
+            b @ _ => {
+                // This should never happen, but nonetheless, format as number.
+                write!(f, "^#{b}")
+            }
+        }
+    }
+}
+
 impl Keyboard {
     /// Creates a new keyboard reader.
     pub fn new() -> Keyboard {
         Keyboard {
             stdin: io::stdin().bytes(),
+            stdin_waiting: None,
         }
     }
 
     fn next(&mut self) -> Result<Option<u8>> {
-        self.stdin
-            .next()
-            .transpose()
-            .map_err(|e| Error::io(Some("/dev/stdin"), e))
+        if let Some(b) = self.stdin_waiting.take() {
+            Ok(Some(b))
+        } else {
+            self.stdin
+                .next()
+                .transpose()
+                .map_err(|e| Error::io(Some("/dev/stdin"), e))
+        }
     }
 
     /// Reads the next key.
@@ -136,9 +151,9 @@ impl Keyboard {
     pub fn read(&mut self) -> Result<Key> {
         let key = match self.next()? {
             Some(27) => self.read_escape()?,
-            Some(b @ 0..=31) => Key::Control(b),
-            Some(b @ 32..=126) => Key::Char(b as char),
-            Some(127) => Key::Delete,
+            Some(b @ 0..32) => Key::Control(b),
+            Some(b @ 32..127) => Key::Char(b as char),
+            Some(b @ 127) => Key::Control(b),
             Some(b) => self.read_unicode(b)?,
             None => Key::None,
         };
@@ -152,7 +167,6 @@ impl Keyboard {
     /// sequence is unrecognized.
     fn read_escape(&mut self) -> Result<Key> {
         let key = match self.next()? {
-            Some(27) => self.read_escape()?,
             Some(b'[') => self.read_ansi()?,
             Some(b'O') => {
                 match self.next()? {
@@ -161,8 +175,11 @@ impl Keyboard {
                     _ => Key::None,
                 }
             }
+            Some(b) => {
+                self.stdin_waiting = Some(b);
+                Key::Control(27)
+            }
             None => Key::Control(27),
-            _ => Key::None,
         };
         Ok(key)
     }
@@ -255,8 +272,11 @@ impl Keyboard {
 fn map_vt(key_code: u8, key_mod: u8) -> Key {
     match (key_code, modifiers(key_mod)) {
         (1, (shift, ctrl)) => Key::Home(shift, ctrl),
-        (2, _) => Key::Insert,
-        (3, _) => Key::Delete,
+        (2, _) => {
+            // INS key, but for now, just ignore.
+            Key::None
+        }
+        (3, _) => Key::Control(127),
         (4, (shift, ctrl)) => Key::End(shift, ctrl),
         (5, (shift, ctrl)) => Key::PageUp(shift, ctrl),
         (6, (shift, ctrl)) => Key::PageDown(shift, ctrl),
