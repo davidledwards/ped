@@ -1,8 +1,12 @@
-//! Editing operations.
+//! # Editing operations
 //!
 //! A collection of functions intended to be associated with names of editing
-//! operations. These functions serve as the glue between [`Key`]s and respective
-//! actions in the context of the editing experience.
+//! operations. These functions serve as the glue between [`Key`](crate::key::Key)s and
+//! respective actions in the context of the editing experience.
+//!
+//! Editing operations are designed to be callable only indirectly through [`OpMap`]
+//! instances created by [`init_op_map`]. The mapping of names to functions is captured
+//! in [`OP_MAPPINGS`].
 //!
 //! See [`Bindings`](crate::bind::Bindings) for further details on binding keys
 //! at runtime.
@@ -14,181 +18,161 @@ use crate::workspace::Placement;
 use std::collections::HashMap;
 
 /// A function type that implements an editing operation.
-pub type OpFn = fn(&mut Session) -> Result<Action>;
+pub type OpFn = fn(&mut Session) -> Result<Option<Action>>;
 
 /// Map of editing operations to editing functions.
 pub type OpMap = HashMap<&'static str, OpFn>;
 
-/// An action returned by an editing function that is to be carried out by the
-/// [`Controller`].
 pub enum Action {
-    Nothing,
-    Continue,
-    Alert(String),
-    UndefinedKey,
     Quit,
+    Alert(String),
 }
 
 /// Operation: `insert-line`
-pub fn insert_line(session: &mut Session) -> Result<Action> {
+fn insert_line(session: &mut Session) -> Result<Option<Action>> {
     session.active_editor().insert_char('\n');
-    Ok(Action::Nothing)
+    Ok(None)
 }
 
 /// Operation: `delete-char-left`
-pub fn delete_char_left(session: &mut Session) -> Result<Action> {
+fn delete_char_left(session: &mut Session) -> Result<Option<Action>> {
     // todo: should we return deleted char in result?
     let _ = session.active_editor().delete_left();
-    Ok(Action::Nothing)
+    Ok(None)
 }
 
 /// Operation: `delete-char-right`
-pub fn delete_char_right(session: &mut Session) -> Result<Action> {
-    // todo: should we return deleted char in result?
+fn delete_char_right(session: &mut Session) -> Result<Option<Action>> {
     let _ = session.active_editor().delete_right();
-    Ok(Action::Nothing)
+    Ok(None)
 }
 
 /// Operation: `move-up`
-pub fn move_up(session: &mut Session) -> Result<Action> {
+fn move_up(session: &mut Session) -> Result<Option<Action>> {
     session.active_editor().move_up();
-    Ok(Action::Nothing)
+    Ok(None)
 }
 
 /// Operation: `move-down`
-pub fn move_down(session: &mut Session) -> Result<Action> {
+fn move_down(session: &mut Session) -> Result<Option<Action>> {
     session.active_editor().move_down();
-    Ok(Action::Nothing)
+    Ok(None)
 }
 
 /// Operation: `move-left`
-pub fn move_left(session: &mut Session) -> Result<Action> {
+fn move_left(session: &mut Session) -> Result<Option<Action>> {
     session.active_editor().move_left();
-    Ok(Action::Nothing)
+    Ok(None)
 }
 
 /// Operation: `move-right`
-pub fn move_right(session: &mut Session) -> Result<Action> {
+fn move_right(session: &mut Session) -> Result<Option<Action>> {
     session.active_editor().move_right();
-    Ok(Action::Nothing)
+    Ok(None)
 }
 
 /// Operation: `move-page-up`
-pub fn move_page_up(session: &mut Session) -> Result<Action> {
+fn move_page_up(session: &mut Session) -> Result<Option<Action>> {
     session.active_editor().move_page_up();
-    Ok(Action::Nothing)
+    Ok(None)
 }
 
 /// Operation: `move-page-down`
-pub fn move_page_down(session: &mut Session) -> Result<Action> {
+fn move_page_down(session: &mut Session) -> Result<Option<Action>> {
     session.active_editor().move_page_down();
-    Ok(Action::Nothing)
+    Ok(None)
 }
 
 /// Operation: `move-top`
-pub fn move_top(session: &mut Session) -> Result<Action> {
+fn move_top(session: &mut Session) -> Result<Option<Action>> {
     session.active_editor().move_top();
-    Ok(Action::Nothing)
+    Ok(None)
 }
 
 /// Operation: `move-bottom`
-pub fn move_bottom(session: &mut Session) -> Result<Action> {
+fn move_bottom(session: &mut Session) -> Result<Option<Action>> {
     session.active_editor().move_bottom();
-    Ok(Action::Nothing)
+    Ok(None)
 }
 
 /// Operation: `scroll-up`
-pub fn scroll_up(session: &mut Session) -> Result<Action> {
+fn scroll_up(session: &mut Session) -> Result<Option<Action>> {
     session.active_editor().scroll_up();
-    Ok(Action::Nothing)
+    Ok(None)
 }
 
 /// Operation: `scroll-down`
-pub fn scroll_down(session: &mut Session) -> Result<Action> {
+fn scroll_down(session: &mut Session) -> Result<Option<Action>> {
     session.active_editor().scroll_down();
-    Ok(Action::Nothing)
+    Ok(None)
 }
 
 /// Operation: `move-begin-line`
-pub fn move_begin_line(session: &mut Session) -> Result<Action> {
+fn move_begin_line(session: &mut Session) -> Result<Option<Action>> {
     session.active_editor().move_beg();
-    Ok(Action::Nothing)
+    Ok(None)
 }
 
 /// Operation: `move-end-line`
-pub fn move_end_line(session: &mut Session) -> Result<Action> {
+fn move_end_line(session: &mut Session) -> Result<Option<Action>> {
     session.active_editor().move_end();
-    Ok(Action::Nothing)
+    Ok(None)
 }
 
 /// Operation: `redraw`
-pub fn redraw(session: &mut Session) -> Result<Action> {
+fn redraw(session: &mut Session) -> Result<Option<Action>> {
     session.active_editor().draw();
-    Ok(Action::Nothing)
+    Ok(None)
 }
 
 /// Operation: `redraw-and-center`
-pub fn redraw_and_center(session: &mut Session) -> Result<Action> {
+fn redraw_and_center(session: &mut Session) -> Result<Option<Action>> {
     let mut editor = session.active_editor();
     editor.align_cursor(Align::Center);
     editor.draw();
-    Ok(Action::Nothing)
+    Ok(None)
 }
 
 /// Operation: `quit`
-pub fn quit(_: &mut Session) -> Result<Action> {
+fn quit(_: &mut Session) -> Result<Option<Action>> {
     // FIXME: ask to save dirty buffers
-    Ok(Action::Quit)
+    Ok(Some(Action::Quit))
 }
 
-pub fn open_window_top(session: &mut Session) -> Result<Action> {
-    let action = session
-        .add_view(Placement::Top)
-        .map(|_| Action::Nothing)
-        .unwrap_or(Action::Nothing);
-    Ok(action)
+fn open_window_top(session: &mut Session) -> Result<Option<Action>> {
+    // FIXME: move alerting from session to here
+    let _ = session.add_view(Placement::Top);
+    Ok(None)
 }
 
-pub fn open_window_bottom(session: &mut Session) -> Result<Action> {
-    let action = session
-        .add_view(Placement::Bottom)
-        .map(|_| Action::Nothing)
-        .unwrap_or(Action::Nothing);
-    Ok(action)
+fn open_window_bottom(session: &mut Session) -> Result<Option<Action>> {
+    let _ = session.add_view(Placement::Bottom);
+    Ok(None)
 }
 
-pub fn open_window_above(session: &mut Session) -> Result<Action> {
-    let action = session
-        .add_view(Placement::Above(session.active_id()))
-        .map(|_| Action::Nothing)
-        .unwrap_or(Action::Nothing);
-    Ok(action)
+fn open_window_above(session: &mut Session) -> Result<Option<Action>> {
+    let _ = session.add_view(Placement::Above(session.active_id()));
+    Ok(None)
 }
 
-pub fn open_window_below(session: &mut Session) -> Result<Action> {
-    let action = session
-        .add_view(Placement::Below(session.active_id()))
-        .map(|_| Action::Nothing)
-        .unwrap_or(Action::Nothing);
-    Ok(action)
+fn open_window_below(session: &mut Session) -> Result<Option<Action>> {
+    let _ = session.add_view(Placement::Below(session.active_id()));
+    Ok(None)
 }
 
-pub fn close_window(session: &mut Session) -> Result<Action> {
-    let action = session
-        .remove_view(session.active_id())
-        .map(|_| Action::Nothing)
-        .unwrap_or(Action::Nothing);
-    Ok(action)
+fn close_window(session: &mut Session) -> Result<Option<Action>> {
+    let _ = session.remove_view(session.active_id());
+    Ok(None)
 }
 
-pub fn prev_window(session: &mut Session) -> Result<Action> {
+fn prev_window(session: &mut Session) -> Result<Option<Action>> {
     session.prev_view();
-    Ok(Action::Nothing)
+    Ok(None)
 }
 
-pub fn next_window(session: &mut Session) -> Result<Action> {
+fn next_window(session: &mut Session) -> Result<Option<Action>> {
     session.next_view();
-    Ok(Action::Nothing)
+    Ok(None)
 }
 
 /// Predefined mapping of editing operations to editing functions.

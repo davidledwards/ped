@@ -69,6 +69,54 @@ impl Controller {
         }
     }
 
+    /// Runs the main processing loop.
+    ///
+    /// This loop orchestrates the entire editing experience, reading sequences of
+    /// [keys](Key) and calling their corresponding editing functions until instructed to
+    /// quit.
+    pub fn run(&mut self) -> Result<()> {
+        loop {
+            let key = self.keyboard.read()?;
+            if key == Key::None {
+                // do background stuff here
+            } else {
+                if let Some(c) = self.is_char(&key) {
+                    // Inserting text is statistically most prevalent scenario, so this
+                    // short circuits detection and bypasses normal indirection of key
+                    // binding.
+                    self.session.active_editor().insert_char(c);
+                    self.reset_alert();
+                } else {
+                    self.context.key_seq.push(key.clone());
+                    if let Some(op_fn) = self.bindings.find(&self.context.key_seq) {
+                        match op_fn(&mut self.session)? {
+                            Some(Action::Quit) => break,
+                            Some(Action::Alert(text)) => {
+                                self.set_alert(text.as_str());
+                            }
+                            None => {
+                                self.reset_alert();
+                            }
+                        }
+                        self.clear_keys();
+                    } else if self.bindings.is_prefix(&self.context.key_seq) {
+                        // Current keys form a prefix of at least one sequence bound to an
+                        // editing function.
+                        self.show_keys();
+                    } else {
+                        // Current keys are not bound to an editing function, nor do they
+                        // form a prefix.
+                        self.show_undefined_keys();
+                        self.clear_keys();
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// An efficient means of detecting the very common case of a single character,
+    /// allowing the controller to optimize its handling.
     fn is_char(&self, key: &Key) -> Option<char> {
         if self.context.key_seq.is_empty() {
             if let Key::Char(c) = key {
@@ -81,57 +129,27 @@ impl Controller {
         }
     }
 
-    pub fn run(&mut self) -> Result<()> {
-        loop {
-            let key = self.keyboard.read()?;
-            if key == Key::None {
-                // do background stuff here
+    fn show_keys(&mut self) {
+        let text = KeySeq(&self.context.key_seq).to_string();
+        self.set_alert(text.as_str());
+    }
+
+    fn show_undefined_keys(&mut self) {
+        let key_seq = &self.context.key_seq;
+        let text = format!(
+            "{}: undefined {}",
+            KeySeq(&key_seq),
+            if key_seq.len() == 1 {
+                "key"
             } else {
-                let action = if let Some(c) = self.is_char(&key) {
-                    self.session.active_editor().insert_char(c);
-                    Action::Nothing
-                } else {
-                    self.context.key_seq.push(key.clone());
-                    if let Some(op_fn) = self.bindings.find(&self.context.key_seq) {
-                        op_fn(&mut self.session)?
-                    } else if self.bindings.is_prefix(&self.context.key_seq) {
-                        Action::Continue
-                    } else {
-                        Action::UndefinedKey
-                    }
-                };
-                match action {
-                    Action::Nothing => {
-                        self.reset_alert();
-                        self.context.key_seq.clear();
-                    }
-                    Action::Continue => {
-                        let text = KeySeq(&self.context.key_seq).to_string();
-                        self.set_alert(text.as_str());
-                    }
-                    Action::Alert(text) => {
-                        self.set_alert(text.as_str());
-                        self.context.key_seq.clear();
-                    }
-                    Action::UndefinedKey => {
-                        let key_seq = &self.context.key_seq;
-                        let text = format!(
-                            "{}: undefined {}",
-                            KeySeq(&key_seq),
-                            if key_seq.len() == 1 {
-                                "key"
-                            } else {
-                                "key sequence"
-                            }
-                        );
-                        self.set_alert(text.as_str());
-                        self.context.key_seq.clear();
-                    }
-                    Action::Quit => break,
-                }
+                "key sequence"
             }
-        }
-        Ok(())
+        );
+        self.set_alert(text.as_str());
+    }
+
+    fn clear_keys(&mut self) {
+        self.context.key_seq.clear();
     }
 
     fn set_alert(&mut self, text: &str) {
