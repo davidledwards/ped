@@ -1,9 +1,9 @@
 //! Main controller.
-use crate::bind::BindingMap;
+use crate::bind::Bindings;
 use crate::editor::EditorRef;
 use crate::error::Result;
 use crate::key::{Key, Keyboard};
-use crate::op::{Action, ContinueFn};
+use crate::op::Action;
 use crate::session::Session;
 use crate::workspace::Workspace;
 
@@ -13,7 +13,7 @@ use std::time::Instant;
 /// The primary control point for coordinating user interaction and editing operations.
 pub struct Controller {
     keyboard: Keyboard,
-    bindings: BindingMap,
+    bindings: Bindings,
     session: Session,
     context: Context,
 }
@@ -24,31 +24,23 @@ struct Context {
     /// been cleared.
     last_alert: Option<Instant>,
 
-    /// An optional continuation function that will process the next [`Key`].
-    cont_fn: Option<Box<ContinueFn>>,
-
-    /// A stack of keys representing a sequence of continuation function.
-    ///
-    /// In theory, an editing operation could return an infinite number of continuation
-    /// functions, but in practice, there is usually one or possibly two continuations.
-    /// A continuation would be used to represent a *collection* of like operations.
-    key_stack: Vec<Key>,
+    /// A sequence of keys resulting from continuations.
+    key_seq: Vec<Key>,
 }
 
 impl Context {
     fn new() -> Context {
         Context {
             last_alert: None,
-            cont_fn: None,
-            key_stack: Vec::new(),
+            key_seq: Vec::new(),
         }
     }
 }
 
 /// Wrapper used only for formatting [`Key`] sequences.
-struct KeyStack<'a>(&'a Vec<Key>);
+struct KeySeq<'a>(&'a Vec<Key>);
 
-impl fmt::Display for KeyStack<'_> {
+impl fmt::Display for KeySeq<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let key_seq = self
             .0
@@ -63,7 +55,7 @@ impl fmt::Display for KeyStack<'_> {
 impl Controller {
     pub fn new(
         keyboard: Keyboard,
-        bindings: BindingMap,
+        bindings: Bindings,
         workspace: Workspace,
         editors: Vec<EditorRef>,
     ) -> Controller {
@@ -77,49 +69,63 @@ impl Controller {
         }
     }
 
+    fn is_char(&self, key: &Key) -> Option<char> {
+        if self.context.key_seq.is_empty() {
+            if let Key::Char(c) = key {
+                Some(*c)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
     pub fn run(&mut self) -> Result<()> {
         loop {
             let key = self.keyboard.read()?;
             if key == Key::None {
                 // do background stuff here
             } else {
-                let action = if let Some(mut cn_fn) = self.context.cont_fn.take() {
-                    cn_fn(&mut self.session, &key)?
+                let action = if let Some(c) = self.is_char(&key) {
+                    self.session.active_editor().insert_char(c);
+                    Action::Nothing
                 } else {
-                    match self.bindings.lookup(&key) {
-                        Some(op_fn) => op_fn(&mut self.session, &key)?,
-                        None => Action::UndefinedKey(key.clone()),
+                    self.context.key_seq.push(key.clone());
+                    if let Some(op_fn) = self.bindings.find(&self.context.key_seq) {
+                        op_fn(&mut self.session)?
+                    } else if self.bindings.is_prefix(&self.context.key_seq) {
+                        Action::Continue
+                    } else {
+                        Action::UndefinedKey
                     }
                 };
                 match action {
                     Action::Nothing => {
                         self.reset_alert();
-                        self.context.key_stack.clear();
+                        self.context.key_seq.clear();
                     }
-                    Action::Continue(cn_fn) => {
-                        self.context.cont_fn = Some(cn_fn);
-                        self.context.key_stack.push(key.clone());
-                        let text = KeyStack(&self.context.key_stack).to_string();
+                    Action::Continue => {
+                        let text = KeySeq(&self.context.key_seq).to_string();
                         self.set_alert(text.as_str());
                     }
                     Action::Alert(text) => {
                         self.set_alert(text.as_str());
-                        self.context.key_stack.clear();
+                        self.context.key_seq.clear();
                     }
-                    Action::UndefinedKey(key) => {
-                        let mut key_stack = self.context.key_stack.clone();
-                        self.context.key_stack.clear();
-                        key_stack.push(key.clone());
+                    Action::UndefinedKey => {
+                        let key_seq = &self.context.key_seq;
                         let text = format!(
                             "{}: undefined {}",
-                            KeyStack(&key_stack),
-                            if key_stack.len() == 1 {
+                            KeySeq(&key_seq),
+                            if key_seq.len() == 1 {
                                 "key"
                             } else {
                                 "key sequence"
                             }
                         );
                         self.set_alert(text.as_str());
+                        self.context.key_seq.clear();
                     }
                     Action::Quit => break,
                 }

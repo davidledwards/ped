@@ -18,7 +18,7 @@ mod theme;
 mod window;
 mod workspace;
 
-use crate::bind::BindingMap;
+use crate::bind::Bindings;
 use crate::buffer::Buffer;
 use crate::control::Controller;
 use crate::display::{Point, Size};
@@ -68,7 +68,7 @@ fn run() -> Result<()> {
             Vec::new()
         };
 
-        let bindings = BindingMap::new();
+        let bindings = Bindings::new();
 
         let (rows, cols) = term::size()?;
         term::init()?;

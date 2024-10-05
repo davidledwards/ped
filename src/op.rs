@@ -1,200 +1,229 @@
 //! Editing operations.
 //!
-//! A collection of functions intended to be associated with canonical names of
-//! editing operations. These functions serve as the glue between a [`Key`] and
-//! its respective action in the context of the editing experience.
+//! A collection of functions intended to be associated with names of editing
+//! operations. These functions serve as the glue between [`Key`]s and respective
+//! actions in the context of the editing experience.
 //!
-//! See [`BindingMap`](crate::bind::BindingMap) for further details on binding keys
+//! See [`Bindings`](crate::bind::Bindings) for further details on binding keys
 //! at runtime.
 use crate::editor::Align;
 use crate::error::Result;
-use crate::key::Key;
 use crate::session::Session;
 use crate::workspace::Placement;
 
+use std::collections::HashMap;
+
 /// A function type that implements an editing operation.
-pub type OpFn = fn(&mut Session, &Key) -> Result<Action>;
+pub type OpFn = fn(&mut Session) -> Result<Action>;
 
-/// A function type that implements a continuation of an editing operation.
-pub type ContinueFn = dyn FnMut(&mut Session, &Key) -> Result<Action>;
+/// Map of editing operations to editing functions.
+pub type OpMap = HashMap<&'static str, OpFn>;
 
-/// An action returned by an editing operation that is to be carried out by the
+/// An action returned by an editing function that is to be carried out by the
 /// [`Controller`].
 pub enum Action {
     Nothing,
-    Continue(Box<ContinueFn>),
+    Continue,
     Alert(String),
-    UndefinedKey(Key),
+    UndefinedKey,
     Quit,
 }
 
-/// Canonical name: `meta-key`
-pub fn meta_key(_: &mut Session, _: &Key) -> Result<Action> {
-    let cont_fn = |_: &mut Session, key: &Key| match key {
-        // FIXME: translate to meta key
-        _ => Ok(Action::Nothing),
-    };
-    Ok(Action::Continue(Box::new(cont_fn)))
-}
-
-/// Canonical name: `insert-char`
-pub fn insert_char(session: &mut Session, key: &Key) -> Result<Action> {
-    match key {
-        Key::Char(c) => {
-            session.active_editor().insert_char(*c);
-            Ok(Action::Nothing)
-        }
-        _ => panic!("{key:?}: expecting Key::Char"),
-    }
-}
-
-/// Canonical name: `insert-line`
-pub fn insert_line(session: &mut Session, _: &Key) -> Result<Action> {
+/// Operation: `insert-line`
+pub fn insert_line(session: &mut Session) -> Result<Action> {
     session.active_editor().insert_char('\n');
     Ok(Action::Nothing)
 }
 
-/// Canonical name: `delete-char-left`
-pub fn delete_char_left(session: &mut Session, _: &Key) -> Result<Action> {
+/// Operation: `delete-char-left`
+pub fn delete_char_left(session: &mut Session) -> Result<Action> {
     // todo: should we return deleted char in result?
     let _ = session.active_editor().delete_left();
     Ok(Action::Nothing)
 }
 
-/// Canonical name: `delete-char-right`
-pub fn delete_char_right(session: &mut Session, _: &Key) -> Result<Action> {
+/// Operation: `delete-char-right`
+pub fn delete_char_right(session: &mut Session) -> Result<Action> {
     // todo: should we return deleted char in result?
     let _ = session.active_editor().delete_right();
     Ok(Action::Nothing)
 }
 
-/// Canonical name: `move-up`
-pub fn move_up(session: &mut Session, _: &Key) -> Result<Action> {
+/// Operation: `move-up`
+pub fn move_up(session: &mut Session) -> Result<Action> {
     session.active_editor().move_up();
     Ok(Action::Nothing)
 }
 
-/// Canonical name: `move-down`
-pub fn move_down(session: &mut Session, _: &Key) -> Result<Action> {
+/// Operation: `move-down`
+pub fn move_down(session: &mut Session) -> Result<Action> {
     session.active_editor().move_down();
     Ok(Action::Nothing)
 }
 
-/// Canonical name: `move-left`
-pub fn move_left(session: &mut Session, _: &Key) -> Result<Action> {
+/// Operation: `move-left`
+pub fn move_left(session: &mut Session) -> Result<Action> {
     session.active_editor().move_left();
     Ok(Action::Nothing)
 }
 
-/// Canonical name: `move-right`
-pub fn move_right(session: &mut Session, _: &Key) -> Result<Action> {
+/// Operation: `move-right`
+pub fn move_right(session: &mut Session) -> Result<Action> {
     session.active_editor().move_right();
     Ok(Action::Nothing)
 }
 
-/// Canonical name: `move-page-up`
-pub fn move_page_up(session: &mut Session, _: &Key) -> Result<Action> {
+/// Operation: `move-page-up`
+pub fn move_page_up(session: &mut Session) -> Result<Action> {
     session.active_editor().move_page_up();
     Ok(Action::Nothing)
 }
 
-/// Canonical name: `move-page-down`
-pub fn move_page_down(session: &mut Session, _: &Key) -> Result<Action> {
+/// Operation: `move-page-down`
+pub fn move_page_down(session: &mut Session) -> Result<Action> {
     session.active_editor().move_page_down();
     Ok(Action::Nothing)
 }
 
-/// Canonical name: `move-top`
-pub fn move_top(session: &mut Session, _: &Key) -> Result<Action> {
+/// Operation: `move-top`
+pub fn move_top(session: &mut Session) -> Result<Action> {
     session.active_editor().move_top();
     Ok(Action::Nothing)
 }
 
-/// Canonical name: `move-bottom`
-pub fn move_bottom(session: &mut Session, _: &Key) -> Result<Action> {
+/// Operation: `move-bottom`
+pub fn move_bottom(session: &mut Session) -> Result<Action> {
     session.active_editor().move_bottom();
     Ok(Action::Nothing)
 }
 
-/// Canonical name: `scroll-up`
-pub fn scroll_up(session: &mut Session, _: &Key) -> Result<Action> {
+/// Operation: `scroll-up`
+pub fn scroll_up(session: &mut Session) -> Result<Action> {
     session.active_editor().scroll_up();
     Ok(Action::Nothing)
 }
 
-/// Canonical name: `scroll-down`
-pub fn scroll_down(session: &mut Session, _: &Key) -> Result<Action> {
+/// Operation: `scroll-down`
+pub fn scroll_down(session: &mut Session) -> Result<Action> {
     session.active_editor().scroll_down();
     Ok(Action::Nothing)
 }
 
-/// Canonical name: `move-begin-line`
-pub fn move_begin_line(session: &mut Session, _: &Key) -> Result<Action> {
+/// Operation: `move-begin-line`
+pub fn move_begin_line(session: &mut Session) -> Result<Action> {
     session.active_editor().move_beg();
     Ok(Action::Nothing)
 }
 
-/// Canonical name: `move-end-line`
-pub fn move_end_line(session: &mut Session, _: &Key) -> Result<Action> {
+/// Operation: `move-end-line`
+pub fn move_end_line(session: &mut Session) -> Result<Action> {
     session.active_editor().move_end();
     Ok(Action::Nothing)
 }
 
-/// Canonical name: `redraw`
-pub fn redraw(session: &mut Session, _: &Key) -> Result<Action> {
+/// Operation: `redraw`
+pub fn redraw(session: &mut Session) -> Result<Action> {
     session.active_editor().draw();
     Ok(Action::Nothing)
 }
 
-/// Canonical name: `redraw-and-center`
-pub fn redraw_and_center(session: &mut Session, _: &Key) -> Result<Action> {
+/// Operation: `redraw-and-center`
+pub fn redraw_and_center(session: &mut Session) -> Result<Action> {
     let mut editor = session.active_editor();
     editor.align_cursor(Align::Center);
     editor.draw();
     Ok(Action::Nothing)
 }
 
-/// Canonical name: `quit`
-pub fn quit(_: &mut Session, _: &Key) -> Result<Action> {
+/// Operation: `quit`
+pub fn quit(_: &mut Session) -> Result<Action> {
     // FIXME: ask to save dirty buffers
     Ok(Action::Quit)
 }
 
-/// Canonical name: `window-key`
-pub fn window_key(_: &mut Session, _: &Key) -> Result<Action> {
-    let cont_fn = |session: &mut Session, key: &Key| {
-        let action = match key {
-            Key::Char('/') => session
-                .add_view(Placement::Top)
-                .map(|_| Action::Nothing)
-                .unwrap_or(Action::Nothing),
-            Key::Char('\\') => session
-                .add_view(Placement::Bottom)
-                .map(|_| Action::Nothing)
-                .unwrap_or(Action::Nothing),
-            Key::Char('[') => session
-                .add_view(Placement::Above(session.active_id()))
-                .map(|_| Action::Nothing)
-                .unwrap_or(Action::Nothing),
-            Key::Char(']') => session
-                .add_view(Placement::Below(session.active_id()))
-                .map(|_| Action::Nothing)
-                .unwrap_or(Action::Nothing),
-            Key::Char('k') => session
-                .remove_view(session.active_id())
-                .map(|_| Action::Nothing)
-                .unwrap_or(Action::Nothing),
-            Key::Char('p') => {
-                session.prev_view();
-                Action::Nothing
-            }
-            Key::Char('n') => {
-                session.next_view();
-                Action::Nothing
-            }
-            _ => Action::UndefinedKey(key.clone()),
-        };
-        Ok(action)
-    };
-    Ok(Action::Continue(Box::new(cont_fn)))
+pub fn open_window_top(session: &mut Session) -> Result<Action> {
+    let action = session
+        .add_view(Placement::Top)
+        .map(|_| Action::Nothing)
+        .unwrap_or(Action::Nothing);
+    Ok(action)
+}
+
+pub fn open_window_bottom(session: &mut Session) -> Result<Action> {
+    let action = session
+        .add_view(Placement::Bottom)
+        .map(|_| Action::Nothing)
+        .unwrap_or(Action::Nothing);
+    Ok(action)
+}
+
+pub fn open_window_above(session: &mut Session) -> Result<Action> {
+    let action = session
+        .add_view(Placement::Above(session.active_id()))
+        .map(|_| Action::Nothing)
+        .unwrap_or(Action::Nothing);
+    Ok(action)
+}
+
+pub fn open_window_below(session: &mut Session) -> Result<Action> {
+    let action = session
+        .add_view(Placement::Below(session.active_id()))
+        .map(|_| Action::Nothing)
+        .unwrap_or(Action::Nothing);
+    Ok(action)
+}
+
+pub fn close_window(session: &mut Session) -> Result<Action> {
+    let action = session
+        .remove_view(session.active_id())
+        .map(|_| Action::Nothing)
+        .unwrap_or(Action::Nothing);
+    Ok(action)
+}
+
+pub fn prev_window(session: &mut Session) -> Result<Action> {
+    session.prev_view();
+    Ok(Action::Nothing)
+}
+
+pub fn next_window(session: &mut Session) -> Result<Action> {
+    session.next_view();
+    Ok(Action::Nothing)
+}
+
+/// Predefined mapping of editing operations to editing functions.
+const OP_MAPPINGS: [(&'static str, OpFn); 25] = [
+    ("insert-line", insert_line),
+    ("delete-char-left", delete_char_left),
+    ("delete-char-right", delete_char_right),
+    ("move-up", move_up),
+    ("move-down", move_down),
+    ("move-left", move_left),
+    ("move-right", move_right),
+    ("move-page-up", move_page_up),
+    ("move-page-down", move_page_down),
+    ("move-top", move_top),
+    ("move-bottom", move_bottom),
+    ("scroll-up", scroll_up),
+    ("scroll-down", scroll_down),
+    ("move-begin-line", move_begin_line),
+    ("move-end-line", move_end_line),
+    ("redraw", redraw),
+    ("redraw-and-center", redraw_and_center),
+    ("quit", quit),
+    ("open-window-top", open_window_top),
+    ("open-window-bottom", open_window_bottom),
+    ("open-window-above", open_window_above),
+    ("open-window-below", open_window_below),
+    ("close-window", close_window),
+    ("prev-window", prev_window),
+    ("next-window", next_window),
+];
+
+pub fn init_op_map() -> OpMap {
+    let mut op_map = OpMap::new();
+    for (op, op_fn) in OP_MAPPINGS {
+        op_map.insert(op, op_fn);
+    }
+    op_map
 }

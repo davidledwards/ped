@@ -24,9 +24,6 @@ pub enum Error {
     UnexpectedArg {
         arg: String,
     },
-    BindKey {
-        key: String,
-    },
     BindOp {
         op: String,
     },
@@ -67,12 +64,6 @@ impl Error {
         }
     }
 
-    pub fn bind_key(key: &str) -> Error {
-        Error::BindKey {
-            key: key.to_string(),
-        }
-    }
-
     pub fn bind_op(op: &str) -> Error {
         Error::BindOp { op: op.to_string() }
     }
@@ -88,8 +79,7 @@ impl Display for Error {
             },
             Error::UTF8 { bytes, cause } => write!(f, "{bytes:?}: {cause}"),
             Error::UnexpectedArg { arg } => write!(f, "{arg}: unexpected argument"),
-            Error::BindKey { key } => write!(f, "{key}: unknown key for binding"),
-            Error::BindOp { op } => write!(f, "{op}: unknown operation for binding"),
+            Error::BindOp { op } => write!(f, "{op}: bind operation not found"),
         }
     }
 }
