@@ -24,6 +24,9 @@ pub enum Error {
     UnexpectedArg {
         arg: String,
     },
+    InvalidKey {
+        key: String,
+    },
     BindOp {
         op: String,
     },
@@ -64,6 +67,12 @@ impl Error {
         }
     }
 
+    pub fn invalid_key(key: &str) -> Error {
+        Error::InvalidKey {
+            key: key.to_string(),
+        }
+    }
+
     pub fn bind_op(op: &str) -> Error {
         Error::BindOp { op: op.to_string() }
     }
@@ -79,6 +88,7 @@ impl Display for Error {
             },
             Error::UTF8 { bytes, cause } => write!(f, "{bytes:?}: {cause}"),
             Error::UnexpectedArg { arg } => write!(f, "{arg}: unexpected argument"),
+            Error::InvalidKey { key } => write!(f, "{key}: invalid key"),
             Error::BindOp { op } => write!(f, "{op}: bind operation not found"),
         }
     }

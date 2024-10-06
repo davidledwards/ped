@@ -39,7 +39,7 @@ pub enum Ctrl {
 }
 
 /// Map of key names to [`Key`]s.
-type KeyMap = HashMap<&'static str, Key>;
+pub type KeyMap = HashMap<&'static str, Key>;
 
 /// A keyboard that reads bytes from the terminal and produces corresponding [`Key`]s.
 pub struct Keyboard {

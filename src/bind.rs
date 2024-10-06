@@ -1,6 +1,6 @@
 //! Key bindings.
 use crate::error::{Error, Result};
-use crate::key::{self, Ctrl, Key, Shift};
+use crate::key::{self, Ctrl, Key, KeyMap, Shift};
 use crate::op::{self, OpFn, OpMap};
 
 use std::collections::{HashMap, HashSet};
@@ -9,26 +9,37 @@ use std::collections::{HashMap, HashSet};
 type BindMap = HashMap<Vec<Key>, &'static str>;
 
 /// Set of [`Key`] sequence prefixes.
-type PrefixSet = HashSet<Vec<Key>>;
+type Prefixes = HashSet<Vec<Key>>;
 
 /// A mapping of [`Key`] sequences to editing functions.
 pub struct Bindings {
+    key_map: KeyMap,
     op_map: OpMap,
     bind_map: BindMap,
-    bind_prefixes: PrefixSet,
+    bind_prefixes: Prefixes,
 }
+
+const OTHER_BINDINGS: [(&'static str, &'static str); 6] = [
+    ("ctrl-w:/", "open-window-top"),
+    ("ctrl-w:\\", "open-window-bottom"),
+    ("ctrl-w:[", "open-window-above"),
+    ("ctrl-w:]", "open-window-below"),
+    ("ctrl-w:p", "prev-window"),
+    ("ctrl-w:n", "next-window"),
+];
 
 impl Bindings {
     /// Creates the default key bindings.
     pub fn new() -> Bindings {
         let mut this = Bindings {
+            key_map: key::init_key_map(),
             op_map: op::init_op_map(),
             bind_map: BindMap::new(),
-            bind_prefixes: PrefixSet::new(),
+            bind_prefixes: Prefixes::new(),
         };
 
         // Since default bindings are single keys, as opposed to key sequences,
-        // adding bind prefixes can be skipped.
+        // process of adding prefixes can be skipped.
         for (key, op) in Self::DEFAULT_BINDINGS.iter() {
             if let Some((op, _)) = this.op_map.get_key_value(op as &str) {
                 this.bind_map.insert(vec![key.clone()], op);
@@ -37,19 +48,45 @@ impl Bindings {
             }
         }
 
-        // FIXME: hack a few key sequences for testing
-        let key_map = key::init_key_map();
-        let ext_bindings = [(
-            vec![
-                key_map.get("ctrl-x").unwrap().clone(),
-                key_map.get("ctrl-w").unwrap().clone(),
-                Key::Char('/'),
-            ],
-            "open-window-top".to_string(),
-        )];
-        let _ = this.bind(&ext_bindings);
-
+        for (key_seq, op) in OTHER_BINDINGS {
+            this.bind(key_seq, op).unwrap_or_else(|e| panic!("{e}"));
+        }
         this
+    }
+
+    fn to_keys(&self, names: &str) -> Result<Vec<Key>> {
+        names
+            .split(':')
+            .map(|name| {
+                self.key_map
+                    .get(name)
+                    .cloned()
+                    .or_else(|| {
+                        let mut chars = name.chars();
+                        if let (Some(c), None) = (chars.next(), chars.next()) {
+                            Some(Key::Char(c))
+                        } else {
+                            None
+                        }
+                    })
+                    .ok_or_else(|| Error::invalid_key(name))
+            })
+            .collect()
+    }
+
+    fn bind(&mut self, key_seq: &str, op: &str) -> Result<()> {
+        self.to_keys(key_seq).and_then(|keys| {
+            self.op_map
+                .get_key_value(op)
+                .map(|(op, _)| {
+                    self.bind_map.insert(keys.clone(), op);
+                    for n in 1..keys.len() {
+                        let prefix = &keys[0..n];
+                        self.bind_prefixes.insert(prefix.to_vec());
+                    }
+                })
+                .ok_or_else(|| Error::bind_op(op))
+        })
     }
 
     /// Binds the collection of key sequences to editing operations specified in
@@ -62,7 +99,7 @@ impl Bindings {
     ///
     /// Returns [`Err`] if any entry in `bindings` does not match the name of an
     /// editing operation.
-    pub fn bind(&mut self, bindings: &[(Vec<Key>, String)]) -> Result<()> {
+    pub fn bind_all(&mut self, bindings: &[(Vec<Key>, String)]) -> Result<()> {
         for (keys, op) in bindings {
             if keys.len() > 0 {
                 if let Some((op, _)) = self.op_map.get_key_value(op as &str) {
