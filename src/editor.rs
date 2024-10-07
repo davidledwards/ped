@@ -24,6 +24,9 @@ pub struct Editor {
     /// Buffer position corresponding to the first character of the `cursor` row.
     row_pos: usize,
 
+    /// An optional column to which the cursor should *snap* when moving up and down.
+    snap_col: Option<u32>,
+
     /// Position of the cursor in the window.
     cursor: Point,
 
@@ -98,6 +101,7 @@ impl Editor {
             buffer,
             cur_pos,
             row_pos: 0,
+            snap_col: None,
             cursor: Point::ORIGIN,
             view: View::new(Window::zombie().to_ref()),
         }
@@ -143,6 +147,7 @@ impl Editor {
         // of row to top of buffer.
         let col = self.column_of(self.cur_pos);
         self.row_pos = self.cur_pos - col as usize;
+        self.snap_col = None;
         let (_, row) = self.find_up(self.row_pos, row);
         self.cursor = Point::new(row, col);
     }
@@ -204,9 +209,9 @@ impl Editor {
             }
         };
         self.canvas_mut().draw();
-
         self.cur_pos = cur_pos;
         self.row_pos = row_pos;
+        self.snap_col = None;
         self.set_cursor(row, col);
     }
 
@@ -283,6 +288,7 @@ impl Editor {
             self.canvas_mut().draw();
             self.cur_pos = from_pos;
             self.row_pos = row_pos;
+            self.snap_col = None;
             self.set_cursor(row, col);
             text
         } else {
@@ -340,6 +346,7 @@ impl Editor {
             }
             self.canvas_mut().draw();
             self.canvas_mut().set_cursor(self.cursor);
+            self.snap_col = None;
             text
         } else {
             vec![]
@@ -357,7 +364,9 @@ impl Editor {
         // Tries to move cursor up by 1 row, though it may already be at top of buffer.
         let (row_pos, rows) = self.find_up(self.row_pos, 1);
         if rows > 0 {
-            let (cur_pos, col) = self.find_col(row_pos, self.cursor.col);
+            // Snap column takes precedence over cursor column.
+            let try_col = self.snap_col.take().unwrap_or(self.cursor.col);
+            let (cur_pos, col) = self.find_col(row_pos, try_col);
 
             // Changes to canvas only occur when cursor is already at top row of window,
             // otherwise just change position of cursor on display.
@@ -372,6 +381,7 @@ impl Editor {
 
             self.cur_pos = cur_pos;
             self.row_pos = row_pos;
+            self.snap_col = Some(try_col);
             self.set_cursor(row, col);
         }
     }
@@ -380,7 +390,9 @@ impl Editor {
         // Tries to move cursor down by 1 row, though it may already be at end of buffer.
         let (row_pos, rows) = self.find_down(self.row_pos, 1);
         if rows > 0 {
-            let (cur_pos, col) = self.find_col(row_pos, self.cursor.col);
+            // Snap column takes precedence over cursor column.
+            let try_col = self.snap_col.take().unwrap_or(self.cursor.col);
+            let (cur_pos, col) = self.find_col(row_pos, try_col);
 
             // Changes to canvas only occur when cursor is already at bottow row of
             // window, otherwise just change position of cursor on display.
@@ -395,6 +407,7 @@ impl Editor {
 
             self.cur_pos = cur_pos;
             self.row_pos = row_pos;
+            self.snap_col = Some(try_col);
             self.set_cursor(row, col);
         }
     }
@@ -438,6 +451,7 @@ impl Editor {
             };
 
             self.cur_pos = cur_pos;
+            self.snap_col = None;
             self.set_cursor(row, col);
         }
     }
@@ -477,6 +491,7 @@ impl Editor {
             };
 
             self.cur_pos = cur_pos + 1;
+            self.snap_col = None;
             self.set_cursor(row, col);
         }
     }
@@ -486,9 +501,12 @@ impl Editor {
         // buffer could be reached first.
         let (row_pos, rows) = self.find_up(self.row_pos, self.view.rows);
         if rows > 0 {
+            // Snap column takes precedence over cursor column.
+            let try_col = self.snap_col.take().unwrap_or(self.cursor.col);
+
             // Tries to maintain current location of cursor on display by moving up
             // additional rows, though again, top of buffer could be reached first.
-            let (cur_pos, col) = self.find_col(row_pos, self.cursor.col);
+            let (cur_pos, col) = self.find_col(row_pos, try_col);
             let (top_pos, row) = self.find_up(row_pos, self.cursor.row);
 
             // Since entire display likely changed in most cases, perform full rendering of
@@ -498,6 +516,7 @@ impl Editor {
 
             self.cur_pos = cur_pos;
             self.row_pos = row_pos;
+            self.snap_col = Some(try_col);
             self.set_cursor(row, col);
         }
     }
@@ -507,9 +526,12 @@ impl Editor {
         // bottom of buffer could be reached first.
         let (row_pos, rows) = self.find_down(self.row_pos, self.view.rows);
         if rows > 0 {
+            // Snap column takes precedence over cursor column.
+            let try_col = self.snap_col.take().unwrap_or(self.cursor.col);
+
             // Tries to maintain current location of cursor on display by moving down
             // additional rows, though again, bottom of buffer could be reached first.
-            let (cur_pos, col) = self.find_col(row_pos, self.cursor.col);
+            let (cur_pos, col) = self.find_col(row_pos, try_col);
             let (top_pos, row) = self.find_up(row_pos, self.cursor.row);
 
             // Since entire display likely changed in most cases, perform full rendering of
@@ -519,6 +541,7 @@ impl Editor {
 
             self.cur_pos = cur_pos;
             self.row_pos = row_pos;
+            self.snap_col = Some(try_col);
             self.set_cursor(row, col);
         }
     }
@@ -530,6 +553,7 @@ impl Editor {
             self.cur_pos = self.row_pos;
             self.set_cursor_col(0);
         }
+        self.snap_col = None;
     }
 
     /// Moves the cursor to the end of the current row.
@@ -544,6 +568,7 @@ impl Editor {
             self.cur_pos = cur_pos;
             self.set_cursor_col((self.cur_pos - self.row_pos) as u32);
         }
+        self.snap_col = None;
     }
 
     /// Moves the cursor to the top of the buffer.
@@ -557,6 +582,7 @@ impl Editor {
         }
 
         self.cur_pos = 0;
+        self.snap_col = None;
         self.set_cursor(0, 0);
     }
 
@@ -573,6 +599,7 @@ impl Editor {
         let (top_pos, row) = self.find_up(self.row_pos, self.view.rows - 1);
         self.render_rows_from(0, top_pos);
         self.canvas_mut().draw();
+        self.snap_col = None;
         self.set_cursor(row, col);
     }
 
@@ -586,7 +613,7 @@ impl Editor {
         let try_rows = self.view.rows - self.cursor.row;
         let (row_pos, rows) = self.find_down(self.row_pos, try_rows);
 
-        // Only need to scroll if following row exiats.
+        // Only need to scroll if following row exists.
         if rows == try_rows {
             self.canvas_mut().scroll_up(self.view.rows, 1);
             self.render_rows(self.view.rows - 1, 1, row_pos);
@@ -596,12 +623,16 @@ impl Editor {
                 // Indicates that cursor is not yet on top row.
                 (self.cursor.row - 1, self.cursor.col)
             } else {
+                // Snap column takes precedence over cursor column.
+                let try_col = self.snap_col.take().unwrap_or(self.cursor.col);
+
                 // Indicates that cursor is already on top row, so new row position and
                 // column number need to be calculated.
                 let (row_pos, _) = self.find_down(self.row_pos, 1);
-                let (cur_pos, col) = self.find_col(row_pos, self.cursor.col);
+                let (cur_pos, col) = self.find_col(row_pos, try_col);
                 self.cur_pos = cur_pos;
                 self.row_pos = row_pos;
+                self.snap_col = Some(try_col);
                 (0, col)
             };
             self.set_cursor(row, col);
@@ -628,12 +659,16 @@ impl Editor {
                 // Indicates that cursor is not yet on bottom row.
                 (self.cursor.row + 1, self.cursor.col)
             } else {
+                // Snap column takes precedence over cursor column.
+                let try_col = self.snap_col.take().unwrap_or(self.cursor.col);
+
                 // Indicates that cursor is already on bottom row, so new row position and
                 // column number need to be calculated.
                 let (row_pos, _) = self.find_up(self.row_pos, 1);
-                let (cur_pos, col) = self.find_col(row_pos, self.cursor.col);
+                let (cur_pos, col) = self.find_col(row_pos, try_col);
                 self.cur_pos = cur_pos;
                 self.row_pos = row_pos;
+                self.snap_col = Some(try_col);
                 (self.cursor.row, col)
             };
             self.set_cursor(row, col);
