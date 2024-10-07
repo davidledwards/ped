@@ -140,29 +140,43 @@ fn quit(_: &mut Session) -> Result<Option<Action>> {
 }
 
 fn open_window_top(session: &mut Session) -> Result<Option<Action>> {
-    // FIXME: move alerting from session to here
-    let _ = session.add_view(Placement::Top);
-    Ok(None)
+    let action = session
+        .add_view(Placement::Top)
+        .map(|_| None)
+        .unwrap_or_else(|| Some(Action::Alert("out of window space".to_string())));
+    Ok(action)
 }
 
 fn open_window_bottom(session: &mut Session) -> Result<Option<Action>> {
-    let _ = session.add_view(Placement::Bottom);
-    Ok(None)
+    let action = session
+        .add_view(Placement::Bottom)
+        .map(|_| None)
+        .unwrap_or_else(|| Some(Action::Alert("out of window space".to_string())));
+    Ok(action)
 }
 
 fn open_window_above(session: &mut Session) -> Result<Option<Action>> {
-    let _ = session.add_view(Placement::Above(session.active_id()));
-    Ok(None)
+    let action = session
+        .add_view(Placement::Above(session.active_id()))
+        .map(|_| None)
+        .unwrap_or_else(|| Some(Action::Alert("out of window space".to_string())));
+    Ok(action)
 }
 
 fn open_window_below(session: &mut Session) -> Result<Option<Action>> {
-    let _ = session.add_view(Placement::Below(session.active_id()));
-    Ok(None)
+    let action = session
+        .add_view(Placement::Below(session.active_id()))
+        .map(|_| None)
+        .unwrap_or_else(|| Some(Action::Alert("out of window space".to_string())));
+    Ok(action)
 }
 
 fn close_window(session: &mut Session) -> Result<Option<Action>> {
-    let _ = session.remove_view(session.active_id());
-    Ok(None)
+    let action = session
+        .remove_view(session.active_id())
+        .map(|_| None)
+        .unwrap_or_else(|| Some(Action::Alert("cannot close only window".to_string())));
+    Ok(action)
 }
 
 fn prev_window(session: &mut Session) -> Result<Option<Action>> {

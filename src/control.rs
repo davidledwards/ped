@@ -79,8 +79,11 @@ impl Controller {
             let key = self.keyboard.read()?;
             if key == Key::None {
                 // do background stuff here
+            } else if key == Key::Control(7) {
+                self.clear_keys();
+                self.reset_alert();
             } else {
-                if let Some(c) = self.is_char(&key) {
+                if let Some(c) = self.possible_char(&key) {
                     // Inserting text is statistically most prevalent scenario, so this
                     // short circuits detection and bypasses normal indirection of key
                     // binding.
@@ -117,7 +120,7 @@ impl Controller {
 
     /// An efficient means of detecting the very common case of a single character,
     /// allowing the controller to optimize its handling.
-    fn is_char(&self, key: &Key) -> Option<char> {
+    fn possible_char(&self, key: &Key) -> Option<char> {
         if self.context.key_seq.is_empty() {
             if let Key::Char(c) = key {
                 Some(*c)
@@ -155,11 +158,13 @@ impl Controller {
     fn set_alert(&mut self, text: &str) {
         self.session.workspace.alert(text);
         self.context.last_alert = Some(Instant::now());
+        self.session.active_editor().show_cursor();
     }
 
     fn reset_alert(&mut self) {
         if let Some(_) = self.context.last_alert.take() {
             self.session.workspace.alert("");
+            self.session.active_editor().show_cursor();
         }
     }
 }
