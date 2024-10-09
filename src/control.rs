@@ -1,12 +1,12 @@
 //! Main controller.
 use crate::bind::Bindings;
 use crate::editor::EditorRef;
+use crate::env::Environment;
 use crate::error::Result;
 use crate::key::{Key, Keyboard};
 use crate::op::Action;
-use crate::session::Session;
 use crate::term;
-use crate::workspace::Workspace;
+use crate::workspace::{Workspace, WorkspaceRef};
 
 use std::fmt;
 use std::time::Instant;
@@ -15,7 +15,8 @@ use std::time::Instant;
 pub struct Controller {
     keyboard: Keyboard,
     bindings: Bindings,
-    session: Session,
+    workspace: WorkspaceRef,
+    env: Environment,
     context: Context,
 }
 
@@ -68,12 +69,14 @@ impl Controller {
         workspace: Workspace,
         editors: Vec<EditorRef>,
     ) -> Controller {
-        let session = Session::new(workspace, editors);
+        let workspace = workspace.to_ref();
+        let env = Environment::new(workspace.clone(), editors);
 
         Controller {
             keyboard,
             bindings,
-            session,
+            workspace,
+            env,
             context: Context::new(),
         }
     }
@@ -96,7 +99,7 @@ impl Controller {
                 } else if let Some(time) = self.context.term_changed.take() {
                     if time.elapsed().as_millis() > Self::TERM_CHANGE_DELAY {
                         // Resize once delay period expires.
-                        self.session.resize();
+                        self.env.resize();
                         None
                     } else {
                         // Keep waiting.
@@ -113,12 +116,12 @@ impl Controller {
                     // Inserting text is statistically most prevalent scenario, so this
                     // short circuits detection and bypasses normal indirection of key
                     // binding.
-                    self.session.active_editor().insert_char(c);
+                    self.env.active_editor().insert_char(c);
                     self.clear_alert();
                 } else {
                     self.context.key_seq.push(key.clone());
                     if let Some(op_fn) = self.bindings.find(&self.context.key_seq) {
-                        match op_fn(&mut self.session)? {
+                        match op_fn(&mut self.env)? {
                             Some(Action::Quit) => break,
                             Some(Action::Alert(text)) => {
                                 self.set_alert(text.as_str());
@@ -182,15 +185,15 @@ impl Controller {
     }
 
     fn set_alert(&mut self, text: &str) {
-        self.session.workspace.set_alert(text);
+        self.workspace.borrow_mut().set_alert(text);
         self.context.last_alert = Some(Instant::now());
-        self.session.active_editor().show_cursor();
+        self.env.active_editor().show_cursor();
     }
 
     fn clear_alert(&mut self) {
         if let Some(_) = self.context.last_alert.take() {
-            self.session.workspace.clear_alert();
-            self.session.active_editor().show_cursor();
+            self.workspace.borrow_mut().clear_alert();
+            self.env.active_editor().show_cursor();
         }
     }
 }

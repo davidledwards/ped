@@ -4,7 +4,9 @@ use crate::term;
 use crate::theme::{Theme, ThemeRef};
 use crate::window::{Window, WindowRef};
 
+use std::cell::RefCell;
 use std::cmp;
+use std::rc::Rc;
 
 /// Placement directive when adding new [`View`]s to a [`Workspace`].
 #[derive(Debug)]
@@ -104,6 +106,8 @@ pub struct Workspace {
     alert: Option<String>,
 }
 
+pub type WorkspaceRef = Rc<RefCell<Workspace>>;
+
 impl Workspace {
     /// A lower bound on the size of the workspace area.
     const MIN_SIZE: Size = Size::new(3, 2);
@@ -132,6 +136,11 @@ impl Workspace {
         };
         this.open_view(Placement::Top);
         this
+    }
+
+    /// Turns the workspace into a [`WorkspaceRef`].
+    pub fn to_ref(self) -> WorkspaceRef {
+        Rc::new(RefCell::new(self))
     }
 
     /// Opens a new view in the workspace whose placement is based on `place`, returning

@@ -6,13 +6,13 @@ mod color;
 mod control;
 mod display;
 mod editor;
+mod env;
 mod error;
 mod grid;
 mod io;
 mod key;
 mod op;
 mod opt;
-mod session;
 mod term;
 mod theme;
 mod window;
@@ -28,7 +28,6 @@ use crate::opt::Options;
 use crate::theme::Theme;
 use crate::workspace::Workspace;
 
-use std::env;
 use std::ops::Drop;
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -54,7 +53,7 @@ impl Drop for Reset {
 }
 
 fn run() -> Result<()> {
-    let opts = Options::parse(env::args().skip(1))?;
+    let opts = Options::parse(std::env::args().skip(1))?;
     if opts.help {
         println!("usage: ped");
     } else {

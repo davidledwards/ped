@@ -11,14 +11,14 @@
 //! See [`Bindings`](crate::bind::Bindings) for further details on binding keys
 //! at runtime.
 use crate::editor::Align;
+use crate::env::Environment;
 use crate::error::Result;
-use crate::session::Session;
 use crate::workspace::Placement;
 
 use std::collections::HashMap;
 
 /// A function type that implements an editing operation.
-pub type OpFn = fn(&mut Session) -> Result<Option<Action>>;
+pub type OpFn = fn(&mut Environment) -> Result<Option<Action>>;
 
 /// Map of editing operations to editing functions.
 pub type OpMap = HashMap<&'static str, OpFn>;
@@ -29,163 +29,163 @@ pub enum Action {
 }
 
 /// Operation: `insert-line`
-fn insert_line(session: &mut Session) -> Result<Option<Action>> {
-    session.active_editor().insert_char('\n');
+fn insert_line(env: &mut Environment) -> Result<Option<Action>> {
+    env.active_editor().insert_char('\n');
     Ok(None)
 }
 
 /// Operation: `delete-char-left`
-fn delete_char_left(session: &mut Session) -> Result<Option<Action>> {
+fn delete_char_left(env: &mut Environment) -> Result<Option<Action>> {
     // todo: should we return deleted char in result?
-    let _ = session.active_editor().delete_left();
+    let _ = env.active_editor().delete_left();
     Ok(None)
 }
 
 /// Operation: `delete-char-right`
-fn delete_char_right(session: &mut Session) -> Result<Option<Action>> {
-    let _ = session.active_editor().delete_right();
+fn delete_char_right(env: &mut Environment) -> Result<Option<Action>> {
+    let _ = env.active_editor().delete_right();
     Ok(None)
 }
 
 /// Operation: `move-up`
-fn move_up(session: &mut Session) -> Result<Option<Action>> {
-    session.active_editor().move_up();
+fn move_up(env: &mut Environment) -> Result<Option<Action>> {
+    env.active_editor().move_up();
     Ok(None)
 }
 
 /// Operation: `move-down`
-fn move_down(session: &mut Session) -> Result<Option<Action>> {
-    session.active_editor().move_down();
+fn move_down(env: &mut Environment) -> Result<Option<Action>> {
+    env.active_editor().move_down();
     Ok(None)
 }
 
 /// Operation: `move-left`
-fn move_left(session: &mut Session) -> Result<Option<Action>> {
-    session.active_editor().move_left();
+fn move_left(env: &mut Environment) -> Result<Option<Action>> {
+    env.active_editor().move_left();
     Ok(None)
 }
 
 /// Operation: `move-right`
-fn move_right(session: &mut Session) -> Result<Option<Action>> {
-    session.active_editor().move_right();
+fn move_right(env: &mut Environment) -> Result<Option<Action>> {
+    env.active_editor().move_right();
     Ok(None)
 }
 
 /// Operation: `move-page-up`
-fn move_page_up(session: &mut Session) -> Result<Option<Action>> {
-    session.active_editor().move_page_up();
+fn move_page_up(env: &mut Environment) -> Result<Option<Action>> {
+    env.active_editor().move_page_up();
     Ok(None)
 }
 
 /// Operation: `move-page-down`
-fn move_page_down(session: &mut Session) -> Result<Option<Action>> {
-    session.active_editor().move_page_down();
+fn move_page_down(env: &mut Environment) -> Result<Option<Action>> {
+    env.active_editor().move_page_down();
     Ok(None)
 }
 
 /// Operation: `move-top`
-fn move_top(session: &mut Session) -> Result<Option<Action>> {
-    session.active_editor().move_top();
+fn move_top(env: &mut Environment) -> Result<Option<Action>> {
+    env.active_editor().move_top();
     Ok(None)
 }
 
 /// Operation: `move-bottom`
-fn move_bottom(session: &mut Session) -> Result<Option<Action>> {
-    session.active_editor().move_bottom();
+fn move_bottom(env: &mut Environment) -> Result<Option<Action>> {
+    env.active_editor().move_bottom();
     Ok(None)
 }
 
 /// Operation: `scroll-up`
-fn scroll_up(session: &mut Session) -> Result<Option<Action>> {
-    session.active_editor().scroll_up();
+fn scroll_up(env: &mut Environment) -> Result<Option<Action>> {
+    env.active_editor().scroll_up();
     Ok(None)
 }
 
 /// Operation: `scroll-down`
-fn scroll_down(session: &mut Session) -> Result<Option<Action>> {
-    session.active_editor().scroll_down();
+fn scroll_down(env: &mut Environment) -> Result<Option<Action>> {
+    env.active_editor().scroll_down();
     Ok(None)
 }
 
 /// Operation: `move-begin-line`
-fn move_begin_line(session: &mut Session) -> Result<Option<Action>> {
-    session.active_editor().move_beg();
+fn move_begin_line(env: &mut Environment) -> Result<Option<Action>> {
+    env.active_editor().move_beg();
     Ok(None)
 }
 
 /// Operation: `move-end-line`
-fn move_end_line(session: &mut Session) -> Result<Option<Action>> {
-    session.active_editor().move_end();
+fn move_end_line(env: &mut Environment) -> Result<Option<Action>> {
+    env.active_editor().move_end();
     Ok(None)
 }
 
 /// Operation: `redraw`
-fn redraw(session: &mut Session) -> Result<Option<Action>> {
-    session.active_editor().draw();
+fn redraw(env: &mut Environment) -> Result<Option<Action>> {
+    env.active_editor().draw();
     Ok(None)
 }
 
 /// Operation: `redraw-and-center`
-fn redraw_and_center(session: &mut Session) -> Result<Option<Action>> {
-    let mut editor = session.active_editor();
+fn redraw_and_center(env: &mut Environment) -> Result<Option<Action>> {
+    let mut editor = env.active_editor();
     editor.align_cursor(Align::Center);
     editor.draw();
     Ok(None)
 }
 
 /// Operation: `quit`
-fn quit(_: &mut Session) -> Result<Option<Action>> {
+fn quit(_: &mut Environment) -> Result<Option<Action>> {
     // FIXME: ask to save dirty buffers
     Ok(Some(Action::Quit))
 }
 
-fn open_window_top(session: &mut Session) -> Result<Option<Action>> {
-    let action = session
+fn open_window_top(env: &mut Environment) -> Result<Option<Action>> {
+    let action = env
         .open_view(Placement::Top)
         .map(|_| None)
         .unwrap_or_else(|| Some(Action::Alert("out of window space".to_string())));
     Ok(action)
 }
 
-fn open_window_bottom(session: &mut Session) -> Result<Option<Action>> {
-    let action = session
+fn open_window_bottom(env: &mut Environment) -> Result<Option<Action>> {
+    let action = env
         .open_view(Placement::Bottom)
         .map(|_| None)
         .unwrap_or_else(|| Some(Action::Alert("out of window space".to_string())));
     Ok(action)
 }
 
-fn open_window_above(session: &mut Session) -> Result<Option<Action>> {
-    let action = session
-        .open_view(Placement::Above(session.active_id()))
+fn open_window_above(env: &mut Environment) -> Result<Option<Action>> {
+    let action = env
+        .open_view(Placement::Above(env.active_id()))
         .map(|_| None)
         .unwrap_or_else(|| Some(Action::Alert("out of window space".to_string())));
     Ok(action)
 }
 
-fn open_window_below(session: &mut Session) -> Result<Option<Action>> {
-    let action = session
-        .open_view(Placement::Below(session.active_id()))
+fn open_window_below(env: &mut Environment) -> Result<Option<Action>> {
+    let action = env
+        .open_view(Placement::Below(env.active_id()))
         .map(|_| None)
         .unwrap_or_else(|| Some(Action::Alert("out of window space".to_string())));
     Ok(action)
 }
 
-fn close_window(session: &mut Session) -> Result<Option<Action>> {
-    let action = session
-        .close_view(session.active_id())
+fn close_window(env: &mut Environment) -> Result<Option<Action>> {
+    let action = env
+        .close_view(env.active_id())
         .map(|_| None)
         .unwrap_or_else(|| Some(Action::Alert("cannot close only window".to_string())));
     Ok(action)
 }
 
-fn prev_window(session: &mut Session) -> Result<Option<Action>> {
-    session.prev_view();
+fn prev_window(env: &mut Environment) -> Result<Option<Action>> {
+    env.prev_view();
     Ok(None)
 }
 
-fn next_window(session: &mut Session) -> Result<Option<Action>> {
-    session.next_view();
+fn next_window(env: &mut Environment) -> Result<Option<Action>> {
+    env.next_view();
     Ok(None)
 }
 
