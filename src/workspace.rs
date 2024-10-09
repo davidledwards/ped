@@ -130,8 +130,77 @@ impl Workspace {
             views: vec![],
             alert: None,
         };
-        this.add_view(Placement::Top);
+        this.open_view(Placement::Top);
         this
+    }
+
+    /// Opens a new view in the workspace whose placement is based on `place`, returning
+    /// the *id* of the view or `None` if the view could not be created.
+    ///
+    /// Existing views will be resized as a side effect of opening a new view. However,
+    /// the view will not be created, and resizing will not occur, if the resulting
+    /// number of rows would drop below [`Self::MIN_ROWS`].
+    ///
+    /// This function panics if the `id` specified in [`Placement::Above`] or
+    /// [`Placement::Below`] is not found, as this would indicate a correctness
+    /// problem by the caller.
+    pub fn open_view(&mut self, place: Placement) -> Option<u32> {
+        // Calculate number of rows that would need to be allocated to each view
+        // should another view be added.
+        let rows = self.views_size.rows / (self.views.len() + 1) as u32;
+        if rows < Self::MIN_VIEW_ROWS {
+            None
+        } else {
+            // Find correct index for insertion of new window.
+            let index = match place {
+                Placement::Top => 0,
+                Placement::Bottom => self.views.len(),
+                Placement::Above(id) => self
+                    .views
+                    .iter()
+                    .position(|v| v.id == id)
+                    .unwrap_or_else(|| panic!("{place:?}: view not found")),
+                Placement::Below(id) => self
+                    .views
+                    .iter()
+                    .position(|v| v.id == id)
+                    .map(|i| i + 1)
+                    .unwrap_or_else(|| panic!("{place:?}: view not found")),
+            };
+
+            // Insert zombie view in correct place before resizing views.
+            let view_id = self.next_id();
+            self.views.insert(index, self.create_zombie(view_id));
+            self.resize_views();
+            Some(view_id)
+        }
+    }
+
+    /// Closes the view referenced by `id` from the workspace, returning the *id* of
+    /// the view above or `None` if the view could not be closed.
+    ///
+    /// Remaining views will be resized as a side effect of removal. However, the view
+    /// will not be closed, and resizing will not occur, if `id` is the only remaining
+    /// view in the workspace.
+    ///
+    /// This function panics if `id` is not found, as this would indicate a correctness
+    /// problem by the caller.
+    pub fn close_view(&mut self, id: u32) -> Option<u32> {
+        if self.views.len() > 1 {
+            let i = self
+                .views
+                .iter()
+                .position(|v| v.id == id)
+                .unwrap_or_else(|| panic!("{id}: view not found"));
+            self.views.remove(i);
+            self.resize_views();
+
+            // Select view above the one removed.
+            let i = if i > 0 { i - 1 } else { 0 };
+            Some(self.views[i].id)
+        } else {
+            None
+        }
     }
 
     /// Resizes the workspace if the terminal size has changed and returns a vector of
@@ -186,75 +255,6 @@ impl Workspace {
             self.resize_views();
             self.show_alert();
             Some(removed_ids)
-        } else {
-            None
-        }
-    }
-
-    /// Adds a view to the workspace whose placement is based on `place`, returning
-    /// the *id* of the view or `None` if the view could not be created.
-    ///
-    /// Existing views will be resized as a side effect of adding a new view. However,
-    /// the view will not be created, and resizing will not occur, if the resulting
-    /// number of rows would drop below [`Self::MIN_ROWS`].
-    ///
-    /// This function panics if the `id` specified in [`Placement::Above`] or
-    /// [`Placement::Below`] is not found, as this would indicate a correctness
-    /// problem by the caller.
-    pub fn add_view(&mut self, place: Placement) -> Option<u32> {
-        // Calculate number of rows that would need to be allocated to each view
-        // should another view be added.
-        let rows = self.views_size.rows / (self.views.len() + 1) as u32;
-        if rows < Self::MIN_VIEW_ROWS {
-            None
-        } else {
-            // Find correct index for insertion of new window.
-            let index = match place {
-                Placement::Top => 0,
-                Placement::Bottom => self.views.len(),
-                Placement::Above(id) => self
-                    .views
-                    .iter()
-                    .position(|v| v.id == id)
-                    .unwrap_or_else(|| panic!("{place:?}: view not found")),
-                Placement::Below(id) => self
-                    .views
-                    .iter()
-                    .position(|v| v.id == id)
-                    .map(|i| i + 1)
-                    .unwrap_or_else(|| panic!("{place:?}: view not found")),
-            };
-
-            // Insert zombie view in correct place before resizing views.
-            let view_id = self.next_id();
-            self.views.insert(index, self.create_zombie(view_id));
-            self.resize_views();
-            Some(view_id)
-        }
-    }
-
-    /// Removes the view referenced by `id` from the workspace, returning the *id* of
-    /// the view above or `None` if the view could not be removed.
-    ///
-    /// Remaining views will be resized as a side effect of removal. However, the view
-    /// will not be removed, and resizing will not occur, if `id` is the only remaining
-    /// view in the workspace.
-    ///
-    /// This function panics if `id` is not found, as this would indicate a correctness
-    /// problem by the caller.
-    pub fn remove_view(&mut self, id: u32) -> Option<u32> {
-        if self.views.len() > 1 {
-            let i = self
-                .views
-                .iter()
-                .position(|v| v.id == id)
-                .unwrap_or_else(|| panic!("{id}: view not found"));
-            self.views.remove(i);
-            self.resize_views();
-
-            // Select view above the one removed.
-            let i = if i > 0 { i - 1 } else { 0 };
-            Some(self.views[i].id)
         } else {
             None
         }

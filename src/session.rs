@@ -6,7 +6,7 @@ use crate::workspace::{Placement, Workspace};
 use std::cell::RefMut;
 use std::collections::HashMap;
 
-/// Map of view [id](crate::workspace::View) to [`Editor`].
+/// Map of [`View`](crate::workspace::View) id to [`Editor`].
 type EditorMap = HashMap<u32, EditorRef>;
 
 pub struct Session {
@@ -40,7 +40,7 @@ impl Session {
                 Some(workspace.top_view())
             } else {
                 workspace
-                    .add_view(Placement::Bottom)
+                    .open_view(Placement::Bottom)
                     .map(|id| workspace.get_view(id))
             };
             if let Some(v) = view {
@@ -91,8 +91,8 @@ impl Session {
         }
     }
 
-    pub fn add_view(&mut self, place: Placement) -> Option<u32> {
-        self.workspace.add_view(place).map(|id| {
+    pub fn open_view(&mut self, place: Placement) -> Option<u32> {
+        self.workspace.open_view(place).map(|id| {
             for (id, e) in self.editor_map.iter() {
                 let view = self.workspace.get_view(*id);
                 e.borrow_mut().attach(view.window().clone());
@@ -110,8 +110,8 @@ impl Session {
         })
     }
 
-    pub fn remove_view(&mut self, id: u32) -> Option<u32> {
-        self.workspace.remove_view(id).map(|next_id| {
+    pub fn close_view(&mut self, id: u32) -> Option<u32> {
+        self.workspace.close_view(id).map(|next_id| {
             match self.editor_map.remove(&id) {
                 Some(e) => e.borrow_mut().attach(Window::zombie().to_ref()),
                 None => panic!("{}: view not found", id),
