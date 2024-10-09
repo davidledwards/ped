@@ -31,6 +31,12 @@ impl fmt::Display for Size {
     }
 }
 
+impl From<(u32, u32)> for Size {
+    fn from(value: (u32, u32)) -> Size {
+        Size::new(value.0, value.1)
+    }
+}
+
 impl Sub<Size> for Size {
     type Output = Size;
 

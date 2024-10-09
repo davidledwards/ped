@@ -5,6 +5,7 @@ use crate::error::Result;
 use crate::key::{Key, Keyboard};
 use crate::op::Action;
 use crate::session::Session;
+use crate::term;
 use crate::workspace::Workspace;
 
 use std::fmt;
@@ -20,6 +21,9 @@ pub struct Controller {
 
 /// Execution context of [`Controller`] that manages state.
 struct Context {
+    /// An optional time capturing the last terminal size change event.
+    term_changed: Option<Instant>,
+
     /// An optional time of the last alert displayed to user or `None` if the alert has
     /// been cleared.
     last_alert: Option<Instant>,
@@ -31,6 +35,7 @@ struct Context {
 impl Context {
     fn new() -> Context {
         Context {
+            term_changed: None,
             last_alert: None,
             key_seq: Vec::new(),
         }
@@ -53,6 +58,10 @@ impl fmt::Display for KeySeq<'_> {
 }
 
 impl Controller {
+    /// Number of milliseconds controller waits before resizing workspace after it notices a
+    /// change.
+    const TERM_CHANGE_DELAY: u128 = 100;
+
     pub fn new(
         keyboard: Keyboard,
         bindings: Bindings,
@@ -78,17 +87,34 @@ impl Controller {
         loop {
             let key = self.keyboard.read()?;
             if key == Key::None {
-                // do background stuff here
+                // Detect change in terminal size and resize workspace, but not immediately.
+                // In practice, a rapid series of change events could be detected because
+                // human movement is significantly slower.
+                self.context.term_changed = if term::size_changed() {
+                    // Restart clock when change is detected.
+                    Some(Instant::now())
+                } else if let Some(time) = self.context.term_changed.take() {
+                    if time.elapsed().as_millis() > Self::TERM_CHANGE_DELAY {
+                        // Resize once delay period expires.
+                        self.session.resize();
+                        None
+                    } else {
+                        // Keep waiting.
+                        Some(time)
+                    }
+                } else {
+                    None
+                };
             } else if key == Key::Control(7) {
                 self.clear_keys();
-                self.reset_alert();
+                self.clear_alert();
             } else {
                 if let Some(c) = self.possible_char(&key) {
                     // Inserting text is statistically most prevalent scenario, so this
                     // short circuits detection and bypasses normal indirection of key
                     // binding.
                     self.session.active_editor().insert_char(c);
-                    self.reset_alert();
+                    self.clear_alert();
                 } else {
                     self.context.key_seq.push(key.clone());
                     if let Some(op_fn) = self.bindings.find(&self.context.key_seq) {
@@ -98,7 +124,7 @@ impl Controller {
                                 self.set_alert(text.as_str());
                             }
                             None => {
-                                self.reset_alert();
+                                self.clear_alert();
                             }
                         }
                         self.clear_keys();
@@ -156,14 +182,14 @@ impl Controller {
     }
 
     fn set_alert(&mut self, text: &str) {
-        self.session.workspace.alert(text);
+        self.session.workspace.set_alert(text);
         self.context.last_alert = Some(Instant::now());
         self.session.active_editor().show_cursor();
     }
 
-    fn reset_alert(&mut self) {
+    fn clear_alert(&mut self) {
         if let Some(_) = self.context.last_alert.take() {
-            self.session.workspace.alert("");
+            self.session.workspace.clear_alert();
             self.session.active_editor().show_cursor();
         }
     }

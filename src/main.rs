@@ -21,7 +21,6 @@ mod workspace;
 use crate::bind::Bindings;
 use crate::buffer::Buffer;
 use crate::control::Controller;
-use crate::display::{Point, Size};
 use crate::editor::Editor;
 use crate::error::Result;
 use crate::key::Keyboard;
@@ -70,14 +69,12 @@ fn run() -> Result<()> {
 
         let bindings = Bindings::new();
 
-        let (rows, cols) = term::size()?;
         term::init()?;
         let _reset = Reset;
 
         let keyboard = Keyboard::new();
-        let size = Size::new(rows, cols);
         let theme = Theme::new();
-        let workspace = Workspace::new(Point::ORIGIN, size, theme);
+        let workspace = Workspace::new(theme);
         let mut controller = Controller::new(keyboard, bindings, workspace, editors);
         controller.run()?
     }

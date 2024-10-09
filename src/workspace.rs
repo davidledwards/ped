@@ -1,7 +1,10 @@
 //! Workspace management.
 use crate::display::{Display, Point, Size};
+use crate::term;
 use crate::theme::{Theme, ThemeRef};
 use crate::window::{Window, WindowRef};
+
+use std::cmp;
 
 /// Placement directive when adding new [`View`]s to a [`Workspace`].
 #[derive(Debug)]
@@ -85,9 +88,6 @@ impl<'a> Iterator for Views<'a> {
 /// A workspace is a collection of [`View`]s that encapsulate the entire editing
 /// experience.
 ///
-/// Usually, a workspace occupies the entire terminal, but this is not required, hence
-/// the reason for providing [origin](`Point`) and [size](`Size`) informatiom.
-///
 /// Mutiple views within a workspace are organized vertically with an equal number of
 /// rows. As views are added and removed, the resulting collection of views is resized
 /// accorndingly.
@@ -95,37 +95,100 @@ impl<'a> Iterator for Views<'a> {
 /// A workspace always provides at least `1` view, which implies that the last
 /// remaining view can never be removed.
 pub struct Workspace {
-    origin: Point,
     size: Size,
     theme: ThemeRef,
     views_origin: Point,
     views_size: Size,
     id_seq: u32,
     views: Vec<View>,
+    alert: Option<String>,
 }
 
 impl Workspace {
-    /// An offset from the workspace origin for calculating the origin of views.
-    const VIEWS_ORIGIN_OFFSET: Size = Size::ZERO;
+    /// A lower bound on the size of the workspace area.
+    const MIN_SIZE: Size = Size::new(3, 2);
 
-    /// An adjustment of the workspace size for calculating the size of views.
+    /// Origin of the view area relative to the workspace.
+    const VIEWS_ORIGIN: Point = Point::ORIGIN;
+
+    /// An adjustment to subtract from the workspace area size for calculating the area
+    /// size of views.
     const VIEWS_SIZE_ADJUST: Size = Size::rows(1);
 
     /// Minimum number of rows assigned to a view.
-    const MIN_ROWS: u32 = 3;
+    const MIN_VIEW_ROWS: u32 = 2;
 
-    pub fn new(origin: Point, size: Size, theme: Theme) -> Workspace {
+    /// Creates a workspace with the given `theme` and consuming the entire terminal.
+    pub fn new(theme: Theme) -> Workspace {
+        let size = Self::query_size();
         let mut this = Workspace {
-            origin,
             size,
             theme: theme.to_ref(),
-            views_origin: origin + Self::VIEWS_ORIGIN_OFFSET,
+            views_origin: Self::VIEWS_ORIGIN,
             views_size: size - Self::VIEWS_SIZE_ADJUST,
             id_seq: 0,
             views: vec![],
+            alert: None,
         };
         this.add_view(Placement::Top);
         this
+    }
+
+    /// Resizes the workspace if the terminal size has changed and returns a vector of
+    /// view *ids* removed due to minimum size constraints of the workspace.
+    ///
+    /// Under most circumstances, the vector is empty. However, if one or more views
+    /// needs to be removed, the selection starts at the bottom and proceeds up.
+    ///
+    /// There exists the possibility that all but one view are removed if the terminal
+    /// is made small enough. Since the workspace guarantees the existence of at least
+    /// one view, `keep_id` is provided by the caller to identify which view should be
+    /// kept.
+    pub fn resize(&mut self, keep_id: u32) -> Option<Vec<u32>> {
+        let size = Self::query_size();
+        if size != self.size {
+            // Update size of workspace and view areas, which drive calculation of total
+            // number of views and corresponding row allocations.
+            self.size = size;
+            self.views_size = size - Self::VIEWS_SIZE_ADJUST;
+
+            // Calculate number of rows to allocate to each view, though revised workspace
+            // size might lead to violation of minimum view size constraint, which means
+            // total number of views must be reduced such that constraint is held.
+            let rows = self.views_size.rows / self.views.len() as u32;
+            let count = if rows < Self::MIN_VIEW_ROWS {
+                (self.views_size.rows / Self::MIN_VIEW_ROWS) as usize
+            } else {
+                self.views.len()
+            };
+
+            // If necessary, remove views from bottom to top, though do not remove view
+            // specified by caller regardless of where it exists in stack of views.
+            let removed_ids =
+                if count < self.views.len() {
+                    let n = self.views.len() - count;
+                    let indexes = self.views.iter().rev().enumerate().fold(
+                        Vec::new(),
+                        |mut indexes, (i, v)| {
+                            if indexes.len() < n && v.id() != keep_id {
+                                // Index is flipped since views are being iterated back to
+                                // front.
+                                indexes.push(self.views.len() - i - 1);
+                            }
+                            indexes
+                        },
+                    );
+                    indexes.iter().map(|i| self.views.remove(*i).id()).collect()
+                } else {
+                    vec![]
+                };
+
+            self.resize_views();
+            self.show_alert();
+            Some(removed_ids)
+        } else {
+            None
+        }
     }
 
     /// Adds a view to the workspace whose placement is based on `place`, returning
@@ -139,21 +202,16 @@ impl Workspace {
     /// [`Placement::Below`] is not found, as this would indicate a correctness
     /// problem by the caller.
     pub fn add_view(&mut self, place: Placement) -> Option<u32> {
-        // Determine number of rows to allocate to each view.
-        let view_count = self.views.len() + 1;
-        let view_rows = self.views_size.rows / view_count as u32;
-        let residual_rows = self.views_size.rows % view_count as u32;
-
-        if view_rows < Self::MIN_ROWS {
+        // Calculate number of rows that would need to be allocated to each view
+        // should another view be added.
+        let rows = self.views_size.rows / (self.views.len() + 1) as u32;
+        if rows < Self::MIN_VIEW_ROWS {
             None
         } else {
-            // Generate unique id for new view.
-            let view_id = self.next_id();
-
             // Find correct index for insertion of new window.
             let index = match place {
                 Placement::Top => 0,
-                Placement::Bottom => view_count - 1,
+                Placement::Bottom => self.views.len(),
                 Placement::Above(id) => self
                     .views
                     .iter()
@@ -167,31 +225,10 @@ impl Workspace {
                     .unwrap_or_else(|| panic!("{place:?}: view not found")),
             };
 
-            // Resize views.
-            let (views, _) =
-                (0..view_count).fold((Vec::new(), self.views_origin), |(mut views, origin), i| {
-                    // Select id to use based on index.
-                    let id = if i == index {
-                        view_id
-                    } else {
-                        self.views[if i < index { i } else { i - 1 }].id
-                    };
-
-                    // Give preference of residual rows to top-most windows.
-                    let rows = if i >= residual_rows as usize {
-                        view_rows
-                    } else {
-                        view_rows + 1
-                    };
-
-                    // Recreate view with new origin and size.
-                    let view = self.create_view(id, origin, rows);
-                    views.push(view);
-
-                    // Update origin for next iteration of fold.
-                    (views, origin + Size::rows(rows))
-                });
-            self.views = views;
+            // Insert zombie view in correct place before resizing views.
+            let view_id = self.next_id();
+            self.views.insert(index, self.create_zombie(view_id));
+            self.resize_views();
             Some(view_id)
         }
     }
@@ -213,39 +250,42 @@ impl Workspace {
                 .position(|v| v.id == id)
                 .unwrap_or_else(|| panic!("{id}: view not found"));
             self.views.remove(i);
+            self.resize_views();
 
-            // Determine number of rows to allocate to each view.
-            let view_count = self.views.len();
-            let view_rows = self.views_size.rows / view_count as u32;
-            let residual_rows = self.views_size.rows % view_count as u32;
-
-            // Resize views.
-            let (views, _) = self.views.iter().enumerate().fold(
-                (Vec::new(), self.views_origin),
-                |(mut views, origin), (i, v)| {
-                    // Give preference of residual rows to top-most windows.
-                    let rows = if i >= residual_rows as usize {
-                        view_rows
-                    } else {
-                        view_rows + 1
-                    };
-
-                    // Recreate view with new origin and size.
-                    let view = self.create_view(v.id, origin, rows);
-                    views.push(view);
-
-                    // Update origin for next iteration of fold.
-                    (views, origin + Size::rows(rows))
-                },
-            );
-            self.views = views;
-
-            // Select view above that which was removed.
+            // Select view above the one removed.
             let i = if i > 0 { i - 1 } else { 0 };
             Some(self.views[i].id)
         } else {
             None
         }
+    }
+
+    /// Resizes views with an equal distribution of `rows`, though views towards the top
+    /// will include an additional row if `residual_rows` is greater than 0.
+    fn resize_views(&mut self) {
+        let count = self.views.len();
+        let rows = self.views_size.rows / count as u32;
+        let residual_rows = self.views_size.rows % count as u32;
+
+        let (views, _) = self.views.iter().enumerate().fold(
+            (Vec::new(), self.views_origin),
+            |(mut views, origin), (i, v)| {
+                // Give precedence of residual rows to top-most views.
+                let rows = if i >= residual_rows as usize {
+                    rows
+                } else {
+                    rows + 1
+                };
+
+                // Recreate view with new origin and size.
+                let view = self.create_view(v.id, origin, rows);
+                views.push(view);
+
+                // Update origin for next iteration of fold.
+                (views, origin + Size::rows(rows))
+            },
+        );
+        self.views = views;
     }
 
     /// Returns the top-most [`View`] in the workspace.
@@ -306,18 +346,44 @@ impl Workspace {
         Views::new(self)
     }
 
-    pub fn alert(&mut self, text: &str) {
-        let text = if text.len() > self.size.cols as usize {
-            &text[..self.size.cols as usize]
+    pub fn set_alert(&mut self, text: &str) {
+        self.alert = Some(text.to_string());
+        self.show_alert();
+    }
+
+    pub fn clear_alert(&mut self) {
+        self.alert = None;
+        self.show_alert();
+    }
+
+    fn show_alert(&self) {
+        let text = if let Some(ref text) = self.alert {
+            if text.len() > self.size.cols as usize {
+                &text[..self.size.cols as usize]
+            } else {
+                &text
+            }
         } else {
-            text
+            ""
         };
-        Display::new(self.origin + Size::rows(self.size.rows - 1))
+        Display::new(Point::ORIGIN + Size::rows(self.size.rows - 1))
             .set_cursor(Point::ORIGIN)
             .set_color(self.theme.alert_color)
             .write_str(text)
             .write_str(" ".repeat(self.size.cols as usize - text.len()).as_str())
             .send();
+    }
+
+    /// Returns the terminal [size](Size), but possibly changes what is reported by the
+    /// terminal to ensure the lower bound constraint of [`MIN_SIZE`](Self::MIN_SIZE)
+    /// holds true.
+    fn query_size() -> Size {
+        let (rows, cols) =
+            term::size().unwrap_or_else(|e| panic!("trying to query terminal size: {e}"));
+        Size::new(
+            cmp::max(rows, Self::MIN_SIZE.rows),
+            cmp::max(cols, Self::MIN_SIZE.cols),
+        )
     }
 
     fn next_id(&mut self) -> u32 {
@@ -330,5 +396,9 @@ impl Workspace {
         let size = Size::new(rows, self.views_size.cols);
         let window = Window::new(origin, size, self.theme.clone());
         View::new(id, origin, size, window.to_ref())
+    }
+
+    fn create_zombie(&self, id: u32) -> View {
+        View::new(id, Point::ORIGIN, Size::ZERO, Window::zombie().to_ref())
     }
 }

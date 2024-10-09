@@ -6,6 +6,7 @@ use crate::workspace::{Placement, Workspace};
 use std::cell::RefMut;
 use std::collections::HashMap;
 
+/// Map of view [id](crate::workspace::View) to [`Editor`].
 type EditorMap = HashMap<u32, EditorRef>;
 
 pub struct Session {
@@ -16,33 +17,42 @@ pub struct Session {
 }
 
 impl Session {
+    /// Create a session using the `workspace` and the collection of `editors`.
+    ///
+    /// A view is created for each editor. However, if the number of editors exceeds the
+    /// capacity of the workspace, then it stops creating views. If no editors are given,
+    /// then an empty editor will be created and attached to the default view in the
+    /// workspace.
     pub fn new(workspace: Workspace, editors: Vec<EditorRef>) -> Session {
+        // Need at least one editor.
         let editors = if editors.len() == 0 {
-            let editor = Editor::new();
-            vec![editor.to_ref()]
+            vec![Editor::new().to_ref()]
         } else {
             editors
         };
 
+        // Try creating views for each editor, stopping when workspace can no longer
+        // add views because of capacity constraints.
         let mut workspace = workspace;
         let mut editor_map = EditorMap::new();
         for (i, editor) in editors.iter().enumerate() {
             let view = if i == 0 {
-                workspace.top_view()
+                Some(workspace.top_view())
             } else {
                 workspace
                     .add_view(Placement::Bottom)
                     .map(|id| workspace.get_view(id))
-                    .unwrap_or_else(|| {
-                        panic!("FIXME: adding view could fail because of space limits")
-                    })
             };
-            editor.borrow_mut().attach(view.window().clone());
-            editor_map.insert(view.id(), editor.clone());
+            if let Some(v) = view {
+                editor.borrow_mut().attach(v.window().clone());
+                editor_map.insert(v.id(), editor.clone());
+            } else {
+                break;
+            }
         }
 
+        // Active view is always top of workspace.
         let active_id = workspace.top_view().id();
-
         Session {
             workspace,
             editors,
@@ -51,15 +61,34 @@ impl Session {
         }
     }
 
+    /// Returns the *id* of the active view.
     pub fn active_id(&self) -> u32 {
         self.active_id
     }
 
+    /// Returns a mutable reference to the editor associated with the active view.
     pub fn active_editor(&self) -> RefMut<'_, Editor> {
         self.editor_map
             .get(&self.active_id)
             .unwrap_or_else(|| panic!("{}: active editor not found", self.active_id))
             .borrow_mut()
+    }
+
+    pub fn resize(&mut self) {
+        if let Some(ids) = self.workspace.resize(self.active_id) {
+            for id in ids {
+                if let Some(e) = self.editor_map.remove(&id) {
+                    e.borrow_mut().attach(Window::zombie().to_ref());
+                } else {
+                    panic!("{id}: view not found");
+                }
+            }
+            for (id, e) in self.editor_map.iter() {
+                let view = self.workspace.get_view(*id);
+                e.borrow_mut().attach(view.window().clone());
+            }
+            self.active_editor().show_cursor();
+        }
     }
 
     pub fn add_view(&mut self, place: Placement) -> Option<u32> {
