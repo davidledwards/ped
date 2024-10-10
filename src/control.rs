@@ -8,6 +8,7 @@ use crate::op::Action;
 use crate::term;
 use crate::workspace::{Workspace, WorkspaceRef};
 
+use std::cell::{Ref, RefMut};
 use std::fmt;
 use std::time::Instant;
 
@@ -185,15 +186,23 @@ impl Controller {
     }
 
     fn set_alert(&mut self, text: &str) {
-        self.workspace.borrow_mut().set_alert(text);
+        self.workspace_mut().set_alert(text);
         self.context.last_alert = Some(Instant::now());
         self.env.active_editor().show_cursor();
     }
 
     fn clear_alert(&mut self) {
         if let Some(_) = self.context.last_alert.take() {
-            self.workspace.borrow_mut().clear_alert();
+            self.workspace_mut().clear_alert();
             self.env.active_editor().show_cursor();
         }
+    }
+
+    fn workspace(&self) -> Ref<'_, Workspace> {
+        self.workspace.borrow()
+    }
+
+    fn workspace_mut(&self) -> RefMut<'_, Workspace> {
+        self.workspace.borrow_mut()
     }
 }

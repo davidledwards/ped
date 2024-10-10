@@ -43,6 +43,12 @@ pub enum Align {
 
     /// Try aligning the cursor in the center of the window.
     Center,
+
+    /// Try aligning the cursor at the top of the window.
+    Top,
+
+    /// Try aligning the cursor at the bottom of the window.
+    Bottom,
 }
 
 struct View {
@@ -141,6 +147,8 @@ impl Editor {
         let row = match align {
             Align::Auto => cmp::min(self.cursor.row, self.view.rows - 1),
             Align::Center => self.view.rows / 2,
+            Align::Top => 0,
+            Align::Bottom => self.view.rows - 1,
         };
 
         // Tries to position cursor on target row, but no guarantee depending on proximity
@@ -158,6 +166,14 @@ impl Editor {
         self.canvas_mut().clear();
         self.canvas_mut().draw();
         self.canvas_mut().set_cursor(self.cursor);
+    }
+
+    pub fn get_size(&self) -> Size {
+        (self.view.rows, self.view.cols).into()
+    }
+
+    pub fn get_cursor(&self) -> Point {
+        self.cursor
     }
 
     pub fn show_cursor(&mut self) {

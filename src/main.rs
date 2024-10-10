@@ -9,6 +9,7 @@ mod editor;
 mod env;
 mod error;
 mod grid;
+mod input;
 mod io;
 mod key;
 mod op;

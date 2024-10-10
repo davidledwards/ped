@@ -16,7 +16,7 @@ impl Theme {
     const TEXT_BG: u8 = 233;
 
     const BANNER_FG: u8 = 232;
-    const BANNER_BG: u8 = 253;
+    const BANNER_BG: u8 = 35;
 
     const ALERT_FG: u8 = 2;
     const ALERT_BG: u8 = 232;

@@ -10,6 +10,7 @@
 //!
 //! See [`Bindings`](crate::bind::Bindings) for further details on binding keys
 //! at runtime.
+use crate::display::{Point, Size};
 use crate::editor::Align;
 use crate::env::Environment;
 use crate::error::Result;
@@ -125,10 +126,25 @@ fn redraw(env: &mut Environment) -> Result<Option<Action>> {
     Ok(None)
 }
 
-/// Operation: `redraw-and-center`
-fn redraw_and_center(env: &mut Environment) -> Result<Option<Action>> {
+/// Operation: `scroll-center`
+fn scroll_center(env: &mut Environment) -> Result<Option<Action>> {
+    // Rotate through alignment based on current cursor position using following
+    // cycle: center -> bottom -> top. If position is not precisely on one of
+    // these rows, then start at center. This behavior allows user to quickly
+    // align cursor with successive key presses.
     let mut editor = env.active_editor();
-    editor.align_cursor(Align::Center);
+    let Size { rows, .. } = editor.get_size();
+    let Point { row, .. } = editor.get_cursor();
+    let align = if row == 0 {
+        Align::Center
+    } else if row == rows / 2 {
+        Align::Bottom
+    } else if row == rows - 1 {
+        Align::Top
+    } else {
+        Align::Center
+    };
+    editor.align_cursor(align);
     editor.draw();
     Ok(None)
 }
@@ -207,7 +223,7 @@ const OP_MAPPINGS: [(&'static str, OpFn); 25] = [
     ("move-begin-line", move_begin_line),
     ("move-end-line", move_end_line),
     ("redraw", redraw),
-    ("redraw-and-center", redraw_and_center),
+    ("scroll-center", scroll_center),
     ("quit", quit),
     ("open-window-top", open_window_top),
     ("open-window-bottom", open_window_bottom),
