@@ -23,6 +23,10 @@ impl Size {
     pub const fn rows(rows: u32) -> Size {
         Size { rows, cols: 0 }
     }
+
+    pub const fn cols(cols: u32) -> Size {
+        Size { rows: 0, cols }
+    }
 }
 
 impl fmt::Display for Size {
