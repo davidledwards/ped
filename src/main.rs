@@ -19,10 +19,6 @@ mod theme;
 mod window;
 mod workspace;
 
-use display::Point;
-use input::LineEditor;
-use key::Key;
-
 use crate::bind::Bindings;
 use crate::buffer::Buffer;
 use crate::control::Controller;
@@ -76,20 +72,11 @@ fn run() -> Result<()> {
         term::init()?;
         let _reset = Reset;
 
-        let mut keyboard = Keyboard::new();
+        let keyboard = Keyboard::new();
         let theme = Theme::new();
-        let mut input = LineEditor::new(Point::new(0, 0), 30, theme.to_ref(), "open file:");
-        loop {
-            let key = keyboard.read()?;
-            if key == Key::Control(17) {
-                break;
-            } else {
-                input.process_key(&key);
-            }
-        }
-        // let workspace = Workspace::new(theme);
-        // let mut controller = Controller::new(keyboard, bindings, workspace, editors);
-        // controller.run()?
+        let workspace = Workspace::new(theme);
+        let mut controller = Controller::new(keyboard, bindings, workspace, editors);
+        controller.run()?
     }
     Ok(())
 }

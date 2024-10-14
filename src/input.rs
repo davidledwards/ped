@@ -1,4 +1,4 @@
-//! Line editor.
+//! Input editor.
 use crate::canvas::Canvas;
 use crate::display::{Display, Point, Size};
 use crate::grid::Cell;
@@ -7,8 +7,8 @@ use crate::theme::ThemeRef;
 
 use std::cmp;
 
-pub struct LineEditor {
-    /// The origin of the line editor.
+pub struct InputEditor {
+    /// The origin of the input editor.
     origin: Point,
 
     /// The number of columns reserved for the prompt area, which may be less than
@@ -47,15 +47,15 @@ pub enum Directive {
     Cancel,
 }
 
-impl LineEditor {
-    /// A lower bound on the number of columns allocated to the line editor.
+impl InputEditor {
+    /// A lower bound on the number of columns allocated to the input editor.
     const MIN_COLS: u32 = 2;
 
-    pub fn new(origin: Point, cols: u32, theme: ThemeRef, prompt: &str) -> LineEditor {
+    pub fn new(origin: Point, cols: u32, theme: ThemeRef, prompt: &str) -> InputEditor {
         let (prompt_cols, buf_cols) = Self::calc_sizes(cols, prompt);
         let canvas = Canvas::new(origin + Size::cols(prompt_cols), Size::new(1, buf_cols));
         let blank_cell = Cell::new(' ', theme.text_color);
-        let mut this = LineEditor {
+        let mut this = InputEditor {
             origin,
             prompt_cols,
             buf_cols,
@@ -76,7 +76,11 @@ impl LineEditor {
         self.draw_input();
     }
 
-    /// Resizes the line editor using the revised `origin` and `cols`.
+    pub fn buffer(&self) -> String {
+        self.buf.iter().collect()
+    }
+
+    /// Resizes the input editor using the revised `origin` and `cols`.
     pub fn resize(&mut self, origin: Point, cols: u32) {
         self.origin = origin;
         (self.prompt_cols, self.buf_cols) = Self::calc_sizes(cols, &self.prompt);
@@ -183,13 +187,13 @@ impl LineEditor {
         Directive::Continue
     }
 
-    /// Takes as input the number of `cols` allocated to the entire line editor,
-    /// as well as the `prompt`, and returns a tuple with the following calculations:
-    /// - the number of columns allocated to the prompt
-    /// - the number of columns allocated to the buffer
+    /// Given the number of `cols` allocated to the entire input editor, as well as
+    /// the `prompt`, and returns a tuple with the following calculations:
+    /// - the number of columns allocated to the prompt area
+    /// - the number of columns allocated to the input area
     ///
     /// Note that `cols` is possibly revised to ensure the value is never less than
-    /// [`Self::MIN_COLS`].
+    /// [`MIN_COLS`](Self::MIN_COLS).
     fn calc_sizes(cols: u32, prompt: &str) -> (u32, u32) {
         let cols = cmp::max(cols, Self::MIN_COLS);
 

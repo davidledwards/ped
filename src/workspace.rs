@@ -101,6 +101,8 @@ pub struct Workspace {
     theme: ThemeRef,
     views_origin: Point,
     views_size: Size,
+    shared_origin: Point,
+    shared_size: Size,
     id_seq: u32,
     views: Vec<View>,
     alert: Option<String>,
@@ -111,9 +113,6 @@ pub type WorkspaceRef = Rc<RefCell<Workspace>>;
 impl Workspace {
     /// A lower bound on the size of the workspace area.
     const MIN_SIZE: Size = Size::new(3, 2);
-
-    /// Origin of the view area relative to the workspace.
-    const VIEWS_ORIGIN: Point = Point::ORIGIN;
 
     /// An adjustment to subtract from the workspace area size for calculating the area
     /// size of views.
@@ -128,8 +127,10 @@ impl Workspace {
         let mut this = Workspace {
             size,
             theme: theme.to_ref(),
-            views_origin: Self::VIEWS_ORIGIN,
+            views_origin: Point::ORIGIN,
             views_size: size - Self::VIEWS_SIZE_ADJUST,
+            shared_origin: Point::ORIGIN + Size::rows(size.rows - 1),
+            shared_size: Size::new(1, size.cols),
             id_seq: 0,
             views: vec![],
             alert: None,
@@ -141,6 +142,14 @@ impl Workspace {
     /// Turns the workspace into a [`WorkspaceRef`].
     pub fn to_ref(self) -> WorkspaceRef {
         Rc::new(RefCell::new(self))
+    }
+
+    pub fn shared_region(&self) -> (Point, Size) {
+        (self.shared_origin, self.shared_size)
+    }
+
+    pub fn theme(&self) -> &ThemeRef {
+        &self.theme
     }
 
     /// Opens a new view in the workspace whose placement is based on `place`, returning
@@ -365,8 +374,17 @@ impl Workspace {
         self.show_alert();
     }
 
+    pub fn clear_shared(&mut self) {
+        Display::new(self.shared_origin)
+            .set_cursor(Point::ORIGIN)
+            .set_color(self.theme.echo_color)
+            .write_str(" ".repeat(self.size.cols as usize).as_str())
+            .send();
+    }
+
     fn show_alert(&self) {
         let text = if let Some(ref text) = self.alert {
+            // FIXME: use of .len() counts bytes, not chars
             if text.len() > self.size.cols as usize {
                 &text[..self.size.cols as usize]
             } else {

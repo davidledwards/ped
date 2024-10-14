@@ -24,9 +24,26 @@ pub type OpFn = fn(&mut Environment) -> Result<Option<Action>>;
 /// Map of editing operations to editing functions.
 pub type OpMap = HashMap<&'static str, OpFn>;
 
+pub type AnswerFn = dyn FnMut(&mut Environment, Option<&str>) -> Result<Option<Action>>;
+
 pub enum Action {
     Quit,
     Alert(String),
+    Question(String, Box<AnswerFn>),
+}
+
+fn open_file(env: &mut Environment) -> Result<Option<Action>> {
+    let answer_fn = move |env: &mut Environment, answer: Option<&str>| {
+        // FIXME: do something useful
+        let action = answer
+            .map(|s| Some(Action::Alert(s.to_string())))
+            .unwrap_or(None);
+        Ok(action)
+    };
+    Ok(Some(Action::Question(
+        "open file:".to_string(),
+        Box::new(answer_fn),
+    )))
 }
 
 /// Operation: `insert-line`
@@ -206,7 +223,7 @@ fn next_window(env: &mut Environment) -> Result<Option<Action>> {
 }
 
 /// Predefined mapping of editing operations to editing functions.
-const OP_MAPPINGS: [(&'static str, OpFn); 25] = [
+const OP_MAPPINGS: [(&'static str, OpFn); 26] = [
     ("insert-line", insert_line),
     ("delete-char-left", delete_char_left),
     ("delete-char-right", delete_char_right),
@@ -232,6 +249,8 @@ const OP_MAPPINGS: [(&'static str, OpFn); 25] = [
     ("close-window", close_window),
     ("prev-window", prev_window),
     ("next-window", next_window),
+    // FIXME: added for testing
+    ("open-file", open_file),
 ];
 
 pub fn init_op_map() -> OpMap {

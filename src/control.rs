@@ -3,8 +3,9 @@ use crate::bind::Bindings;
 use crate::editor::EditorRef;
 use crate::env::Environment;
 use crate::error::Result;
+use crate::input::{Directive, InputEditor};
 use crate::key::{Key, Keyboard};
-use crate::op::Action;
+use crate::op::{Action, AnswerFn};
 use crate::term;
 use crate::workspace::{Workspace, WorkspaceRef};
 
@@ -23,23 +24,37 @@ pub struct Controller {
 
 /// Execution context of [`Controller`] that manages state.
 struct Context {
-    /// An optional time capturing the last terminal size change event.
-    term_changed: Option<Instant>,
+    /// A sequence of keys resulting from continuations.
+    key_seq: Vec<Key>,
 
     /// An optional time of the last alert displayed to user or `None` if the alert has
     /// been cleared.
     last_alert: Option<Instant>,
 
-    /// A sequence of keys resulting from continuations.
-    key_seq: Vec<Key>,
+    question: Option<Question>,
+
+    /// An optional time capturing the last terminal size change event.
+    term_changed: Option<Instant>,
+}
+
+struct Question {
+    editor: InputEditor,
+    answer_fn: Box<AnswerFn>,
+}
+
+impl Question {
+    fn new(editor: InputEditor, answer_fn: Box<AnswerFn>) -> Question {
+        Question { editor, answer_fn }
+    }
 }
 
 impl Context {
     fn new() -> Context {
         Context {
-            term_changed: None,
-            last_alert: None,
             key_seq: Vec::new(),
+            last_alert: None,
+            question: None,
+            term_changed: None,
         }
     }
 }
@@ -58,6 +73,8 @@ impl fmt::Display for KeySeq<'_> {
         write!(f, "{key_seq}")
     }
 }
+
+const CTRL_G: Key = Key::Control(7);
 
 impl Controller {
     /// Number of milliseconds controller waits before resizing workspace after it notices a
@@ -109,43 +126,97 @@ impl Controller {
                 } else {
                     None
                 };
-            } else if key == Key::Control(7) {
-                self.clear_keys();
-                self.clear_alert();
             } else {
-                if let Some(c) = self.possible_char(&key) {
-                    // Inserting text is statistically most prevalent scenario, so this
-                    // short circuits detection and bypasses normal indirection of key
-                    // binding.
-                    self.env.active_editor().insert_char(c);
-                    self.clear_alert();
-                } else {
-                    self.context.key_seq.push(key.clone());
-                    if let Some(op_fn) = self.bindings.find(&self.context.key_seq) {
-                        match op_fn(&mut self.env)? {
-                            Some(Action::Quit) => break,
-                            Some(Action::Alert(text)) => {
-                                self.set_alert(text.as_str());
+                if let Some(question) = self.context.question.as_mut() {
+                    let action = if key == CTRL_G {
+                        let action = (question.answer_fn)(&mut self.env, None)?;
+                        self.clear_question();
+                        action
+                    } else {
+                        match question.editor.process_key(&key) {
+                            Directive::Continue => None,
+                            Directive::Accept => {
+                                let action = (question.answer_fn)(
+                                    &mut self.env,
+                                    Some(&question.editor.buffer()),
+                                )?;
+                                self.clear_question();
+                                action
                             }
-                            None => {
-                                self.clear_alert();
+                            Directive::Cancel => {
+                                self.clear_question();
+                                None
                             }
                         }
+                    };
+                    match action {
+                        Some(Action::Quit) => break,
+                        Some(Action::Alert(text)) => {
+                            self.set_alert(text.as_str());
+                        }
+                        Some(Action::Question(prompt, answer_fn)) => {
+                            self.clear_alert();
+                            self.set_question(&prompt, answer_fn);
+                        }
+                        None => (),
+                    }
+                } else {
+                    if let Some(c) = self.possible_char(&key) {
+                        // Inserting text is statistically most prevalent scenario, so this
+                        // short circuits detection and bypasses normal indirection of key
+                        // binding.
+                        self.env.active_editor().insert_char(c);
+                        self.clear_alert();
+                    } else if key == CTRL_G {
                         self.clear_keys();
-                    } else if self.bindings.is_prefix(&self.context.key_seq) {
-                        // Current keys form a prefix of at least one sequence bound to an
-                        // editing function.
-                        self.show_keys();
+                        self.clear_alert();
                     } else {
-                        // Current keys are not bound to an editing function, nor do they
-                        // form a prefix.
-                        self.show_undefined_keys();
-                        self.clear_keys();
+                        self.context.key_seq.push(key.clone());
+                        if let Some(op_fn) = self.bindings.find(&self.context.key_seq) {
+                            match op_fn(&mut self.env)? {
+                                Some(Action::Quit) => break,
+                                Some(Action::Alert(text)) => {
+                                    self.set_alert(text.as_str());
+                                }
+                                Some(Action::Question(prompt, answer_fn)) => {
+                                    self.clear_alert();
+                                    self.set_question(&prompt, answer_fn);
+                                }
+                                None => {
+                                    self.clear_alert();
+                                }
+                            }
+                            self.clear_keys();
+                        } else if self.bindings.is_prefix(&self.context.key_seq) {
+                            // Current keys form a prefix of at least one sequence bound to an
+                            // editing function.
+                            self.show_keys();
+                        } else {
+                            // Current keys are not bound to an editing function, nor do they
+                            // form a prefix.
+                            self.show_undefined_keys();
+                            self.clear_keys();
+                        }
                     }
                 }
             }
         }
         Ok(())
+    }
+
+    fn set_question(&mut self, prompt: &str, answer_fn: Box<AnswerFn>) {
+        let (origin, size) = self.workspace().shared_region();
+        let theme = self.workspace().theme().clone();
+        let editor = InputEditor::new(origin, size.cols, theme, prompt);
+        let question = Question::new(editor, answer_fn);
+        self.context.question = Some(question);
+    }
+
+    fn clear_question(&mut self) {
+        if let Some(_) = self.context.question.take() {
+            self.workspace_mut().clear_shared();
+            self.env.active_editor().show_cursor();
+        }
     }
 
     /// An efficient means of detecting the very common case of a single character,
