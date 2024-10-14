@@ -43,6 +43,11 @@ pub struct Controller {
     term_changed: Option<Instant>,
 }
 
+enum Step {
+    Continue,
+    Quit,
+}
+
 /// Wrapper used only for formatting [`Key`] sequences.
 struct KeySeq<'a>(&'a Vec<Key>);
 
@@ -96,100 +101,122 @@ impl Controller {
         loop {
             let key = self.keyboard.read()?;
             if key == Key::None {
-                // Detect change in terminal size and resize workspace, but not immediately.
-                // In practice, a rapid series of change events could be detected because
-                // human movement is significantly slower.
-                self.term_changed = if term::size_changed() {
-                    // Restart clock when change is detected.
-                    Some(Instant::now())
-                } else if let Some(time) = self.term_changed.take() {
-                    if time.elapsed().as_millis() > Self::TERM_CHANGE_DELAY {
-                        // Resize once delay period expires.
-                        self.env.resize();
-                        self.resize_echo();
-                        self.resize_question();
-                        None
-                    } else {
-                        // Keep waiting.
-                        Some(time)
-                    }
-                } else {
-                    None
-                };
+                self.process_background()?;
             } else {
-                if let Some(answer_fn) = self.question.as_mut() {
-                    let action = if key == CTRL_G {
-                        let action = answer_fn(&mut self.env, None)?;
-                        self.clear_question();
-                        action
-                    } else {
-                        match self.input.process_key(&key) {
-                            Directive::Continue => None,
-                            Directive::Accept => {
-                                let answer = self.input.buffer();
-                                let action = answer_fn(&mut self.env, Some(&answer))?;
-                                self.clear_question();
-                                action
-                            }
-                            Directive::Cancel => {
-                                self.clear_question();
-                                None
-                            }
-                        }
-                    };
-                    match action {
-                        Some(Action::Quit) => break,
-                        Some(Action::Alert(text)) => {
-                            self.set_echo(text.as_str());
-                        }
-                        Some(Action::Question(prompt, answer_fn)) => {
-                            self.clear_echo();
-                            self.set_question(&prompt, answer_fn);
-                        }
-                        None => (),
-                    }
-                } else {
-                    if let Some(c) = self.possible_char(&key) {
-                        // Inserting text is statistically most prevalent scenario, so this
-                        // short circuits detection and bypasses normal indirection of key
-                        // binding.
-                        self.env.active_editor().insert_char(c);
-                        self.clear_echo();
-                    } else if key == CTRL_G {
-                        self.clear_keys();
-                        self.clear_echo();
-                    } else {
-                        self.key_seq.push(key.clone());
-                        if let Some(op_fn) = self.bindings.find(&self.key_seq) {
-                            match op_fn(&mut self.env)? {
-                                Some(Action::Quit) => break,
-                                Some(Action::Alert(text)) => {
-                                    self.set_echo(text.as_str());
-                                }
-                                Some(Action::Question(prompt, answer_fn)) => {
-                                    self.clear_echo();
-                                    self.set_question(&prompt, answer_fn);
-                                }
-                                None => {
-                                    self.clear_echo();
-                                }
-                            }
-                            self.clear_keys();
-                        } else if self.bindings.is_prefix(&self.key_seq) {
-                            // Current keys form a prefix of at least one sequence bound to an
-                            // editing function.
-                            self.show_keys();
-                        } else {
-                            // Current keys are not bound to an editing function, nor do they
-                            // form a prefix.
-                            self.show_undefined_keys();
-                            self.clear_keys();
-                        }
-                    }
+                if let Step::Quit = self.process_key(key)? {
+                    break;
                 }
             }
         }
         Ok(())
+    }
+
+    fn process_key(&mut self, key: Key) -> Result<Step> {
+        if self.question.is_some() {
+            self.process_question(key)
+        } else {
+            self.process_normal(key)
+        }
+    }
+
+    fn process_normal(&mut self, key: Key) -> Result<Step> {
+        if let Some(c) = self.possible_char(&key) {
+            // Inserting text is statistically most prevalent scenario, so this
+            // short circuits detection and bypasses normal indirection of key
+            // binding.
+            self.env.active_editor().insert_char(c);
+            self.clear_echo();
+        } else if key == CTRL_G {
+            self.clear_keys();
+            self.clear_echo();
+        } else {
+            self.key_seq.push(key.clone());
+            if let Some(op_fn) = self.bindings.find(&self.key_seq) {
+                match op_fn(&mut self.env)? {
+                    Some(Action::Quit) => return Ok(Step::Quit),
+                    Some(Action::Alert(text)) => {
+                        self.set_echo(text.as_str());
+                    }
+                    Some(Action::Question(prompt, answer_fn)) => {
+                        self.clear_echo();
+                        self.set_question(&prompt, answer_fn);
+                    }
+                    None => {
+                        self.clear_echo();
+                    }
+                }
+                self.clear_keys();
+            } else if self.bindings.is_prefix(&self.key_seq) {
+                // Current keys form a prefix of at least one sequence bound to an
+                // editing function.
+                self.show_keys();
+            } else {
+                // Current keys are not bound to an editing function, nor do they
+                // form a prefix.
+                self.show_undefined_keys();
+                self.clear_keys();
+            }
+        }
+        Ok(Step::Continue)
+    }
+
+    fn process_question(&mut self, key: Key) -> Result<Step> {
+        let answer_fn = self.question.as_mut().unwrap();
+        let action = if key == CTRL_G {
+            let action = answer_fn(&mut self.env, None)?;
+            self.clear_question();
+            action
+        } else {
+            match self.input.process_key(&key) {
+                Directive::Continue => None,
+                Directive::Accept => {
+                    let answer = self.input.buffer();
+                    let action = answer_fn(&mut self.env, Some(&answer))?;
+                    self.clear_question();
+                    action
+                }
+                Directive::Cancel => {
+                    self.clear_question();
+                    None
+                }
+            }
+        };
+        match action {
+            Some(Action::Quit) => return Ok(Step::Quit),
+            Some(Action::Alert(text)) => {
+                self.set_echo(text.as_str());
+            }
+            Some(Action::Question(prompt, answer_fn)) => {
+                self.clear_echo();
+                self.set_question(&prompt, answer_fn);
+            }
+            None => (),
+        }
+        Ok(Step::Continue)
+    }
+
+    fn process_background(&mut self) -> Result<Step> {
+        // Detect change in terminal size and resize workspace, but not immediately.
+        // In practice, a rapid series of change events could be detected because
+        // human movement is significantly slower.
+        self.term_changed = if term::size_changed() {
+            // Restart clock when change is detected.
+            Some(Instant::now())
+        } else if let Some(time) = self.term_changed.take() {
+            if time.elapsed().as_millis() > Self::TERM_CHANGE_DELAY {
+                // Resize once delay period expires.
+                self.env.resize();
+                self.resize_echo();
+                self.resize_question();
+                None
+            } else {
+                // Keep waiting.
+                Some(time)
+            }
+        } else {
+            None
+        };
+        Ok(Step::Continue)
     }
 
     /// An efficient means of detecting the very common case of a single character,
