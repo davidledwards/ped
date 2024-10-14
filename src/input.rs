@@ -2,40 +2,37 @@
 use crate::canvas::Canvas;
 use crate::display::{Display, Point, Size};
 use crate::grid::Cell;
-use crate::key::{Ctrl, Key, Shift};
-use crate::theme::ThemeRef;
+use crate::key::{
+    Key, CTRL_A, CTRL_B, CTRL_D, CTRL_E, CTRL_F, CTRL_G, CTRL_H, CTRL_J, CTRL_K, CTRL_M, DELETE,
+    END, HOME, LEFT, RIGHT,
+};
+use crate::workspace::WorkspaceRef;
 
 use std::cmp;
 
 pub struct InputEditor {
-    /// The origin of the input editor.
-    origin: Point,
+    workspace: WorkspaceRef,
 
-    /// The number of columns reserved for the prompt area, which may be less than
-    /// the length of [`prompt`] itself.
+    /// Contains a prompt when the input editor is enabled, otherwise `None`.
+    prompt: Option<String>,
+
+    /// Represents the number of columns reserved for the prompt area when enabled, otherwise `0`.
     prompt_cols: u32,
 
-    /// The number of columns reserved for the input area, which is never less than
-    /// [`MIN_COLS`](Self::MIN_COLS).
-    buf_cols: u32,
+    /// Represents the number of columns reserved for the input area when enabled, otherwise `0`.
+    input_cols: u32,
 
-    /// A reference to the color theme.
-    theme: ThemeRef,
-
-    /// The prompt provided by the caller.
-    prompt: String,
+    /// The canvas representing the input buffer when enabled, otherwise [zero](Canvas::zero).
+    canvas: Canvas,
 
     /// The input buffer.
-    buf: Vec<char>,
+    input: Vec<char>,
 
-    /// The current position in [`buf`] corresponding to [`cursor`].
+    /// The current position in [`input`] corresponding to [`cursor`].
     pos: usize,
 
     /// The position of the cursor on the visible canvas.
     cursor: u32,
-
-    /// The canvas representing the input buffer.
-    canvas: Canvas,
 
     /// A predefined blank cell honoring the color [`theme`].
     blank_cell: Cell,
@@ -51,140 +48,162 @@ impl InputEditor {
     /// A lower bound on the number of columns allocated to the input editor.
     const MIN_COLS: u32 = 2;
 
-    pub fn new(origin: Point, cols: u32, theme: ThemeRef, prompt: &str) -> InputEditor {
-        let (prompt_cols, buf_cols) = Self::calc_sizes(cols, prompt);
-        let canvas = Canvas::new(origin + Size::cols(prompt_cols), Size::new(1, buf_cols));
-        let blank_cell = Cell::new(' ', theme.text_color);
-        let mut this = InputEditor {
-            origin,
-            prompt_cols,
-            buf_cols,
-            theme,
-            prompt: prompt.to_string(),
-            buf: Vec::new(),
+    pub fn new(workspace: WorkspaceRef) -> InputEditor {
+        let blank_cell = Cell::new(' ', workspace.borrow().theme().text_color);
+        InputEditor {
+            workspace,
+            prompt: None,
+            prompt_cols: 0,
+            input_cols: 0,
+            canvas: Canvas::zero(),
+            input: Vec::new(),
             pos: 0,
             cursor: 0,
-            canvas,
             blank_cell,
-        };
-        this.draw();
-        this
+        }
+    }
+
+    /// Enables the editor by associating `prompt`.
+    pub fn enable(&mut self, prompt: &str) {
+        self.prompt = Some(prompt.to_string());
+        self.set_sizes();
+        self.input.clear();
+        self.pos = 0;
+        self.cursor = 0;
+        self.draw();
+    }
+
+    /// Disables the editor and clears the area on the workspace.
+    pub fn disable(&mut self) {
+        self.prompt = None;
+        self.set_sizes();
+        self.input.clear();
+        self.pos = 0;
+        self.cursor = 0;
+        self.draw();
+    }
+
+    /// Returns the contents of the input buffer.
+    pub fn buffer(&self) -> String {
+        self.input.iter().collect()
     }
 
     pub fn draw(&mut self) {
-        self.draw_prompt();
-        self.draw_input();
+        if let Some(_) = self.prompt {
+            self.draw_prompt();
+            self.draw_input();
+        } else {
+            self.workspace.borrow_mut().clear_shared();
+        }
     }
 
-    pub fn buffer(&self) -> String {
-        self.buf.iter().collect()
-    }
-
-    /// Resizes the input editor using the revised `origin` and `cols`.
-    pub fn resize(&mut self, origin: Point, cols: u32) {
-        self.origin = origin;
-        (self.prompt_cols, self.buf_cols) = Self::calc_sizes(cols, &self.prompt);
-        self.canvas = Canvas::new(
-            self.origin + Size::cols(self.prompt_cols),
-            Size::new(1, self.buf_cols),
-        );
-        self.cursor = cmp::min(self.cursor, self.buf_cols);
+    /// Resizes the input editor by reprobing the associated workspace.
+    pub fn resize(&mut self) {
+        self.set_sizes();
+        self.cursor = cmp::min(self.cursor, self.input_cols.saturating_sub(1));
         self.draw();
     }
 
     pub fn process_key(&mut self, key: &Key) -> Directive {
-        match key {
+        match *key {
             Key::Char(c) => {
-                self.buf.insert(self.pos, *c);
+                self.input.insert(self.pos, c);
                 self.pos += 1;
-                self.cursor = cmp::min(self.cursor + 1, self.buf_cols - 1);
+                self.cursor = cmp::min(self.cursor + 1, self.input_cols - 1);
                 self.draw_input();
             }
-            Key::Control(13) => {
-                // RET
+            CTRL_M => {
                 return Directive::Accept;
             }
-            Key::Control(8) | Key::Control(127) => {
-                // ctrl-h | DEL
-                // delete char to left
+            CTRL_H | DELETE => {
+                // Delete character left of cursor.
                 if self.pos > 0 {
                     self.pos -= 1;
-                    self.buf.remove(self.pos);
+                    self.input.remove(self.pos);
                     self.cursor = self.cursor.saturating_sub(1);
                     self.draw_input();
                 }
             }
-            Key::Control(4) => {
-                // ctrl-d
-                // delete char to right
-                if self.pos < self.buf.len() {
-                    self.buf.remove(self.pos);
+            CTRL_D => {
+                // Delete character right of cursor.
+                if self.pos < self.input.len() {
+                    self.input.remove(self.pos);
                     self.draw_input();
                 }
             }
-            Key::Control(10) => {
-                // ctrl-j
-                // delete cursor to start of line
+            CTRL_J => {
+                // Delete characters left of cursor to start of line.
                 if self.pos > 0 {
-                    self.buf.drain(0..self.pos);
+                    self.input.drain(0..self.pos);
                     self.pos = 0;
                     self.cursor = 0;
                     self.draw_input();
                 }
             }
-            Key::Control(11) => {
-                // ctrl-k
-                // delete cursor to end of line
-                if self.pos < self.buf.len() {
-                    self.buf.truncate(self.pos);
+            CTRL_K => {
+                // Delete characters right of cursor to end of line.
+                if self.pos < self.input.len() {
+                    self.input.truncate(self.pos);
                     self.draw_input();
                 }
             }
-            Key::Control(6) | Key::Right(Shift::Off, Ctrl::Off) => {
-                // ctrl-f | -->
-                // forward
-                if self.pos < self.buf.len() {
+            CTRL_F | RIGHT => {
+                // Move cursor right.
+                if self.pos < self.input.len() {
                     self.pos += 1;
-                    self.cursor = cmp::min(self.cursor + 1, self.buf_cols - 1);
+                    self.cursor = cmp::min(self.cursor + 1, self.input_cols - 1);
                     self.draw_input();
                 }
             }
-            Key::Control(2) | Key::Left(Shift::Off, Ctrl::Off) => {
-                // ctrl-b | <--
-                // backward
+            CTRL_B | LEFT => {
+                // Move cursor left.
                 if self.pos > 0 {
                     self.pos -= 1;
                     self.cursor = self.cursor.saturating_sub(1);
                     self.draw_input();
                 }
             }
-            Key::Control(1) | Key::Home(Shift::Off, Ctrl::Off) => {
-                // ctrl-a | HOME
-                // start of line
+            CTRL_A | HOME => {
+                // Move cursor to start of line.
                 if self.pos > 0 {
                     self.pos = 0;
                     self.cursor = 0;
                     self.draw_input();
                 }
             }
-            Key::Control(5) | Key::End(Shift::Off, Ctrl::Off) => {
-                // ctrl-e | END
-                // end of line
-                if self.pos < self.buf.len() {
-                    self.pos = self.buf.len();
-                    self.cursor = cmp::min(self.pos as u32, self.buf_cols - 1);
+            CTRL_E | END => {
+                // Move cursor to end of line.
+                if self.pos < self.input.len() {
+                    self.pos = self.input.len();
+                    self.cursor = cmp::min(self.pos as u32, self.input_cols - 1);
                     self.draw_input();
                 }
             }
-            Key::Control(7) => {
-                // ctrl-g
+            CTRL_G => {
                 return Directive::Cancel;
             }
-            _ => {
-                // ignore everything else
-            }
+            _ => (),
         }
         Directive::Continue
+    }
+
+    /// Sets column sizes for the *prompt* and *input* areas, and allocates an
+    /// appropriately-sized canvas.
+    fn set_sizes(&mut self) {
+        if let Some(ref prompt) = self.prompt {
+            // Editor is enabled.
+            let (origin, size) = self.workspace.borrow().shared_region();
+            (self.prompt_cols, self.input_cols) = Self::calc_sizes(size.cols, prompt);
+            self.canvas = Canvas::new(
+                origin + Size::cols(self.prompt_cols),
+                Size::new(1, self.input_cols),
+            );
+        } else {
+            // Editor is disabled, so set everything to zero.
+            self.prompt_cols = 0;
+            self.input_cols = 0;
+            self.canvas = Canvas::zero();
+        }
     }
 
     /// Given the number of `cols` allocated to the entire input editor, as well as
@@ -201,21 +220,21 @@ impl InputEditor {
         let prompt_len = prompt.chars().count() as u32 + 1;
 
         // Desired number of columns to show entire prompt while also ensuring minimum
-        // size constraint for buffer area.
+        // size constraint for input area.
         let desired_cols = prompt_len + Self::MIN_COLS;
-        let (prompt_cols, buf_cols) = if desired_cols > cols {
+        let (prompt_cols, input_cols) = if desired_cols > cols {
             // Clip prompt area so as not to exceed total width of input area.
             (prompt_len - (desired_cols - cols), Self::MIN_COLS)
         } else {
-            // Give available space to buffer area.
+            // Give available space to input area.
             (prompt_len, cols - prompt_len)
         };
         if prompt_cols == 1 {
             // Since trailing space was included in size calculation, this condition
-            // would only show trailing space, so just give it to buffer area.
-            (0, buf_cols + 1)
+            // would only show trailing space, so give it to input area.
+            (0, input_cols + 1)
         } else {
-            (prompt_cols, buf_cols)
+            (prompt_cols, input_cols)
         }
     }
 
@@ -223,13 +242,17 @@ impl InputEditor {
         if self.prompt_cols > 0 {
             let prompt = self
                 .prompt
+                .as_ref()
+                .unwrap()
                 .chars()
                 .take(self.prompt_cols as usize - 1)
                 .collect::<String>();
 
-            Display::new(self.origin)
+            let (origin, _) = self.workspace.borrow().shared_region();
+            let color = self.workspace.borrow().theme().prompt_color;
+            Display::new(origin)
                 .set_cursor(Point::ORIGIN)
-                .set_color(self.theme.prompt_color)
+                .set_color(color)
                 .write_str(prompt.as_str())
                 .write(' ')
                 .send();
@@ -237,19 +260,20 @@ impl InputEditor {
     }
 
     fn draw_input(&mut self) {
-        // Determine slice of buffer visible on canvas.
+        // Determine slice of input buffer visible on canvas.
         let start = self.pos - self.cursor as usize;
-        let end = cmp::min(start + self.buf_cols as usize, self.buf.len());
+        let end = cmp::min(start + self.input_cols as usize, self.input.len());
 
         // Write characters to canvas.
-        for (col, c) in self.buf[start..end].iter().enumerate() {
-            let cell = Cell::new(*c, self.theme.text_color);
+        let color = self.workspace.borrow().theme().text_color;
+        for (col, c) in self.input[start..end].iter().enumerate() {
+            let cell = Cell::new(*c, color);
             self.canvas.set_cell(0, col as u32, cell);
         }
 
         // Clear unused area on canvas.
         let cols = (end - start) as u32;
-        if cols < self.buf_cols {
+        if cols < self.input_cols {
             self.canvas.fill_row_from(0, cols, self.blank_cell);
         }
 

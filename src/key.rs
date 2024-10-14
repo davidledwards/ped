@@ -38,6 +38,23 @@ pub enum Ctrl {
     On,
 }
 
+// Various predefined keys.
+pub const CTRL_A: Key = Key::Control(1);
+pub const CTRL_B: Key = Key::Control(2);
+pub const CTRL_D: Key = Key::Control(4);
+pub const CTRL_E: Key = Key::Control(5);
+pub const CTRL_F: Key = Key::Control(6);
+pub const CTRL_G: Key = Key::Control(7);
+pub const CTRL_H: Key = Key::Control(8);
+pub const CTRL_J: Key = Key::Control(10);
+pub const CTRL_K: Key = Key::Control(11);
+pub const CTRL_M: Key = Key::Control(13);
+pub const DELETE: Key = Key::Control(127);
+pub const LEFT: Key = Key::Left(Shift::Off, Ctrl::Off);
+pub const RIGHT: Key = Key::Right(Shift::Off, Ctrl::Off);
+pub const HOME: Key = Key::Home(Shift::Off, Ctrl::Off);
+pub const END: Key = Key::End(Shift::Off, Ctrl::Off);
+
 /// Map of key names to [`Key`]s.
 pub type KeyMap = HashMap<&'static str, Key>;
 

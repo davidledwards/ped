@@ -5,6 +5,7 @@ mod canvas;
 mod color;
 mod control;
 mod display;
+mod echo;
 mod editor;
 mod env;
 mod error;

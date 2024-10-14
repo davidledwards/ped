@@ -1,62 +1,46 @@
 //! Main controller.
 use crate::bind::Bindings;
+use crate::echo::Echo;
 use crate::editor::EditorRef;
 use crate::env::Environment;
 use crate::error::Result;
 use crate::input::{Directive, InputEditor};
-use crate::key::{Key, Keyboard};
+use crate::key::{Key, Keyboard, CTRL_G};
 use crate::op::{Action, AnswerFn};
 use crate::term;
-use crate::workspace::{Workspace, WorkspaceRef};
+use crate::workspace::Workspace;
 
-use std::cell::{Ref, RefMut};
 use std::fmt;
 use std::time::Instant;
 
 /// The primary control point for coordinating user interaction and editing operations.
 pub struct Controller {
+    /// A keyboard for reading [keys](Key).
     keyboard: Keyboard,
-    bindings: Bindings,
-    workspace: WorkspaceRef,
-    env: Environment,
-    context: Context,
-}
 
-/// Execution context of [`Controller`] that manages state.
-struct Context {
+    /// The key sequences bound to editing functions.
+    bindings: Bindings,
+
+    /// The editing environment made accessible to editing functions.
+    env: Environment,
+
     /// A sequence of keys resulting from continuations.
     key_seq: Vec<Key>,
 
-    /// An optional time of the last alert displayed to user or `None` if the alert has
-    /// been cleared.
-    last_alert: Option<Instant>,
+    /// A means of echoing arbitrary text.
+    echo: Echo,
 
-    question: Option<Question>,
+    /// An optional time of the last echo displayed or `None` if the echo has been cleared.
+    last_echo: Option<Instant>,
+
+    /// A means of soliciting input.
+    input: InputEditor,
+
+    /// An optional question solicited by an editing function or `None` otherwise.
+    question: Option<Box<AnswerFn>>,
 
     /// An optional time capturing the last terminal size change event.
     term_changed: Option<Instant>,
-}
-
-struct Question {
-    editor: InputEditor,
-    answer_fn: Box<AnswerFn>,
-}
-
-impl Question {
-    fn new(editor: InputEditor, answer_fn: Box<AnswerFn>) -> Question {
-        Question { editor, answer_fn }
-    }
-}
-
-impl Context {
-    fn new() -> Context {
-        Context {
-            key_seq: Vec::new(),
-            last_alert: None,
-            question: None,
-            term_changed: None,
-        }
-    }
 }
 
 /// Wrapper used only for formatting [`Key`] sequences.
@@ -74,8 +58,6 @@ impl fmt::Display for KeySeq<'_> {
     }
 }
 
-const CTRL_G: Key = Key::Control(7);
-
 impl Controller {
     /// Number of milliseconds controller waits before resizing workspace after it notices a
     /// change.
@@ -89,13 +71,19 @@ impl Controller {
     ) -> Controller {
         let workspace = workspace.to_ref();
         let env = Environment::new(workspace.clone(), editors);
+        let echo = Echo::new(workspace.clone());
+        let input = InputEditor::new(workspace.clone());
 
         Controller {
             keyboard,
             bindings,
-            workspace,
             env,
-            context: Context::new(),
+            key_seq: Vec::new(),
+            echo,
+            last_echo: None,
+            input,
+            question: None,
+            term_changed: None,
         }
     }
 
@@ -111,13 +99,15 @@ impl Controller {
                 // Detect change in terminal size and resize workspace, but not immediately.
                 // In practice, a rapid series of change events could be detected because
                 // human movement is significantly slower.
-                self.context.term_changed = if term::size_changed() {
+                self.term_changed = if term::size_changed() {
                     // Restart clock when change is detected.
                     Some(Instant::now())
-                } else if let Some(time) = self.context.term_changed.take() {
+                } else if let Some(time) = self.term_changed.take() {
                     if time.elapsed().as_millis() > Self::TERM_CHANGE_DELAY {
                         // Resize once delay period expires.
                         self.env.resize();
+                        self.resize_echo();
+                        self.resize_question();
                         None
                     } else {
                         // Keep waiting.
@@ -127,19 +117,17 @@ impl Controller {
                     None
                 };
             } else {
-                if let Some(question) = self.context.question.as_mut() {
+                if let Some(answer_fn) = self.question.as_mut() {
                     let action = if key == CTRL_G {
-                        let action = (question.answer_fn)(&mut self.env, None)?;
+                        let action = answer_fn(&mut self.env, None)?;
                         self.clear_question();
                         action
                     } else {
-                        match question.editor.process_key(&key) {
+                        match self.input.process_key(&key) {
                             Directive::Continue => None,
                             Directive::Accept => {
-                                let action = (question.answer_fn)(
-                                    &mut self.env,
-                                    Some(&question.editor.buffer()),
-                                )?;
+                                let answer = self.input.buffer();
+                                let action = answer_fn(&mut self.env, Some(&answer))?;
                                 self.clear_question();
                                 action
                             }
@@ -152,10 +140,10 @@ impl Controller {
                     match action {
                         Some(Action::Quit) => break,
                         Some(Action::Alert(text)) => {
-                            self.set_alert(text.as_str());
+                            self.set_echo(text.as_str());
                         }
                         Some(Action::Question(prompt, answer_fn)) => {
-                            self.clear_alert();
+                            self.clear_echo();
                             self.set_question(&prompt, answer_fn);
                         }
                         None => (),
@@ -166,28 +154,28 @@ impl Controller {
                         // short circuits detection and bypasses normal indirection of key
                         // binding.
                         self.env.active_editor().insert_char(c);
-                        self.clear_alert();
+                        self.clear_echo();
                     } else if key == CTRL_G {
                         self.clear_keys();
-                        self.clear_alert();
+                        self.clear_echo();
                     } else {
-                        self.context.key_seq.push(key.clone());
-                        if let Some(op_fn) = self.bindings.find(&self.context.key_seq) {
+                        self.key_seq.push(key.clone());
+                        if let Some(op_fn) = self.bindings.find(&self.key_seq) {
                             match op_fn(&mut self.env)? {
                                 Some(Action::Quit) => break,
                                 Some(Action::Alert(text)) => {
-                                    self.set_alert(text.as_str());
+                                    self.set_echo(text.as_str());
                                 }
                                 Some(Action::Question(prompt, answer_fn)) => {
-                                    self.clear_alert();
+                                    self.clear_echo();
                                     self.set_question(&prompt, answer_fn);
                                 }
                                 None => {
-                                    self.clear_alert();
+                                    self.clear_echo();
                                 }
                             }
                             self.clear_keys();
-                        } else if self.bindings.is_prefix(&self.context.key_seq) {
+                        } else if self.bindings.is_prefix(&self.key_seq) {
                             // Current keys form a prefix of at least one sequence bound to an
                             // editing function.
                             self.show_keys();
@@ -204,25 +192,10 @@ impl Controller {
         Ok(())
     }
 
-    fn set_question(&mut self, prompt: &str, answer_fn: Box<AnswerFn>) {
-        let (origin, size) = self.workspace().shared_region();
-        let theme = self.workspace().theme().clone();
-        let editor = InputEditor::new(origin, size.cols, theme, prompt);
-        let question = Question::new(editor, answer_fn);
-        self.context.question = Some(question);
-    }
-
-    fn clear_question(&mut self) {
-        if let Some(_) = self.context.question.take() {
-            self.workspace_mut().clear_shared();
-            self.env.active_editor().show_cursor();
-        }
-    }
-
     /// An efficient means of detecting the very common case of a single character,
     /// allowing the controller to optimize its handling.
     fn possible_char(&self, key: &Key) -> Option<char> {
-        if self.context.key_seq.is_empty() {
+        if self.key_seq.is_empty() {
             if let Key::Char(c) = key {
                 Some(*c)
             } else {
@@ -233,13 +206,17 @@ impl Controller {
         }
     }
 
+    fn clear_keys(&mut self) {
+        self.key_seq.clear();
+    }
+
     fn show_keys(&mut self) {
-        let text = KeySeq(&self.context.key_seq).to_string();
-        self.set_alert(text.as_str());
+        let text = KeySeq(&self.key_seq).to_string();
+        self.set_echo(text.as_str());
     }
 
     fn show_undefined_keys(&mut self) {
-        let key_seq = &self.context.key_seq;
+        let key_seq = &self.key_seq;
         let text = format!(
             "{}: undefined {}",
             KeySeq(&key_seq),
@@ -249,31 +226,44 @@ impl Controller {
                 "key sequence"
             }
         );
-        self.set_alert(text.as_str());
+        self.set_echo(text.as_str());
     }
 
-    fn clear_keys(&mut self) {
-        self.context.key_seq.clear();
-    }
-
-    fn set_alert(&mut self, text: &str) {
-        self.workspace_mut().set_alert(text);
-        self.context.last_alert = Some(Instant::now());
+    fn set_echo(&mut self, text: &str) {
+        self.echo.set(text);
+        self.last_echo = Some(Instant::now());
         self.env.active_editor().show_cursor();
     }
 
-    fn clear_alert(&mut self) {
-        if let Some(_) = self.context.last_alert.take() {
-            self.workspace_mut().clear_alert();
+    fn clear_echo(&mut self) {
+        if let Some(_) = self.last_echo.take() {
+            self.echo.clear();
             self.env.active_editor().show_cursor();
         }
     }
 
-    fn workspace(&self) -> Ref<'_, Workspace> {
-        self.workspace.borrow()
+    fn resize_echo(&mut self) {
+        if let Some(_) = self.last_echo {
+            self.echo.resize();
+            self.env.active_editor().show_cursor();
+        }
     }
 
-    fn workspace_mut(&self) -> RefMut<'_, Workspace> {
-        self.workspace.borrow_mut()
+    fn set_question(&mut self, prompt: &str, answer_fn: Box<AnswerFn>) {
+        self.input.enable(prompt);
+        self.question = Some(answer_fn);
+    }
+
+    fn clear_question(&mut self) {
+        if let Some(_) = self.question.take() {
+            self.input.disable();
+            self.env.active_editor().show_cursor();
+        }
+    }
+
+    fn resize_question(&mut self) {
+        if let Some(_) = self.question {
+            self.input.resize();
+        }
     }
 }

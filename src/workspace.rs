@@ -105,7 +105,6 @@ pub struct Workspace {
     shared_size: Size,
     id_seq: u32,
     views: Vec<View>,
-    alert: Option<String>,
 }
 
 pub type WorkspaceRef = Rc<RefCell<Workspace>>;
@@ -133,7 +132,6 @@ impl Workspace {
             shared_size: Size::new(1, size.cols),
             id_seq: 0,
             views: vec![],
-            alert: None,
         };
         this.open_view(Placement::Top);
         this
@@ -238,6 +236,8 @@ impl Workspace {
             // number of views and corresponding row allocations.
             self.size = size;
             self.views_size = size - Self::VIEWS_SIZE_ADJUST;
+            self.shared_origin = Point::ORIGIN + Size::rows(size.rows - 1);
+            self.shared_size = Size::new(1, size.cols);
 
             // Calculate number of rows to allocate to each view, though revised workspace
             // size might lead to violation of minimum view size constraint, which means
@@ -271,7 +271,6 @@ impl Workspace {
                 };
 
             self.resize_views();
-            self.show_alert();
             Some(removed_ids)
         } else {
             None
@@ -364,40 +363,11 @@ impl Workspace {
         Views::new(self)
     }
 
-    pub fn set_alert(&mut self, text: &str) {
-        self.alert = Some(text.to_string());
-        self.show_alert();
-    }
-
-    pub fn clear_alert(&mut self) {
-        self.alert = None;
-        self.show_alert();
-    }
-
     pub fn clear_shared(&mut self) {
         Display::new(self.shared_origin)
             .set_cursor(Point::ORIGIN)
             .set_color(self.theme.echo_color)
             .write_str(" ".repeat(self.size.cols as usize).as_str())
-            .send();
-    }
-
-    fn show_alert(&self) {
-        let text = if let Some(ref text) = self.alert {
-            // FIXME: use of .len() counts bytes, not chars
-            if text.len() > self.size.cols as usize {
-                &text[..self.size.cols as usize]
-            } else {
-                &text
-            }
-        } else {
-            ""
-        };
-        Display::new(Point::ORIGIN + Size::rows(self.size.rows - 1))
-            .set_cursor(Point::ORIGIN)
-            .set_color(self.theme.echo_color)
-            .write_str(text)
-            .write_str(" ".repeat(self.size.cols as usize - text.len()).as_str())
             .send();
     }
 
