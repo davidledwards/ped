@@ -1,129 +1,104 @@
-//! Input reader.
+//! Line editor.
 use crate::canvas::Canvas;
-use crate::color::Color;
 use crate::display::{Display, Point, Size};
 use crate::grid::Cell;
 use crate::key::{Ctrl, Key, Shift};
+use crate::theme::ThemeRef;
 
 use std::cmp;
 
-pub struct Input {
+pub struct LineEditor {
+    /// The origin of the line editor.
     origin: Point,
-    cols: u32,
-    prompt: String,
-    buf: Vec<char>,
-    pos: usize,
-    cursor: u32,
+
+    /// The number of columns reserved for the prompt area, which may be less than
+    /// the length of [`prompt`] itself.
     prompt_cols: u32,
+
+    /// The number of columns reserved for the input area, which is never less than
+    /// [`MIN_COLS`](Self::MIN_COLS).
     buf_cols: u32,
+
+    /// A reference to the color theme.
+    theme: ThemeRef,
+
+    /// The prompt provided by the caller.
+    prompt: String,
+
+    /// The input buffer.
+    buf: Vec<char>,
+
+    /// The current position in [`buf`] corresponding to [`cursor`].
+    pos: usize,
+
+    /// The position of the cursor on the visible canvas.
+    cursor: u32,
+
+    /// The canvas representing the input buffer.
     canvas: Canvas,
+
+    /// A predefined blank cell honoring the color [`theme`].
+    blank_cell: Cell,
 }
 
-pub enum Status {
+pub enum Directive {
     Continue,
     Accept,
-    Quit,
+    Cancel,
 }
 
-impl Input {
+impl LineEditor {
+    /// A lower bound on the number of columns allocated to the line editor.
     const MIN_COLS: u32 = 2;
 
-    /// Takes as input the number of `cols` allocated to the entire input area,
-    /// as well as the `prompt`, and returns a tuple with the following calculations:
-    /// - a possibly revised value for `cols` to ensure the value is never less than
-    ///   [`Self::MIN_COLS`]
-    /// - the number of columns allocated to the prompt
-    /// - the number of columns allocated to the buffer
-    fn calc_sizes(cols: u32, prompt: &str) -> (u32, u32, u32) {
-        let cols = cmp::max(cols, Self::MIN_COLS);
-
-        // Include trailing space after prompt in calculations.
-        let prompt_len = prompt.chars().count() as u32 + 1;
-
-        // Desired number of columns to show entire prompt while also ensuring minimum
-        // size constraint for buffer area.
-        let desired_cols = prompt_len + Self::MIN_COLS;
-        let (prompt_cols, buf_cols) = if desired_cols > cols {
-            // Clip prompt area so as not to exceed total width of input area.
-            (prompt_len - (desired_cols - cols), Self::MIN_COLS)
-        } else {
-            // Give available space to buffer area.
-            (prompt_len, cols - prompt_len)
-        };
-        if prompt_cols == 1 {
-            // Since trailing space was included in size calculation, this condition
-            // would only show trailing space, so just give it to buffer area.
-            (cols, 0, buf_cols + 1)
-        } else {
-            (cols, prompt_cols, buf_cols)
-        }
-    }
-
-    pub fn new(origin: Point, cols: u32, prompt: &str) -> Input {
-        let (cols, prompt_cols, buf_cols) = Self::calc_sizes(cols, prompt);
-
+    pub fn new(origin: Point, cols: u32, theme: ThemeRef, prompt: &str) -> LineEditor {
+        let (prompt_cols, buf_cols) = Self::calc_sizes(cols, prompt);
         let canvas = Canvas::new(origin + Size::cols(prompt_cols), Size::new(1, buf_cols));
-
-        let mut this = Input {
+        let blank_cell = Cell::new(' ', theme.text_color);
+        let mut this = LineEditor {
             origin,
-            cols,
+            prompt_cols,
+            buf_cols,
+            theme,
             prompt: prompt.to_string(),
             buf: Vec::new(),
             pos: 0,
             cursor: 0,
-            prompt_cols,
-            buf_cols,
             canvas,
+            blank_cell,
         };
-        this.draw_prompt();
-        this.draw_input();
+        this.draw();
         this
     }
 
-    fn draw_prompt(&mut self) {
-        if self.prompt_cols > 0 {
-            let prompt = self
-                .prompt
-                .chars()
-                .take(self.prompt_cols as usize - 1)
-                .collect::<String>();
-
-            Display::new(self.origin)
-                .set_cursor(Point::ORIGIN)
-                .set_color(Color::new(2, 232))
-                .write_str(prompt.as_str())
-                .write(' ')
-                .send();
-        }
+    pub fn draw(&mut self) {
+        self.draw_prompt();
+        self.draw_input();
     }
 
-    fn draw_input(&mut self) {
-        let start_pos = self.pos - self.cursor as usize;
-        let end_pos = cmp::min(start_pos + self.canvas.size().cols as usize, self.buf.len());
-        for (col, c) in self.buf[start_pos..end_pos].iter().enumerate() {
-            self.canvas
-                .set_cell(0, col as u32, Cell::new(*c, Color::new(15, 233)));
-        }
-        let n = end_pos - start_pos;
-        if n < self.canvas.size().cols as usize {
-            self.canvas
-                .fill_row_from(0, n as u32, Cell::new(' ', Color::new(15, 233)));
-        }
-        self.canvas.draw();
-        self.canvas.set_cursor(Point::new(0, self.cursor));
+    /// Resizes the line editor using the revised `origin` and `cols`.
+    pub fn resize(&mut self, origin: Point, cols: u32) {
+        self.origin = origin;
+        (self.prompt_cols, self.buf_cols) = Self::calc_sizes(cols, &self.prompt);
+        self.canvas = Canvas::new(
+            self.origin + Size::cols(self.prompt_cols),
+            Size::new(1, self.buf_cols),
+        );
+        self.cursor = cmp::min(self.cursor, self.buf_cols);
+        self.draw();
     }
 
-    pub fn process_key(&mut self, key: &Key) -> Status {
+    pub fn process_key(&mut self, key: &Key) -> Directive {
         match key {
             Key::Char(c) => {
                 self.buf.insert(self.pos, *c);
                 self.pos += 1;
-                self.cursor = cmp::min(self.cursor + 1, self.canvas.size().cols - 1);
+                self.cursor = cmp::min(self.cursor + 1, self.buf_cols - 1);
                 self.draw_input();
             }
             Key::Control(13) => {
                 // RET
-                return Status::Accept;
+                return Directive::Accept;
             }
             Key::Control(8) | Key::Control(127) => {
                 // ctrl-h | DEL
@@ -166,7 +141,7 @@ impl Input {
                 // forward
                 if self.pos < self.buf.len() {
                     self.pos += 1;
-                    self.cursor = cmp::min(self.cursor + 1, self.canvas.size().cols - 1);
+                    self.cursor = cmp::min(self.cursor + 1, self.buf_cols - 1);
                     self.draw_input();
                 }
             }
@@ -193,14 +168,89 @@ impl Input {
                 // end of line
                 if self.pos < self.buf.len() {
                     self.pos = self.buf.len();
-                    self.cursor = cmp::min(self.pos as u32, self.canvas.size().cols - 1);
+                    self.cursor = cmp::min(self.pos as u32, self.buf_cols - 1);
                     self.draw_input();
                 }
+            }
+            Key::Control(7) => {
+                // ctrl-g
+                return Directive::Cancel;
             }
             _ => {
                 // ignore everything else
             }
         }
-        Status::Continue
+        Directive::Continue
+    }
+
+    /// Takes as input the number of `cols` allocated to the entire line editor,
+    /// as well as the `prompt`, and returns a tuple with the following calculations:
+    /// - the number of columns allocated to the prompt
+    /// - the number of columns allocated to the buffer
+    ///
+    /// Note that `cols` is possibly revised to ensure the value is never less than
+    /// [`Self::MIN_COLS`].
+    fn calc_sizes(cols: u32, prompt: &str) -> (u32, u32) {
+        let cols = cmp::max(cols, Self::MIN_COLS);
+
+        // Include trailing space after prompt in calculations.
+        let prompt_len = prompt.chars().count() as u32 + 1;
+
+        // Desired number of columns to show entire prompt while also ensuring minimum
+        // size constraint for buffer area.
+        let desired_cols = prompt_len + Self::MIN_COLS;
+        let (prompt_cols, buf_cols) = if desired_cols > cols {
+            // Clip prompt area so as not to exceed total width of input area.
+            (prompt_len - (desired_cols - cols), Self::MIN_COLS)
+        } else {
+            // Give available space to buffer area.
+            (prompt_len, cols - prompt_len)
+        };
+        if prompt_cols == 1 {
+            // Since trailing space was included in size calculation, this condition
+            // would only show trailing space, so just give it to buffer area.
+            (0, buf_cols + 1)
+        } else {
+            (prompt_cols, buf_cols)
+        }
+    }
+
+    fn draw_prompt(&mut self) {
+        if self.prompt_cols > 0 {
+            let prompt = self
+                .prompt
+                .chars()
+                .take(self.prompt_cols as usize - 1)
+                .collect::<String>();
+
+            Display::new(self.origin)
+                .set_cursor(Point::ORIGIN)
+                .set_color(self.theme.prompt_color)
+                .write_str(prompt.as_str())
+                .write(' ')
+                .send();
+        }
+    }
+
+    fn draw_input(&mut self) {
+        // Determine slice of buffer visible on canvas.
+        let start = self.pos - self.cursor as usize;
+        let end = cmp::min(start + self.buf_cols as usize, self.buf.len());
+
+        // Write characters to canvas.
+        for (col, c) in self.buf[start..end].iter().enumerate() {
+            let cell = Cell::new(*c, self.theme.text_color);
+            self.canvas.set_cell(0, col as u32, cell);
+        }
+
+        // Clear unused area on canvas.
+        let cols = (end - start) as u32;
+        if cols < self.buf_cols {
+            self.canvas.fill_row_from(0, cols, self.blank_cell);
+        }
+
+        // Send pending changes to canvas and set new cursor position.
+        self.canvas.draw();
+        self.canvas.set_cursor(Point::new(0, self.cursor));
     }
 }

@@ -6,7 +6,8 @@ use crate::color::Color;
 pub struct Theme {
     pub text_color: Color,
     pub banner_color: Color,
-    pub alert_color: Color,
+    pub echo_color: Color,
+    pub prompt_color: Color,
 }
 
 pub type ThemeRef = Rc<Theme>;
@@ -18,14 +19,18 @@ impl Theme {
     const BANNER_FG: u8 = 232;
     const BANNER_BG: u8 = 35;
 
-    const ALERT_FG: u8 = 2;
-    const ALERT_BG: u8 = 232;
+    const ECHO_FG: u8 = 2;
+    const ECHO_BG: u8 = 232;
+
+    const PROMPT_FG: u8 = 247;
+    const PROMPT_BG: u8 = 233;
 
     pub fn new() -> Theme {
         Theme {
             text_color: Color::new(Self::TEXT_FG, Self::TEXT_BG),
             banner_color: Color::new(Self::BANNER_FG, Self::BANNER_BG),
-            alert_color: Color::new(Self::ALERT_FG, Self::ALERT_BG),
+            echo_color: Color::new(Self::ECHO_FG, Self::ECHO_BG),
+            prompt_color: Color::new(Self::PROMPT_FG, Self::PROMPT_BG),
         }
     }
 

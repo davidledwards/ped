@@ -377,7 +377,7 @@ impl Workspace {
         };
         Display::new(Point::ORIGIN + Size::rows(self.size.rows - 1))
             .set_cursor(Point::ORIGIN)
-            .set_color(self.theme.alert_color)
+            .set_color(self.theme.echo_color)
             .write_str(text)
             .write_str(" ".repeat(self.size.cols as usize - text.len()).as_str())
             .send();
