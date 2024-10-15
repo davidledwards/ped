@@ -143,7 +143,11 @@ impl Environment {
         self.active_id
     }
 
-    fn workspace(&self) -> Ref<'_, Workspace> {
+    pub fn get_editor(&self, id: u32) -> Option<EditorRef> {
+        self.editor_map.get(&id).cloned()
+    }
+
+    pub fn workspace(&self) -> Ref<'_, Workspace> {
         self.workspace.borrow()
     }
 

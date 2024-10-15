@@ -34,11 +34,21 @@ pub enum Action {
 
 fn open_file(env: &mut Environment) -> Result<Option<Action>> {
     let answer_fn = move |env: &mut Environment, answer: Option<&str>| {
-        // FIXME: do something useful
-        let action = answer
-            .map(|s| Some(Action::Alert(s.to_string())))
-            .unwrap_or(None);
-        Ok(action)
+        // FIXME: for testing purposes
+        if let Some(file) = answer {
+            if let Some(id) = env.open_view(Placement::Bottom) {
+                if let Some(editor) = env.get_editor(id) {
+                    editor.borrow_mut().insert_chars(&file.chars().collect());
+                }
+                Ok(None)
+            } else {
+                Ok(Some(Action::Alert(format!(
+                    "{file}: not enough room for new window"
+                ))))
+            }
+        } else {
+            Ok(None)
+        }
     };
     Ok(Some(Action::Question(
         "open file:".to_string(),

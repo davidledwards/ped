@@ -155,7 +155,7 @@ impl Workspace {
     ///
     /// Existing views will be resized as a side effect of opening a new view. However,
     /// the view will not be created, and resizing will not occur, if the resulting
-    /// number of rows would drop below [`Self::MIN_ROWS`].
+    /// number of rows would drop below [`Self::MIN_VIEW_ROWS`].
     ///
     /// This function panics if the `id` specified in [`Placement::Above`] or
     /// [`Placement::Below`] is not found, as this would indicate a correctness

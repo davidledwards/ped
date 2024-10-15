@@ -1,0 +1,5 @@
+usage: ped OPTIONS [file...]
+       ped --help
+       ped --version
+
+  The pedestrian terminal-based text editor.

@@ -1,3 +1,20 @@
+//! # ped
+//!
+//! The *ped*estrian text editor.
+//!
+//! Copyright 2024 David Edwards
+//!
+//! Licensed under the Apache License, Version 2.0 (the "License");
+//! you may not use this file except in compliance with the License.
+//! You may obtain a copy of the License at
+//!
+//! <https://www.apache.org/licenses/LICENSE-2.0>
+//!
+//! Unless required by applicable law or agreed to in writing, software
+//! distributed under the License is distributed on an "AS IS" BASIS,
+//! WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+//! See the License for the specific language governing permissions and
+//! limitations under the License.
 mod ansi;
 mod bind;
 mod buffer;
@@ -34,6 +51,24 @@ use std::ops::Drop;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
+/// Usage documentation for display to terminal.
+const USAGE: &str = include_str!("usage.in");
+
+// Version and build information.
+const PED_NAME: &str = env!("CARGO_PKG_NAME");
+const PED_VERSION: &str = env!("CARGO_PKG_VERSION");
+const BUILD_HASH: &str = env!("PED_VERSION_HASH");
+const BUILD_DATE: &str = env!("PED_VERSION_DATE");
+
+/// Used for restoring the terminal via [`Drop`] to its original state.
+struct RestoreTerminal;
+
+impl Drop for RestoreTerminal {
+    fn drop(&mut self) {
+        term::restore().unwrap_or_else(|e| println!("error restoring terminal: {e}"));
+    }
+}
+
 fn main() -> ExitCode {
     match run() {
         Err(e) => {
@@ -44,40 +79,38 @@ fn main() -> ExitCode {
     }
 }
 
-struct Reset;
-
-impl Drop for Reset {
-    fn drop(&mut self) {
-        if let Err(e) = term::restore() {
-            println!("error resetting terminal: {e:?}");
-        }
-    }
-}
-
 fn run() -> Result<()> {
     let opts = Options::parse(std::env::args().skip(1))?;
     if opts.help {
-        println!("usage: ped");
+        println!("{USAGE}");
+        Ok(())
+    } else if opts.version {
+        println!("{PED_NAME} {PED_VERSION} ({BUILD_HASH} {BUILD_DATE})");
+        Ok(())
     } else {
-        let editors = if let Some(file) = opts.files.iter().next() {
-            let mut buffer = Buffer::new();
-            let _ = io::read_file(file, &mut buffer)?;
-            buffer.set_pos(0);
-            vec![Editor::with_buffer(Some(PathBuf::from(file)), buffer.to_ref()).to_ref()]
-        } else {
-            Vec::new()
-        };
-
-        let bindings = Bindings::new();
-
-        term::init()?;
-        let _reset = Reset;
-
-        let keyboard = Keyboard::new();
-        let theme = Theme::new();
-        let workspace = Workspace::new(theme);
-        let mut controller = Controller::new(keyboard, bindings, workspace, editors);
-        controller.run()?
+        run_opts(&opts)
     }
+}
+
+fn run_opts(opts: &Options) -> Result<()> {
+    let editors = if let Some(file) = opts.files.iter().next() {
+        let mut buffer = Buffer::new();
+        let _ = io::read_file(file, &mut buffer)?;
+        buffer.set_pos(0);
+        vec![Editor::with_buffer(Some(PathBuf::from(file)), buffer.to_ref()).to_ref()]
+    } else {
+        Vec::new()
+    };
+
+    let bindings = Bindings::new();
+
+    term::init()?;
+    let _restore = RestoreTerminal;
+
+    let keyboard = Keyboard::new();
+    let theme = Theme::new();
+    let workspace = Workspace::new(theme);
+    let mut controller = Controller::new(keyboard, bindings, workspace, editors);
+    controller.run()?;
     Ok(())
 }

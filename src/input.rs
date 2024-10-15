@@ -28,13 +28,14 @@ pub struct InputEditor {
     /// The input buffer.
     input: Vec<char>,
 
-    /// The current position in [`input`] corresponding to [`cursor`].
+    /// The current position in [`input`](Self::input) corresponding to
+    /// [`cursor`](Self::cursor).
     pos: usize,
 
     /// The position of the cursor on the visible canvas.
     cursor: u32,
 
-    /// A predefined blank cell honoring the color [`theme`].
+    /// A predefined blank cell honoring the workspace color theme.
     blank_cell: Cell,
 }
 

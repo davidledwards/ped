@@ -1,55 +1,44 @@
-use std::process::Command;
-use std::str::from_utf8;
+use std::error::Error;
+use std::process::{Command, ExitCode};
+use std::str;
 
-const GIT_COMMAND: &str = "git";
-const GIT_ARGS: [&str; 3] = ["show", "--no-patch", "--format=%h %as"];
+const GIT_COMMAND: [&str; 4] = ["git", "show", "--no-patch", "--format=%h %as"];
 
-const DEFAULT_HASH: &str = "0000000";
-const DEFAULT_DATE: &str = "0000-00-00";
+const PED_VERSION_HASH: &str = "cargo:rustc-env=PED_VERSION_HASH";
+const PED_VERSION_DATE: &str = "cargo:rustc-env=PED_VERSION_DATE";
 
-fn main() {
-    let output = Command::new(GIT_COMMAND).args(GIT_ARGS).output();
-
-    let (hash, date) = match output {
-        Ok(out) if out.status.success() => match from_utf8(&out.stdout) {
-            Ok(s) => match s.split_once(' ') {
-                Some((hash, date)) => (Some(hash.to_string()), Some(date.to_string())),
-                None => (None, None),
-            },
-            Err(e) => {
-                eprintln!("error parsing UTF-8 output: {}", e);
-                (None, None)
-            }
-        },
-        Ok(out) => {
-            eprintln!("[{}]: {}", format_command(), out.status);
-            (None, None)
-        }
+fn main() -> ExitCode {
+    match run() {
         Err(e) => {
-            eprintln!("[{}]: {}", format_command(), e);
-            (None, None)
+            eprintln!("`{}`: {e}", GIT_COMMAND.join(" "));
+            ExitCode::from(1)
         }
-    };
-
-    println!(
-        "cargo:rustc-env=PED_VERSION_HASH={}",
-        hash.unwrap_or(DEFAULT_HASH.to_string())
-    );
-    println!(
-        "cargo:rustc-env=PED_VERSION_DATE={}",
-        date.unwrap_or(DEFAULT_DATE.to_string())
-    );
+        Ok(code) => code,
+    }
 }
 
-fn format_command() -> String {
-    format!(
-        "{GIT_COMMAND} {}",
-        GIT_ARGS.iter().fold(String::new(), |mut args, a| {
-            if args.len() > 0 {
-                args.push(' ');
-            }
-            args.push_str(a);
-            args
-        })
-    )
+fn run() -> Result<ExitCode, Box<dyn Error>> {
+    let out = Command::new(GIT_COMMAND[0])
+        .args(&GIT_COMMAND[1..])
+        .output()?;
+    let code = if out.status.success() {
+        let s = str::from_utf8(&out.stdout)?;
+        if let Some((hash, date)) = s.split_once(' ') {
+            println!("{PED_VERSION_HASH}={hash}");
+            println!("{PED_VERSION_DATE}={date}");
+            ExitCode::SUCCESS
+        } else {
+            eprintln!("\"{s}\": unable to split string");
+            ExitCode::from(1)
+        }
+    } else {
+        eprintln!(
+            "`{}`: exited with status {}",
+            GIT_COMMAND.join(" "),
+            out.status
+        );
+        eprintln!("{}", str::from_utf8(&out.stderr)?);
+        ExitCode::from(1)
+    };
+    Ok(code)
 }
