@@ -879,7 +879,7 @@ impl Editor {
                     |(row, col, row_pos), (pos, c)| {
                         if c == '\n' || col == self.view.cols - 1 {
                             // Move to next row when \n is encountered or cursor at right edge of
-                            // window, nothing that next row position always follows the current
+                            // window, noting that next row position always follows the current
                             // character.
                             (row + 1, 0, pos + 1)
                         } else {
