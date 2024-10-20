@@ -17,12 +17,12 @@ impl Theme {
     const TEXT_BG: u8 = 233;
 
     const BANNER_FG: u8 = 232;
-    const BANNER_BG: u8 = 35;
+    const BANNER_BG: u8 = 40;
 
     const ECHO_FG: u8 = 2;
-    const ECHO_BG: u8 = 232;
+    const ECHO_BG: u8 = 233;
 
-    const PROMPT_FG: u8 = 247;
+    const PROMPT_FG: u8 = 40;
     const PROMPT_BG: u8 = 233;
 
     pub fn new() -> Theme {

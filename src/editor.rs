@@ -713,15 +713,14 @@ impl Editor {
         let end_row = row + rows;
         let mut row = row;
         let mut col = 0;
+        let mut canvas = self.canvas_mut();
 
         for c in self.buffer.borrow().forward(row_pos) {
             if c == '\n' {
-                self.canvas_mut()
-                    .fill_row_from(row, col, self.view.blank_cell);
+                canvas.fill_row_from(row, col, self.view.blank_cell);
                 col = self.view.cols;
             } else {
-                self.canvas_mut()
-                    .set_cell(row, col, Cell::new(c, self.view.theme.text_color));
+                canvas.set_cell(row, col, Cell::new(c, self.view.theme.text_color));
                 col += 1;
             }
             if col == self.view.cols {
@@ -736,10 +735,8 @@ impl Editor {
         // Blanks out any remaining cells if end of buffer is reached for all rows not yet
         // processed.
         if row < end_row {
-            self.canvas_mut()
-                .fill_row_from(row, col, self.view.blank_cell);
-            self.canvas_mut()
-                .fill_rows(row + 1, end_row, self.view.blank_cell);
+            canvas.fill_row_from(row, col, self.view.blank_cell);
+            canvas.fill_rows(row + 1, end_row, self.view.blank_cell);
         }
     }
 
