@@ -4,8 +4,8 @@ use std::str;
 
 const GIT_COMMAND: [&str; 4] = ["git", "show", "--no-patch", "--format=%h %as"];
 
-const PED_VERSION_HASH: &str = "cargo:rustc-env=PED_VERSION_HASH";
-const PED_VERSION_DATE: &str = "cargo:rustc-env=PED_VERSION_DATE";
+const BUILD_HASH: &str = "cargo:rustc-env=BUILD_HASH";
+const BUILD_DATE: &str = "cargo:rustc-env=BUILD_DATE";
 
 fn main() -> ExitCode {
     match run() {
@@ -24,8 +24,8 @@ fn run() -> Result<ExitCode, Box<dyn Error>> {
     let code = if out.status.success() {
         let s = str::from_utf8(&out.stdout)?;
         if let Some((hash, date)) = s.split_once(' ') {
-            println!("{PED_VERSION_HASH}={hash}");
-            println!("{PED_VERSION_DATE}={date}");
+            println!("{BUILD_HASH}={hash}");
+            println!("{BUILD_DATE}={date}");
             ExitCode::SUCCESS
         } else {
             eprintln!("\"{s}\": unable to split string");

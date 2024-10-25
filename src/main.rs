@@ -55,10 +55,10 @@ use std::process::ExitCode;
 const USAGE: &str = include_str!("usage.in");
 
 // Version and build information.
-const PED_NAME: &str = env!("CARGO_PKG_NAME");
-const PED_VERSION: &str = env!("CARGO_PKG_VERSION");
-const BUILD_HASH: &str = env!("PED_VERSION_HASH");
-const BUILD_DATE: &str = env!("PED_VERSION_DATE");
+const PACKAGE_NAME: &str = env!("CARGO_PKG_NAME");
+const PACKAGE_VERSION: &str = env!("CARGO_PKG_VERSION");
+const BUILD_HASH: &str = env!("BUILD_HASH");
+const BUILD_DATE: &str = env!("BUILD_DATE");
 
 /// Used for restoring the terminal via [`Drop`] to its original state.
 struct RestoreTerminal;
@@ -85,7 +85,7 @@ fn run() -> Result<()> {
         println!("{USAGE}");
         Ok(())
     } else if opts.version {
-        println!("{PED_NAME} {PED_VERSION} ({BUILD_HASH} {BUILD_DATE})");
+        println!("{PACKAGE_NAME} {PACKAGE_VERSION} ({BUILD_HASH} {BUILD_DATE})");
         Ok(())
     } else {
         run_opts(&opts)
