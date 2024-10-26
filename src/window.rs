@@ -1,7 +1,8 @@
 //! Window management.
 use crate::canvas::{Canvas, CanvasRef};
-use crate::display::{Display, Point, Size};
+use crate::size::{Point, Size};
 use crate::theme::{Theme, ThemeRef};
+use crate::writer::Writer;
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -13,7 +14,7 @@ pub struct Banner {
     title: String,
     dirty: bool,
     cursor: Point,
-    display: Display,
+    writer: Writer,
 }
 
 pub type BannerRef = Rc<RefCell<Banner>>;
@@ -39,7 +40,7 @@ impl Banner {
             title: String::new(),
             dirty: false,
             cursor: Point::ORIGIN,
-            display: Display::new(origin),
+            writer: Writer::new(origin),
         }
     }
 
@@ -51,7 +52,7 @@ impl Banner {
             title: String::new(),
             dirty: false,
             cursor: Point::ORIGIN,
-            display: Display::new(Point::ORIGIN),
+            writer: Writer::new(Point::ORIGIN),
         }
     }
 
@@ -61,12 +62,10 @@ impl Banner {
     }
 
     pub fn draw(&mut self) {
-        self.display
-            .set_cursor(Point::ORIGIN)
-            .set_color(self.theme.banner_color);
+        self.writer.set_origin().set_color(self.theme.banner_color);
 
         if self.cols < Self::MIN_COLS {
-            self.display
+            self.writer
                 .write_str(" ".repeat(self.cols as usize).as_str());
         } else {
             // Calculates number of columns required to display full content of
@@ -97,7 +96,7 @@ impl Banner {
             let gap_len =
                 self.cols as usize - title.len() - cursor.len() - (Self::WS_SIZE - Self::GAP_SIZE);
 
-            self.display
+            self.writer
                 .write(' ')
                 .write(if self.dirty { '*' } else { ' ' })
                 .write_str(title)
@@ -105,7 +104,7 @@ impl Banner {
                 .write_str(cursor.as_str())
                 .write_str("  ");
         }
-        self.display.send();
+        self.writer.send();
     }
 
     pub fn set_title(&mut self, title: String) -> &mut Banner {

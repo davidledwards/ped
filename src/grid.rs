@@ -1,6 +1,6 @@
 //! Grid of cells for arranging characters.
 use crate::color::Color;
-use crate::display::{Point, Size};
+use crate::size::{Point, Size};
 
 /// A 2-dimensional array of [`Cell`]s.
 pub struct Grid {

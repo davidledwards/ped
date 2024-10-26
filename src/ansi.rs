@@ -1,6 +1,6 @@
 //! ANSI escape sequences.
 use crate::color::Color;
-use crate::display::Point;
+use crate::size::Point;
 
 pub const CSI: &str = "\x1b[";
 

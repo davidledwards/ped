@@ -1,7 +1,7 @@
 //! Canvas.
-use crate::display::{Display, Point, Size};
-use crate::grid::Cell;
-use crate::grid::Grid;
+use crate::grid::{Cell, Grid};
+use crate::size::{Point, Size};
+use crate::writer::Writer;
 
 use std::cell::RefCell;
 use std::cmp;
@@ -12,7 +12,7 @@ pub struct Canvas {
     size: Size,
     back: Grid,
     front: Grid,
-    display: Display,
+    writer: Writer,
 }
 
 pub type CanvasRef = Rc<RefCell<Canvas>>;
@@ -24,7 +24,7 @@ impl Canvas {
             size,
             back: Grid::new(size),
             front: Grid::new(size),
-            display: Display::new(origin),
+            writer: Writer::new(origin),
         }
     }
 
@@ -34,7 +34,7 @@ impl Canvas {
             size: Size::ZERO,
             back: Grid::zero(),
             front: Grid::zero(),
-            display: Display::new(Point::ORIGIN),
+            writer: Writer::new(Point::ORIGIN),
         }
     }
 
@@ -176,11 +176,11 @@ impl Canvas {
         debug_assert!(cursor.row < self.size.rows);
         debug_assert!(cursor.col < self.size.cols);
 
-        self.display.set_cursor(cursor);
-        self.display.send();
+        self.writer.set_cursor(cursor);
+        self.writer.send();
     }
 
-    /// Draw pending canvas modifications to display.
+    /// Draw pending canvas modifications.
     pub fn draw(&mut self) {
         // Determine which cells changed in back grid, if any, which then results in
         // constructing series of instructions to update display.
@@ -191,34 +191,34 @@ impl Canvas {
                 self.draw_cell(p, cell, hint);
                 hint = Some((p, cell));
             }
-            self.display.send();
+            self.writer.send();
         }
     }
 
     /// Clears the front grid such that a subsequent [`draw`](Self::draw) will effectively
-    /// render the entire display.
+    /// render the entire canvas.
     pub fn clear(&mut self) {
         self.front.clear();
     }
 
     /// Draws `cell` at point `p`.
     ///
-    /// An optional `hint` is used optimize display output, where the hint is the last
+    /// An optional `hint` is used to optimize the output, where the hint is the last
     /// cell drawn.
     fn draw_cell(&mut self, p: Point, cell: Cell, hint: Option<(Point, Cell)>) {
         match hint {
             Some((prev_p, prev_cell)) => {
                 if p.row != prev_p.row || p.col != prev_p.col + 1 {
-                    self.display.set_cursor(p);
+                    self.writer.set_cursor(p);
                 }
                 if cell.color != prev_cell.color {
-                    self.display.set_color(cell.color);
+                    self.writer.set_color(cell.color);
                 }
             }
             None => {
-                self.display.set_cursor(p).set_color(cell.color);
+                self.writer.set_cursor(p).set_color(cell.color);
             }
         }
-        self.display.write(cell.value);
+        self.writer.write(cell.value);
     }
 }

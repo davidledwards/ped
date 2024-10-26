@@ -1,8 +1,8 @@
 //! Editor.
 use crate::buffer::{Buffer, BufferRef};
 use crate::canvas::{Canvas, CanvasRef};
-use crate::display::{Point, Size};
 use crate::grid::Cell;
+use crate::size::{Point, Size};
 use crate::theme::ThemeRef;
 use crate::window::{BannerRef, Window, WindowRef};
 

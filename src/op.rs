@@ -10,10 +10,10 @@
 //!
 //! See [`Bindings`](crate::bind::Bindings) for further details on binding keys
 //! at runtime.
-use crate::display::{Point, Size};
 use crate::editor::Align;
 use crate::env::Environment;
 use crate::error::Result;
+use crate::size::{Point, Size};
 use crate::workspace::Placement;
 
 use std::collections::HashMap;

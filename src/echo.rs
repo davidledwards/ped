@@ -1,6 +1,6 @@
 //! Echo messages to the shared region of a workspace.
-use crate::display::{Display, Point};
 use crate::workspace::WorkspaceRef;
+use crate::writer::Writer;
 
 pub struct Echo {
     workspace: WorkspaceRef,
@@ -33,8 +33,7 @@ impl Echo {
             let chars = text.chars().take(size.cols as usize).collect::<Vec<_>>();
             let blank_cols = size.cols - chars.len() as u32;
 
-            Display::new(origin)
-                .set_cursor(Point::ORIGIN)
+            Writer::new_at(origin)
                 .set_color(self.workspace.borrow().theme().echo_color)
                 .write_str(chars.into_iter().collect::<String>().as_str())
                 .write_str(" ".repeat(blank_cols as usize).as_str())

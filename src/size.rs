@@ -1,9 +1,5 @@
-//! Sends display instructions to terminal.
-use crate::ansi;
-use crate::color::Color;
-
-use std::fmt;
-use std::io::{self, Write};
+//! Basic types representing size and point information.
+use std::fmt::{self, Display, Formatter};
 use std::ops::{Add, Sub};
 
 /// Represents the size of a 2-dimensional space expressed as `rows` and `cols`.
@@ -29,8 +25,8 @@ impl Size {
     }
 }
 
-impl fmt::Display for Size {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Display for Size {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}/{}", self.rows, self.cols)
     }
 }
@@ -64,8 +60,8 @@ impl Point {
     }
 }
 
-impl fmt::Display for Point {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Display for Point {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}:{}", self.row, self.col)
     }
 }
@@ -91,55 +87,5 @@ impl Add<(u32, u32)> for Point {
 
     fn add(self, rhs: (u32, u32)) -> Point {
         self + Point::new(rhs.0, rhs.1)
-    }
-}
-
-/// A buffered abstraction over standard output that supports sending content to the
-/// display in a structured way.
-///
-/// Cursor operations are relative to an [origin](`Point`) that is provided during
-/// instantiation of the display.
-pub struct Display {
-    origin: Point,
-    out: String,
-}
-
-impl Display {
-    /// Creates a display with `origin` as its reference point for cursor operations.
-    pub fn new(origin: Point) -> Display {
-        Display {
-            origin,
-            out: String::new(),
-        }
-    }
-
-    /// Sends buffered changes to standard output.
-    pub fn send(&mut self) {
-        if self.out.len() > 0 {
-            print!("{}", self.out);
-            let _ = io::stdout().flush();
-            self.out.clear();
-        }
-    }
-
-    pub fn set_cursor(&mut self, cursor: Point) -> &mut Display {
-        self.out
-            .push_str(ansi::set_cursor(self.origin + cursor).as_str());
-        self
-    }
-
-    pub fn set_color(&mut self, color: Color) -> &mut Display {
-        self.out.push_str(ansi::set_color(color).as_str());
-        self
-    }
-
-    pub fn write(&mut self, c: char) -> &mut Display {
-        self.out.push(c);
-        self
-    }
-
-    pub fn write_str(&mut self, text: &str) -> &mut Display {
-        self.out.push_str(text);
-        self
     }
 }

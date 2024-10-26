@@ -1,8 +1,9 @@
 //! Workspace management.
-use crate::display::{Display, Point, Size};
+use crate::size::{Point, Size};
 use crate::term;
 use crate::theme::{Theme, ThemeRef};
 use crate::window::{Window, WindowRef};
+use crate::writer::Writer;
 
 use std::cell::RefCell;
 use std::cmp;
@@ -364,8 +365,7 @@ impl Workspace {
     }
 
     pub fn clear_shared(&mut self) {
-        Display::new(self.shared_origin)
-            .set_cursor(Point::ORIGIN)
+        Writer::new_at(self.shared_origin)
             .set_color(self.theme.echo_color)
             .write_str(" ".repeat(self.size.cols as usize).as_str())
             .send();

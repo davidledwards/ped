@@ -1,12 +1,13 @@
 //! Input editor.
 use crate::canvas::Canvas;
-use crate::display::{Display, Point, Size};
 use crate::grid::Cell;
 use crate::key::{
     Key, CTRL_A, CTRL_B, CTRL_D, CTRL_E, CTRL_F, CTRL_G, CTRL_H, CTRL_J, CTRL_K, CTRL_M, DELETE,
     END, HOME, LEFT, RIGHT,
 };
+use crate::size::{Point, Size};
 use crate::workspace::WorkspaceRef;
+use crate::writer::Writer;
 
 use std::cmp;
 
@@ -251,8 +252,7 @@ impl InputEditor {
 
             let (origin, _) = self.workspace.borrow().shared_region();
             let color = self.workspace.borrow().theme().prompt_color;
-            Display::new(origin)
-                .set_cursor(Point::ORIGIN)
+            Writer::new_at(origin)
                 .set_color(color)
                 .write_str(prompt.as_str())
                 .write(' ')
