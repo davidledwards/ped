@@ -30,6 +30,8 @@ pub struct Editor {
     /// Position of the cursor in the window.
     cursor: Point,
 
+    mark: Option<Mark>,
+
     /// Attached window.
     view: View,
 }
@@ -49,6 +51,11 @@ pub enum Align {
 
     /// Try aligning the cursor at the bottom of the window.
     Bottom,
+}
+
+enum Mark {
+    Soft(usize),
+    Hard(usize),
 }
 
 struct View {
@@ -109,6 +116,7 @@ impl Editor {
             row_pos: 0,
             snap_col: None,
             cursor: Point::ORIGIN,
+            mark: None,
             view: View::new(Window::zombie().to_ref()),
         }
     }
