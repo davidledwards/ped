@@ -51,6 +51,16 @@ impl Writer {
         self
     }
 
+    pub fn show_cursor(&mut self) -> &mut Writer {
+        self.out.push_str(ansi::show_cursor());
+        self
+    }
+
+    pub fn hide_cursor(&mut self) -> &mut Writer {
+        self.out.push_str(ansi::hide_cursor());
+        self
+    }
+
     pub fn set_color(&mut self, color: Color) -> &mut Writer {
         self.out.push_str(ansi::set_color(color).as_str());
         self

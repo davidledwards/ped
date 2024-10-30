@@ -187,11 +187,12 @@ impl Canvas {
         let changes = self.front.reconcile(&self.back);
         if changes.len() > 0 {
             let mut hint = None;
+            self.writer.hide_cursor();
             for (p, cell) in changes {
                 self.draw_cell(p, cell, hint);
                 hint = Some((p, cell));
             }
-            self.writer.send();
+            self.writer.show_cursor().send();
         }
     }
 
