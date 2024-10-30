@@ -377,13 +377,6 @@ impl Editor {
         }
     }
 
-    pub fn move_to(&mut self, pos: usize) {
-        // move cursor to given pos
-        // set row, col, row_pos accordingly
-        // render screen
-        // could move up or down
-    }
-
     pub fn move_up(&mut self) {
         // Tries to move cursor up by 1 row, though it may already be at top of buffer.
         let (row_pos, rows) = self.find_up(self.row_pos, 1);
@@ -719,30 +712,29 @@ impl Editor {
 
         // Objective of this loop is to write specified range of rows to window.
         let end_row = row + rows;
-        let mut row = row;
-        let mut col = 0;
         let mut canvas = self.canvas_mut();
-
-        for c in self.buffer.borrow().forward(row_pos) {
-            if c == '\n' {
-                canvas.fill_row_from(row, col, self.view.blank_cell);
-                col = self.view.cols;
-            } else {
-                canvas.set_cell(row, col, Cell::new(c, self.view.theme.text_color));
-                col += 1;
-            }
-            if col == self.view.cols {
-                row += 1;
-                col = 0;
-            }
-            if row == end_row {
-                break;
-            }
-        }
-
-        // Blanks out any remaining cells if end of buffer is reached for all rows not yet
-        // processed.
-        if row < end_row {
+        let row_col = self
+            .buffer()
+            .forward(row_pos)
+            .try_fold((row, 0), |(row, col), c| {
+                let (row, col) = if c == '\n' {
+                    canvas.fill_row_from(row, col, self.view.blank_cell);
+                    (row + 1, 0)
+                } else {
+                    canvas.set_cell(row, col, Cell::new(c, self.view.theme.text_color));
+                    if col + 1 < self.view.cols {
+                        (row, col + 1)
+                    } else {
+                        (row + 1, 0)
+                    }
+                };
+                if row < end_row {
+                    Some((row, col))
+                } else {
+                    None
+                }
+            });
+        if let Some((row, col)) = row_col {
             canvas.fill_row_from(row, col, self.view.blank_cell);
             canvas.fill_rows(row + 1, end_row, self.view.blank_cell);
         }
