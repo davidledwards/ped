@@ -1,6 +1,6 @@
 # ped
 
-The *ped*estrian text editor.
+The $${\color{blue}ped}$$estrian text editor.
 
 ## Background
 
