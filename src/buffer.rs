@@ -144,6 +144,11 @@ impl Buffer {
         }
     }
 
+    /// Returns the line number corresponding to `pos`.
+    pub fn line_of(&self, pos: usize) -> usize {
+        self.forward(0).take(pos).filter(|c| *c == '\n').count()
+    }
+
     /// Returns the position of the first character of the line relative to `pos`.
     ///
     /// Specifically, this function returns the position of the character following the
@@ -151,7 +156,7 @@ impl Buffer {
     /// beginning of buffer is reached.
     ///
     /// Note that when scanning backwards, `pos` is an _exclusive_ bound.
-    pub fn find_beg_line(&self, pos: usize) -> usize {
+    pub fn find_start_line(&self, pos: usize) -> usize {
         self.backward(pos)
             .index()
             .find(|&(_, c)| c == '\n')
@@ -162,9 +167,9 @@ impl Buffer {
     /// Returns the position of the end of line relative to `pos`.
     ///
     /// Specifically, this function returns the position of the first `\n` encountered when
-    /// scanning foewards from `pos`, or returns the end of buffer position if reached first.
+    /// scanning forward from `pos`, or returns the end of buffer position if reached first.
     ///
-    /// Note that when scanning forwards, `pos` is an _inclusive_ bound.
+    /// Note that when scanning forward, `pos` is an _inclusive_ bound.
     pub fn find_end_line(&self, pos: usize) -> usize {
         self.forward(pos)
             .index()
@@ -186,6 +191,14 @@ impl Buffer {
             .find(|&(_, c)| c == '\n')
             .map(|(_pos, _)| _pos)
             .unwrap_or_else(|| cmp::min(pos + n, self.size))
+    }
+
+    pub fn find_next_line(&self, pos: usize) -> usize {
+        self.forward(pos)
+            .index()
+            .find(|&(_, c)| c == '\n')
+            .map(|(_pos, _)| _pos + 1)
+            .unwrap_or(self.size)
     }
 
     /// Returns a `Some` containing either the position of the first character of the line
@@ -671,7 +684,7 @@ mod tests {
     }
 
     #[test]
-    fn find_beg_line() {
+    fn find_start_line() {
         const TEXT: &str = "abc\ndef\nghi";
 
         let mut buf = Buffer::new();
@@ -680,14 +693,14 @@ mod tests {
 
         // All chars in `def\n` range should find the same beginning of line.
         for pos in 4..8 {
-            let p = buf.find_beg_line(pos);
+            let p = buf.find_start_line(pos);
             assert_eq!(p, 4);
         }
 
         // All chars in `abc\n` range should find the same beginning of line, which
         // also happens to be beginning of buffer.
         for pos in 0..4 {
-            let p = buf.find_beg_line(pos);
+            let p = buf.find_start_line(pos);
             assert_eq!(p, 0);
         }
     }

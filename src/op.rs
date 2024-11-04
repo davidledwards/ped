@@ -38,7 +38,7 @@ fn open_file(env: &mut Environment) -> Result<Option<Action>> {
         if let Some(file) = answer {
             if let Some(id) = env.open_view(Placement::Bottom) {
                 if let Some(editor) = env.get_editor(id) {
-                    editor.borrow_mut().insert_chars(&file.chars().collect());
+                    editor.borrow_mut().insert(&file.chars().collect());
                 }
                 Ok(None)
             } else {
@@ -77,25 +77,25 @@ fn delete_char_right(env: &mut Environment) -> Result<Option<Action>> {
 
 /// Operation: `move-up`
 fn move_up(env: &mut Environment) -> Result<Option<Action>> {
-    env.active_editor().move_up();
+    env.active_editor().move_up(1, false);
     Ok(None)
 }
 
 /// Operation: `move-down`
 fn move_down(env: &mut Environment) -> Result<Option<Action>> {
-    env.active_editor().move_down();
+    env.active_editor().move_down(1, false);
     Ok(None)
 }
 
 /// Operation: `move-left`
 fn move_left(env: &mut Environment) -> Result<Option<Action>> {
-    env.active_editor().move_left();
+    env.active_editor().move_left(1);
     Ok(None)
 }
 
 /// Operation: `move-right`
 fn move_right(env: &mut Environment) -> Result<Option<Action>> {
-    env.active_editor().move_right();
+    env.active_editor().move_right(1);
     Ok(None)
 }
 
@@ -125,19 +125,19 @@ fn move_bottom(env: &mut Environment) -> Result<Option<Action>> {
 
 /// Operation: `scroll-up`
 fn scroll_up(env: &mut Environment) -> Result<Option<Action>> {
-    env.active_editor().scroll_up();
+    env.active_editor().scroll_up(1);
     Ok(None)
 }
 
 /// Operation: `scroll-down`
 fn scroll_down(env: &mut Environment) -> Result<Option<Action>> {
-    env.active_editor().scroll_down();
+    env.active_editor().scroll_down(1);
     Ok(None)
 }
 
 /// Operation: `move-begin-line`
 fn move_begin_line(env: &mut Environment) -> Result<Option<Action>> {
-    env.active_editor().move_beg();
+    env.active_editor().move_start();
     Ok(None)
 }
 

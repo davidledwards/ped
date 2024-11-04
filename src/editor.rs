@@ -21,8 +21,8 @@ pub struct Editor {
     /// Buffer position corresponding to the cursor.
     cur_pos: usize,
 
-    /// Buffer position corresponding to the first character of the `cursor` row.
-    row_pos: usize,
+    top_line: Line,
+    cur_line: Line,
 
     /// An optional column to which the cursor should *snap* when moving up and down.
     snap_col: Option<u32>,
@@ -30,13 +30,69 @@ pub struct Editor {
     /// Position of the cursor in the window.
     cursor: Point,
 
-    mark: Option<Mark>,
-
     /// Attached window.
     view: View,
 }
 
 pub type EditorRef = Rc<RefCell<Editor>>;
+
+#[derive(Clone)]
+struct Line {
+    row_pos: usize,
+    // this value does NOT include \n
+    row_len: usize,
+    line_pos: usize,
+    // this value does NOT include \n
+    line_len: usize,
+    line_nbr: usize,
+}
+
+impl Line {
+    fn zero() -> Line {
+        Line {
+            row_pos: 0,
+            row_len: 0,
+            line_pos: 0,
+            line_len: 0,
+            line_nbr: 0,
+        }
+    }
+
+    fn is_top(&self) -> bool {
+        self.row_pos == 0
+    }
+
+    fn has_wrapped(&self) -> bool {
+        self.row_pos > self.line_pos
+    }
+
+    fn snap_col(&self, col: u32) -> u32 {
+        cmp::min(col, self.row_len as u32)
+    }
+
+    fn pos_of(&self, col: u32) -> usize {
+        self.row_pos + col as usize
+    }
+
+    fn col_of(&self, pos: usize) -> u32 {
+        (pos - self.row_pos) as u32
+    }
+
+    fn end_col(&self) -> u32 {
+        self.row_len as u32
+    }
+
+    fn end_pos(&self) -> usize {
+        self.row_pos + self.row_len
+    }
+
+    fn point_of(&self, col: u32) -> Point {
+        Point::new(
+            self.line_nbr as u32 + 1,
+            (self.row_pos - self.line_pos) as u32 + col + 1,
+        )
+    }
+}
 
 /// Various cursor alignment directives.
 pub enum Align {
@@ -51,11 +107,6 @@ pub enum Align {
 
     /// Try aligning the cursor at the bottom of the window.
     Bottom,
-}
-
-enum Mark {
-    Soft(usize),
-    Hard(usize),
 }
 
 struct View {
@@ -113,10 +164,10 @@ impl Editor {
             path,
             buffer,
             cur_pos,
-            row_pos: 0,
+            top_line: Line::zero(),
+            cur_line: Line::zero(),
             snap_col: None,
             cursor: Point::ORIGIN,
-            mark: None,
             view: View::new(Window::zombie().to_ref()),
         }
     }
@@ -137,22 +188,35 @@ impl Editor {
                 None => "new".to_string(),
             };
 
+            self.align_cursor(Align::Auto);
+
             self.view
                 .banner
                 .borrow_mut()
                 .set_title(title)
-                .set_cursor(self.cursor)
+                .set_cursor(self.cur_line.point_of(self.cursor.col))
                 .draw();
 
-            self.align_cursor(Align::Auto);
             self.draw();
         }
+    }
+
+    fn set_top_line(&mut self, try_row: u32) -> u32 {
+        self.top_line = self.cur_line.clone();
+        for row in 0..try_row {
+            if let Some(line) = self.prev_line(&self.top_line) {
+                self.top_line = line;
+            } else {
+                return row;
+            }
+        }
+        try_row
     }
 
     pub fn align_cursor(&mut self, align: Align) {
         // Determine ideal row where cursor would like to be focused, though this should
         // be considered a hint.
-        let row = match align {
+        let try_row = match align {
             Align::Auto => cmp::min(self.cursor.row, self.view.rows - 1),
             Align::Center => self.view.rows / 2,
             Align::Top => 0,
@@ -161,19 +225,17 @@ impl Editor {
 
         // Tries to position cursor on target row, but no guarantee depending on proximity
         // of row to top of buffer.
-        let col = self.column_of(self.cur_pos);
-        self.row_pos = self.cur_pos - col as usize;
+        self.cur_line = self.find_line(self.cur_pos);
+        let row = self.set_top_line(try_row);
+        let col = self.cur_line.col_of(self.cur_pos);
         self.snap_col = None;
-        let (_, row) = self.find_up(self.row_pos, row);
         self.cursor = Point::new(row, col);
     }
 
     pub fn draw(&mut self) {
-        let (top_pos, _) = self.find_up(self.row_pos, self.cursor.row);
-        self.render_rows_from(0, top_pos);
         self.canvas_mut().clear();
-        self.canvas_mut().draw();
-        self.canvas_mut().set_cursor(self.cursor);
+        self.render();
+        self.show_cursor();
     }
 
     pub fn get_size(&self) -> Size {
@@ -189,59 +251,40 @@ impl Editor {
     }
 
     pub fn insert_char(&mut self, c: char) {
-        self.insert_chars(&vec![c])
+        self.insert(&vec![c])
     }
 
-    pub fn insert_chars(&mut self, cs: &Vec<char>) {
-        // Knowing number of wrapping rows prior to insertion helps optimize rendering
-        // when resulting cursor remains on same row.
-        let wrap_rows = self.wrapped_rows(self.row_pos);
+    pub fn insert(&mut self, cs: &Vec<char>) {
         self.buffer_mut().set_pos(self.cur_pos);
         let cur_pos = self.buffer_mut().insert_chars(cs);
 
-        // Locate resulting cursor position and render accordingly.
-        let (maybe_row, col, row_pos) = self.find_cursor(cur_pos);
-        let row = match maybe_row {
-            Some(row) => {
-                if row == self.cursor.row {
-                    if self.wrapped_rows(self.row_pos) > wrap_rows {
-                        // Insertion caused more rows to wrap, so everything below current
-                        // row essentially gets shifted down.
-                        self.render_rows_from(row, self.row_pos);
-                    } else {
-                        // Number of wrapping rows did not change after insertion, so limit
-                        // rendering to only those rows that wrap. Note that number of
-                        // wrapping rows could extend beyond bottom of window, so ensure
-                        // that number is appropriately bounded.
-                        let rows = cmp::min(wrap_rows + 1, self.view.rows - row);
-                        self.render_rows(row, rows, self.row_pos);
-                    }
-                    row
-                } else {
-                    // New cursor on different row but still visible, so render all rows
-                    // starting from current row.
-                    self.render_rows_from(self.cursor.row, self.row_pos);
-                    row
-                }
-            }
-            None => {
-                // New cursor position not visible, so find top of buffer and render entire
-                // window.
-                let (top_pos, _) = self.find_up(row_pos, self.view.rows - 1);
-                self.render_rows_from(0, top_pos);
-                self.view.rows - 1
-            }
+        // update the current line since insertion will changed info
+        self.cur_line = self.update_line(&self.cur_line);
+
+        let rows = self.find_down_cur_line(cur_pos);
+
+        let row = self.cursor.row + rows;
+        let row = if row < self.view.rows {
+            // this means the new cursor has not moved beyond the bottom
+            // however, we need to update the top line in case it was affected by
+            // the insertion
+            self.top_line = self.update_line(&self.top_line);
+            row
+        } else {
+            // new row is beyond bottom, so find the new top line
+            self.set_top_line(self.view.rows - 1)
         };
-        self.canvas_mut().draw();
+
+        let col = self.cur_line.col_of(cur_pos);
         self.cur_pos = cur_pos;
-        self.row_pos = row_pos;
         self.snap_col = None;
+        self.render();
         self.set_cursor(row, col);
     }
 
     pub fn delete_left(&mut self) -> Option<char> {
         if self.cur_pos > 0 {
-            let cs = self.remove_from(self.cur_pos - 1);
+            let cs = self.remove(self.cur_pos - 1);
             Some(cs[0])
         } else {
             None
@@ -250,7 +293,7 @@ impl Editor {
 
     pub fn delete_right(&mut self) -> Option<char> {
         if self.cur_pos < self.buffer().size() {
-            let cs = self.remove_to(self.cur_pos + 1);
+            let cs = self.remove(self.cur_pos + 1);
             Some(cs[0])
         } else {
             None
@@ -262,312 +305,274 @@ impl Editor {
     /// Specifically, characters in the range [`from_pos`, `self.cur_pos`) are removed
     /// if `from_pos` is less than `self.cur_pos`, otherwise the operation is ignored
     /// and an empty vector is returned.
-    pub fn remove_from(&mut self, from_pos: usize) -> Vec<char> {
-        if from_pos < self.cur_pos {
-            // Calculate number of wrapping rows prior to text removal in order to
-            // help optimize rendering when resulting cursor remains on same row.
-            let wrap_rows = self.wrapped_rows(self.find_row_pos(from_pos));
-
-            // Locate resulting cursor position before removing text.
-            let (maybe_row, col, row_pos) = self.find_cursor(from_pos);
-
-            // This unwrap should never panic since condition of entering this block
-            // is that > 0 characters will be removed.
-            self.buffer_mut().set_pos(from_pos);
-            let text = self
-                .buffer_mut()
-                .remove_chars(self.cur_pos - from_pos)
-                .unwrap();
-
-            let row = match maybe_row {
-                Some(row) => {
-                    if row == self.cursor.row {
-                        if self.wrapped_rows(row_pos) < wrap_rows {
-                            // Removal caused less rows to wrap, so everything below
-                            // current row essentially gets shifted up.
-                            self.render_rows_from(row, row_pos);
-                        } else {
-                            // Number of wrapping rows did not change after removal, so
-                            // limit rendering to only those rows that wrap. Note that number
-                            // of wrapping rows could extend beyond bottom of window, so
-                            // ensure that number is appropriately bounded.
-                            let rows = cmp::min(wrap_rows + 1, self.view.rows - row);
-                            self.render_rows(row, rows, row_pos);
-                        }
-                        row
-                    } else {
-                        // New cursor on different row but still visible, so render all rows
-                        // starting from the new row.
-                        self.render_rows_from(row, row_pos);
-                        row
-                    }
-                }
-                None => {
-                    // New cursor position not visible, so position new row at top of
-                    // window and render entire window.
-                    self.render_rows_from(0, row_pos);
-                    0
-                }
-            };
-            self.canvas_mut().draw();
-            self.cur_pos = from_pos;
-            self.row_pos = row_pos;
-            self.snap_col = None;
-            self.set_cursor(row, col);
-            text
-        } else {
-            vec![]
-        }
-    }
-
+    ///
     /// Removes and returns characters from the cursor position to `to_pos`.
     ///
     /// Specifically, characters in the range [`self.cur_pos`, `to_pos`) are removed
     /// if `to_pos` is greater than `self.cur_pos`, otherwise the operation is ignored
     /// and an empty vector is returned.
-    pub fn remove_to(&mut self, to_pos: usize) -> Vec<char> {
-        let to_pos = cmp::min(to_pos, self.buffer().size());
-        if to_pos > self.cur_pos {
-            // Possibly capture number of wrapping rows prior to text removal, but only
-            // if from and to positions share same beginning of line.
-            let wrap_rows = if self.buffer().find_beg_line(to_pos) <= self.cur_pos {
-                Some(self.wrapped_rows(self.row_pos))
-            } else {
-                None
-            };
-
-            // This unwrap should never panic since condition of entering this block
-            // is that > 0 characters will be removed.
-            self.buffer_mut().set_pos(self.cur_pos);
-            let text = self
-                .buffer_mut()
-                .remove_chars(to_pos - self.cur_pos)
-                .unwrap();
-
-            match wrap_rows {
-                Some(wrap_rows) => {
-                    // This condition occurs when from and to positions share same
-                    // beginning of line, which means rendering can be optimized under
-                    // certain circumstances.
-                    if self.wrapped_rows(self.row_pos) < wrap_rows {
-                        // Removal caused less rows to wrap, so everything below current
-                        // row essentially gets shifted up.
-                        self.render_rows_from(self.cursor.row, self.row_pos);
-                    } else {
-                        // Number of wrapping rows did not change after removal, so limit
-                        // rendering to only those rows that wrap. Note that number of
-                        // wrapping rows could extend beyond bottom of window, so ensure
-                        // that number is appropriately bounded.
-                        let rows = cmp::min(wrap_rows + 1, self.view.rows - self.cursor.row);
-                        self.render_rows(self.cursor.row, rows, self.row_pos);
-                    }
-                }
-                None => {
-                    // This condition occurs when from and to positions do not share
-                    // same beginning of line, which means following rows always shift up.
-                    self.render_rows_from(self.cursor.row, self.row_pos);
-                }
-            }
-            self.canvas_mut().draw();
-            self.canvas_mut().set_cursor(self.cursor);
-            self.snap_col = None;
-            text
+    pub fn remove(&mut self, pos: usize) -> Vec<char> {
+        let pos = cmp::min(pos, self.buffer().size());
+        let (from_pos, len) = if pos < self.cur_pos {
+            (pos, self.cur_pos - pos)
         } else {
-            vec![]
-        }
+            (self.cur_pos, pos - self.cur_pos)
+        };
+
+        let row = if from_pos < self.cur_pos {
+            // backtrack to find cur line that contains from_pos
+            let rows = self.find_up_cur_line(from_pos);
+            if rows > self.cursor.row {
+                // new row is above top
+                self.set_top_line(0)
+            } else {
+                // new row is still visible
+                self.cursor.row - rows
+            }
+        } else {
+            // cursor will remain on same row
+            self.cursor.row
+        };
+
+        self.buffer_mut().set_pos(from_pos);
+        let text = self.buffer_mut().remove_chars(len).unwrap();
+
+        // both lines must be updated after removal since the information may have
+        // changed
+        self.cur_line = self.update_line(&self.cur_line);
+        self.top_line = self.update_line(&self.top_line);
+
+        let col = self.cur_line.col_of(from_pos);
+        self.cur_pos = from_pos;
+        self.snap_col = None;
+        self.render();
+        self.set_cursor(row, col);
+        text
     }
 
-    pub fn move_up(&mut self) {
-        // Tries to move cursor up by 1 row, though it may already be at top of buffer.
-        let (row_pos, rows) = self.find_up(self.row_pos, 1);
+    fn up_cur_line(&mut self, try_rows: u32) -> u32 {
+        for rows in 0..try_rows {
+            if let Some(line) = self.prev_line(&self.cur_line) {
+                self.cur_line = line;
+            } else {
+                return rows;
+            }
+        }
+        try_rows
+    }
+
+    pub fn move_up(&mut self, try_rows: u32, pin: bool) {
+        let rows = self.up_cur_line(try_rows);
         if rows > 0 {
-            // Snap column takes precedence over cursor column.
-            let try_col = self.snap_col.take().unwrap_or(self.cursor.col);
-            let (cur_pos, col) = self.find_col(row_pos, try_col);
-
-            // Changes to canvas only occur when cursor is already at top row of window,
-            // otherwise just change position of cursor on display.
-            let row = if self.cursor.row > 0 {
-                self.cursor.row - 1
-            } else {
-                self.canvas_mut().scroll_down(0, 1);
-                self.render_rows(0, 1, row_pos);
-                self.canvas_mut().draw();
-                0
-            };
-
-            self.cur_pos = cur_pos;
-            self.row_pos = row_pos;
-            self.snap_col = Some(try_col);
-            self.set_cursor(row, col);
-        }
-    }
-
-    pub fn move_down(&mut self) {
-        // Tries to move cursor down by 1 row, though it may already be at end of buffer.
-        let (row_pos, rows) = self.find_down(self.row_pos, 1);
-        if rows > 0 {
-            // Snap column takes precedence over cursor column.
-            let try_col = self.snap_col.take().unwrap_or(self.cursor.col);
-            let (cur_pos, col) = self.find_col(row_pos, try_col);
-
-            // Changes to canvas only occur when cursor is already at bottow row of
-            // window, otherwise just change position of cursor on display.
-            let row = if self.cursor.row < self.view.rows - 1 {
-                self.cursor.row + 1
-            } else {
-                self.canvas_mut().scroll_up(self.view.rows, 1);
-                self.render_rows(self.cursor.row, 1, row_pos);
-                self.canvas_mut().draw();
-                self.cursor.row
-            };
-
-            self.cur_pos = cur_pos;
-            self.row_pos = row_pos;
-            self.snap_col = Some(try_col);
-            self.set_cursor(row, col);
-        }
-    }
-
-    pub fn move_left(&mut self) {
-        // Tries to move buffer position left by 1 character, though it may already be
-        // at beginning of buffer.
-        let left = self.buffer().backward(self.cur_pos).index().next();
-
-        if let Some((cur_pos, c)) = left {
-            let (row, col) = if self.cursor.col > 0 {
-                // Cursor not at left edge of window, so just a simple cursor move.
-                (self.cursor.row, self.cursor.col - 1)
-            } else {
-                // Cursor at left edge of window, so determine position of prior row
-                // and column number.
-                let (row_pos, col) = if c == '\n' {
-                    // Note that position of current row can be derived from new cursor
-                    // position.
-                    let (row_pos, _) = self.find_up(cur_pos + 1, 1);
-                    (row_pos, (cur_pos - row_pos) as u32)
+            let row = if pin {
+                if rows < try_rows {
+                    // this cursor reached the top of the buffer before the desired number
+                    // of rows could be processed, so the resulting row is always 0
+                    self.set_top_line(0)
                 } else {
-                    // Prior row must be at least as long as window width because
-                    // character before cursor is not \n, which means prior row must
-                    // have soft wrapped.
-                    (cur_pos + 1 - self.view.cols as usize, self.view.cols - 1)
-                };
-
-                // Changes to canvas only occur when cursor is already at top row of
-                // window, otherwise just calculate new row number.
-                let row = if self.cursor.row > 0 {
-                    self.cursor.row - 1
-                } else {
-                    self.canvas_mut().scroll_down(0, 1);
-                    self.render_rows(0, 1, row_pos);
-                    self.canvas_mut().draw();
-                    0
-                };
-                self.row_pos = row_pos;
-                (row, col)
-            };
-
-            self.cur_pos = cur_pos;
-            self.snap_col = None;
-            self.set_cursor(row, col);
-        }
-    }
-
-    pub fn move_right(&mut self) {
-        // Tries to move buffer position right by 1 character, though it may already be
-        // at end of buffer.
-        let right = self.buffer().forward(self.cur_pos).index().next();
-
-        if let Some((cur_pos, c)) = right {
-            // Calculate new column number based on adjacent character and current
-            // location of cursor.
-            let col = if c == '\n' {
-                0
+                    // try to find the new top pos by stepping backwards by the cursor.row
+                    // number of rows
+                    self.set_top_line(self.cursor.row)
+                }
             } else {
-                if self.cursor.col < self.view.cols - 1 {
-                    self.cursor.col + 1
+                if rows > self.cursor.row {
+                    // new row is above current top, so just make current row the top
+                    self.set_top_line(0)
                 } else {
-                    0
+                    // new row does not require a change in the top
+                    self.cursor.row - rows
                 }
             };
 
-            // New column number at left edge of window implies that cursor wraps to
-            // next row, which may require changes to canvas.
-            let row = if col == 0 {
-                self.row_pos = cur_pos + 1;
-                if self.cursor.row < self.view.rows - 1 {
-                    self.cursor.row + 1
-                } else {
-                    self.canvas_mut().scroll_up(self.view.rows, 1);
-                    self.render_rows(self.cursor.row, 1, self.row_pos);
-                    self.canvas_mut().draw();
-                    self.cursor.row
-                }
+            let try_col = self.snap_col.take().unwrap_or(self.cursor.col);
+            let col = self.cur_line.snap_col(try_col);
+            self.cur_pos = self.cur_line.pos_of(col);
+            self.snap_col = Some(try_col);
+            self.render();
+            self.set_cursor(row, col);
+        }
+    }
+
+    fn down_cur_line(&mut self, try_rows: u32) -> u32 {
+        for rows in 0..try_rows {
+            if let Some(line) = self.next_line(&self.cur_line) {
+                self.cur_line = line;
             } else {
+                return rows;
+            }
+        }
+        try_rows
+    }
+
+    fn up_top_line(&mut self, try_rows: u32) -> u32 {
+        for rows in 0..try_rows {
+            if let Some(line) = self.prev_line(&self.top_line) {
+                self.top_line = line;
+            } else {
+                return rows;
+            }
+        }
+        try_rows
+    }
+
+    fn down_top_line(&mut self, try_rows: u32) -> u32 {
+        for rows in 0..try_rows {
+            if let Some(line) = self.next_line(&self.top_line) {
+                self.top_line = line;
+            } else {
+                return rows;
+            }
+        }
+        try_rows
+    }
+
+    pub fn move_down(&mut self, try_rows: u32, pin: bool) {
+        let rows = self.down_cur_line(try_rows);
+        if rows > 0 {
+            let row = if pin {
+                // just move top line down by same number of rows
+                self.down_top_line(rows);
                 self.cursor.row
+            } else {
+                if self.cursor.row + rows < self.view.rows {
+                    // this means the new cursor has not moved beyond the bottom, and the
+                    // current top line does not change
+                    self.cursor.row + rows
+                } else {
+                    // new row is beyond bottom, so we need to find the new top line
+                    self.set_top_line(self.view.rows - 1)
+                }
             };
 
-            self.cur_pos = cur_pos + 1;
-            self.snap_col = None;
+            let try_col = self.snap_col.take().unwrap_or(self.cursor.col);
+            let col = self.cur_line.snap_col(try_col);
+            self.cur_pos = self.cur_line.pos_of(col);
+            self.snap_col = Some(try_col);
+            self.render();
             self.set_cursor(row, col);
+        }
+    }
+
+    fn find_up_top_line(&mut self, pos: usize) -> u32 {
+        let mut rows = 0;
+        while pos < self.top_line.row_pos {
+            self.top_line = self.prev_line_unchecked(&self.top_line);
+            rows += 1;
+        }
+        rows
+    }
+
+    fn find_up_cur_line(&mut self, pos: usize) -> u32 {
+        let mut rows = 0;
+        while pos < self.cur_line.row_pos {
+            self.cur_line = self.prev_line_unchecked(&self.cur_line);
+            rows += 1;
+        }
+        rows
+    }
+
+    fn find_down_cur_line(&mut self, pos: usize) -> u32 {
+        let mut rows = 0;
+        while pos > self.cur_line.end_pos() {
+            self.cur_line = self.next_line_unchecked(&self.cur_line);
+            rows += 1;
+        }
+        rows
+    }
+
+    pub fn move_to(&mut self, pos: usize, align: Align) {
+        let row = if pos < self.top_line.row_pos {
+            // pos is above top of page, so find new top line and cur line
+            self.find_up_top_line(pos);
+
+            let rows = match align {
+                Align::Top | Align::Auto => 0,
+                Align::Center => self.view.rows / 2,
+                Align::Bottom => self.view.rows - 1,
+            };
+
+            self.cur_line = self.top_line.clone();
+            self.down_cur_line(rows)
+        } else if pos < self.cur_line.row_pos {
+            // pos is above cur row, but still visible, so find cur line, but keep
+            // top line
+            // find the new cur line which is needed for all cursor alignment scenarios
+            let row = self.cursor.row - self.find_up_cur_line(pos);
+
+            let maybe_rows = match align {
+                Align::Auto => None,
+                Align::Top => Some(0),
+                Align::Center => Some(self.view.rows / 2),
+                Align::Bottom => Some(self.view.rows - 1),
+            };
+
+            if let Some(rows) = maybe_rows {
+                self.set_top_line(rows)
+            } else {
+                row
+            }
+        } else if pos < self.cur_line.end_pos() {
+            // pos is already on cur row
+            let maybe_rows = match align {
+                Align::Auto => None,
+                Align::Top => Some(0),
+                Align::Center => Some(self.view.rows / 2),
+                Align::Bottom => Some(self.view.rows - 1),
+            };
+
+            if let Some(rows) = maybe_rows {
+                self.set_top_line(rows)
+            } else {
+                self.cursor.row
+            }
+        } else {
+            // pos comes after cur row, so find cur line and then top line
+            let rows = self.find_down_cur_line(pos);
+
+            let row = match align {
+                Align::Auto => cmp::min(self.cursor.row + rows, self.view.rows - 1),
+                Align::Top => 0,
+                Align::Center => self.view.rows / 2,
+                Align::Bottom => self.view.rows - 1,
+            };
+
+            self.set_top_line(row)
+        };
+
+        let col = self.cur_line.col_of(pos);
+        self.cur_pos = pos;
+        self.snap_col = None;
+        self.render();
+        self.set_cursor(row, col);
+    }
+
+    pub fn move_left(&mut self, len: usize) {
+        let pos = self.cur_pos - cmp::min(len, self.cur_pos);
+        if pos < self.cur_pos {
+            self.move_to(pos, Align::Auto);
+        }
+    }
+
+    pub fn move_right(&mut self, len: usize) {
+        let pos = cmp::min(self.cur_pos + len, self.buffer().size());
+        if pos > self.cur_pos {
+            self.move_to(pos, Align::Auto);
         }
     }
 
     pub fn move_page_up(&mut self) {
-        // Tries to move cursor up by number of rows equal to size of window, though top of
-        // buffer could be reached first.
-        let (row_pos, rows) = self.find_up(self.row_pos, self.view.rows);
-        if rows > 0 {
-            // Snap column takes precedence over cursor column.
-            let try_col = self.snap_col.take().unwrap_or(self.cursor.col);
-
-            // Tries to maintain current location of cursor on display by moving up
-            // additional rows, though again, top of buffer could be reached first.
-            let (cur_pos, col) = self.find_col(row_pos, try_col);
-            let (top_pos, row) = self.find_up(row_pos, self.cursor.row);
-
-            // Since entire display likely changed in most cases, perform full rendering of
-            // canvas before drawing.
-            self.render_rows_from(0, top_pos);
-            self.canvas_mut().draw();
-
-            self.cur_pos = cur_pos;
-            self.row_pos = row_pos;
-            self.snap_col = Some(try_col);
-            self.set_cursor(row, col);
-        }
+        self.move_up(self.view.rows, true);
     }
 
     pub fn move_page_down(&mut self) {
-        // Tries to move cursor down by number of rows equal to size of window, though
-        // bottom of buffer could be reached first.
-        let (row_pos, rows) = self.find_down(self.row_pos, self.view.rows);
-        if rows > 0 {
-            // Snap column takes precedence over cursor column.
-            let try_col = self.snap_col.take().unwrap_or(self.cursor.col);
-
-            // Tries to maintain current location of cursor on display by moving down
-            // additional rows, though again, bottom of buffer could be reached first.
-            let (cur_pos, col) = self.find_col(row_pos, try_col);
-            let (top_pos, row) = self.find_up(row_pos, self.cursor.row);
-
-            // Since entire display likely changed in most cases, perform full rendering of
-            // canvas before drawing.
-            self.render_rows_from(0, top_pos);
-            self.canvas_mut().draw();
-
-            self.cur_pos = cur_pos;
-            self.row_pos = row_pos;
-            self.snap_col = Some(try_col);
-            self.set_cursor(row, col);
-        }
+        self.move_down(self.view.rows, true);
     }
 
     /// Moves the cursor to the beginning of the current row.
-    pub fn move_beg(&mut self) {
-        // Adjust cursor position and column if cursor not already at beginning of row.
+    pub fn move_start(&mut self) {
         if self.cursor.col > 0 {
-            self.cur_pos = self.row_pos;
+            self.cur_pos = self.cur_line.row_pos;
+            self.render();
             self.set_cursor_col(0);
         }
         self.snap_col = None;
@@ -575,49 +580,23 @@ impl Editor {
 
     /// Moves the cursor to the end of the current row.
     pub fn move_end(&mut self) {
-        // Try moving forward in buffer to find end of line, though stop if distance
-        // between current column and right edge of window reached.
-        let n = (self.view.cols - self.cursor.col - 1) as usize;
-        let cur_pos = self.buffer().find_end_line_or(self.cur_pos, n);
-
-        // Adjust cursor position and column if cursor not already at end of row.
-        if cur_pos > self.cur_pos {
-            self.cur_pos = cur_pos;
-            self.set_cursor_col((self.cur_pos - self.row_pos) as u32);
+        if self.cursor.col < self.cur_line.end_col() {
+            self.cur_pos = self.cur_line.end_pos();
+            self.render();
+            self.set_cursor_col(self.cur_line.end_col());
         }
         self.snap_col = None;
     }
 
     /// Moves the cursor to the top of the buffer.
     pub fn move_top(&mut self) {
-        // Just render all rows since this is likely to happen in most cases, though
-        // simple optimization is to ignore when cursor is already at top of buffer.
-        if self.row_pos > 0 {
-            self.row_pos = 0;
-            self.render_rows_from(0, self.row_pos);
-            self.canvas_mut().draw();
-        }
-
-        self.cur_pos = 0;
-        self.snap_col = None;
-        self.set_cursor(0, 0);
+        self.move_to(0, Align::Top);
     }
 
     /// Moves the cursor to the bottom of the buffer.
     pub fn move_bottom(&mut self) {
-        // Determine column number at end of buffer.
-        let cur_pos = self.buffer().size();
-        self.cur_pos = cur_pos;
-        let col = self.column_of(self.cur_pos);
-
-        // Try to position cursor on last row of window, though this is only advisory
-        // since buffer contents could be smaller than window.
-        self.row_pos = self.cur_pos - col as usize;
-        let (top_pos, row) = self.find_up(self.row_pos, self.view.rows - 1);
-        self.render_rows_from(0, top_pos);
-        self.canvas_mut().draw();
-        self.snap_col = None;
-        self.set_cursor(row, col);
+        let pos = self.buffer().size();
+        self.move_to(pos, Align::Bottom);
     }
 
     /// Scrolls the contents of the window up while preserving the cursor position, which
@@ -625,33 +604,24 @@ impl Editor {
     ///
     /// If this operation would result in the cursor moving beyond the top row, then it
     /// is moved to the next row, essentially staying on the top row.
-    pub fn scroll_up(&mut self) {
-        // Try to find position of row following bottom row.
-        let try_rows = self.view.rows - self.cursor.row;
-        let (row_pos, rows) = self.find_down(self.row_pos, try_rows);
-
-        // Only need to scroll if following row exists.
-        if rows == try_rows {
-            self.canvas_mut().scroll_up(self.view.rows, 1);
-            self.render_rows(self.view.rows - 1, 1, row_pos);
-            self.canvas_mut().draw();
-
-            let (row, col) = if self.cursor.row > 0 {
-                // Indicates that cursor is not yet on top row.
-                (self.cursor.row - 1, self.cursor.col)
-            } else {
-                // Snap column takes precedence over cursor column.
+    pub fn scroll_up(&mut self, try_rows: u32) {
+        let rows = self.down_top_line(try_rows);
+        if rows > 0 {
+            let (row, col) = if rows > self.cursor.row {
+                // this means that scrolling would have pushed the cursor above the top
+                // row, so set cur line to top line and row to 0
+                self.cur_line = self.top_line.clone();
                 let try_col = self.snap_col.take().unwrap_or(self.cursor.col);
-
-                // Indicates that cursor is already on top row, so new row position and
-                // column number need to be calculated.
-                let (row_pos, _) = self.find_down(self.row_pos, 1);
-                let (cur_pos, col) = self.find_col(row_pos, try_col);
-                self.cur_pos = cur_pos;
-                self.row_pos = row_pos;
+                let col = self.cur_line.snap_col(try_col);
+                self.cur_pos = self.cur_line.pos_of(col);
                 self.snap_col = Some(try_col);
                 (0, col)
+            } else {
+                // this means that cursor still remains visible
+                (self.cursor.row - rows, self.cursor.col)
             };
+
+            self.render();
             self.set_cursor(row, col);
         }
     }
@@ -661,33 +631,25 @@ impl Editor {
     ///
     /// If this operation would result in the cursor moving beyond the bottom row, then it
     /// is moved to the previous row, essentiall staying on the bottow row.
-    pub fn scroll_down(&mut self) {
-        // Try to find position of row preceding top row.
-        let try_rows = self.cursor.row + 1;
-        let (row_pos, rows) = self.find_up(self.row_pos, try_rows);
-
-        // Only need to scroll if preceding row exists.
-        if rows == try_rows {
-            self.canvas_mut().scroll_down(0, 1);
-            self.render_rows(0, 1, row_pos);
-            self.canvas_mut().draw();
-
-            let (row, col) = if self.cursor.row < self.view.rows - 1 {
-                // Indicates that cursor is not yet on bottom row.
-                (self.cursor.row + 1, self.cursor.col)
+    pub fn scroll_down(&mut self, try_rows: u32) {
+        let rows = self.up_top_line(try_rows);
+        if rows > 0 {
+            let row = self.cursor.row + rows;
+            let (row, col) = if row < self.view.rows {
+                // this means that cursor is still visible on display
+                (row, self.cursor.col)
             } else {
-                // Snap column takes precedence over cursor column.
+                // this means that scrolling would have pushed the cursor below the bottom
+                // back up from cur line to find the line at the bottom of the display
+                self.up_cur_line(row - self.view.rows + 1);
                 let try_col = self.snap_col.take().unwrap_or(self.cursor.col);
-
-                // Indicates that cursor is already on bottom row, so new row position and
-                // column number need to be calculated.
-                let (row_pos, _) = self.find_up(self.row_pos, 1);
-                let (cur_pos, col) = self.find_col(row_pos, try_col);
-                self.cur_pos = cur_pos;
-                self.row_pos = row_pos;
+                let col = self.cur_line.snap_col(try_col);
+                self.cur_pos = self.cur_line.pos_of(col);
                 self.snap_col = Some(try_col);
-                (self.cursor.row, col)
+                (self.view.rows - 1 as u32, col)
             };
+
+            self.render();
             self.set_cursor(row, col);
         }
     }
@@ -695,6 +657,11 @@ impl Editor {
     /// Sets the cursor to (`row`, `col`) and updates the window.
     fn set_cursor(&mut self, row: u32, col: u32) {
         self.cursor = Point::new(row, col);
+        self.view
+            .banner
+            .borrow_mut()
+            .set_cursor(self.cur_line.point_of(self.cursor.col))
+            .draw();
         self.canvas_mut().set_cursor(self.cursor);
     }
 
@@ -704,19 +671,13 @@ impl Editor {
         self.set_cursor(self.cursor.row, col);
     }
 
-    /// Writes the contents of the buffer to the window, where `row` is the beginning row,
-    /// `rows` is the number of rows, and `row_pos` is the buffer position of `row`.
-    fn render_rows(&mut self, row: u32, rows: u32, row_pos: usize) {
-        debug_assert!(row < self.view.rows);
-        debug_assert!(row + rows <= self.view.rows);
-
-        // Objective of this loop is to write specified range of rows to window.
-        let end_row = row + rows;
-        let mut canvas = self.canvas_mut();
-        let row_col = self
-            .buffer()
-            .forward(row_pos)
-            .try_fold((row, 0), |(row, col), c| {
+    fn render(&mut self) {
+        let mut canvas = self.view.canvas.borrow_mut();
+        let rest = self
+            .buffer
+            .borrow()
+            .forward(self.top_line.row_pos)
+            .try_fold((0, 0), |(row, col), c| {
                 let (row, col) = if c == '\n' {
                     canvas.fill_row_from(row, col, self.view.blank_cell);
                     (row + 1, 0)
@@ -728,191 +689,140 @@ impl Editor {
                         (row + 1, 0)
                     }
                 };
-                if row < end_row {
+                if row < self.view.rows {
                     Some((row, col))
                 } else {
                     None
                 }
             });
-        if let Some((row, col)) = row_col {
+        if let Some((row, col)) = rest {
             canvas.fill_row_from(row, col, self.view.blank_cell);
-            canvas.fill_rows(row + 1, end_row, self.view.blank_cell);
+            canvas.fill_rows(row + 1, self.view.rows, self.view.blank_cell);
+        }
+        canvas.draw();
+    }
+
+    // todo
+    //
+    // returns the line corresponding to the given pos
+    fn find_line(&self, pos: usize) -> Line {
+        let buffer = self.buffer.borrow();
+        let line_pos = buffer.find_start_line(pos);
+        let line_len = buffer.find_end_line(pos) - line_pos;
+        let row_pos = pos - ((pos - line_pos) % self.view.cols as usize);
+        let row_len = cmp::min(line_len - (row_pos - line_pos), self.view.cols as usize);
+        Line {
+            row_pos,
+            row_len,
+            line_pos,
+            line_len,
+            line_nbr: buffer.line_of(line_pos),
         }
     }
 
-    /// Writes the contents of the buffer to the window, where `row` is the beginning row
-    /// and `row_pos` is the buffer position of `row`.
-    fn render_rows_from(&mut self, row: u32, row_pos: usize) {
-        self.render_rows(row, self.view.rows - row, row_pos);
-    }
-
-    /// Finds the buffer position of `rows` preceding `row_pos`.
-    ///
-    /// Returns a tuple containing the (row position, rows), where the number of rows may
-    /// be less than `rows` if the operation reaches the beginning of the buffer.
-    fn find_up(&self, row_pos: usize, rows: u32) -> (usize, u32) {
-        let mut row = 0;
-        let mut row_pos = row_pos;
-
-        while row < rows {
-            if let Some(pos) = self.prev_row(row_pos) {
-                row_pos = pos;
-                row += 1;
-            } else {
-                break;
-            }
+    // todo
+    //
+    // updates the line info and returns a new line
+    fn update_line(&self, line: &Line) -> Line {
+        // line_pos and row_pos would not change, only their lengths
+        // line_nbr would also not change
+        //
+        // rationale for above is that an insertion is always relative to
+        // cur_line, and even if the insertion happened at col 0, this does not
+        // change any values above
+        let buffer = self.buffer.borrow();
+        let line_len = buffer.find_end_line(line.line_pos) - line.line_pos;
+        let row_len = cmp::min(
+            line_len - (line.row_pos - line.line_pos),
+            self.view.cols as usize,
+        );
+        Line {
+            row_len,
+            line_len,
+            ..*line
         }
-        (row_pos, row)
     }
 
-    /// Finds the buffer position of `rows` following `row_pos`.
-    ///
-    /// Returns a tuple containing the (row position, rows), where the number of rows may
-    /// be less than `rows` if the operation reaches the end of buffer.
-    fn find_down(&self, row_pos: usize, rows: u32) -> (usize, u32) {
-        let mut row = 0;
-        let mut row_pos = row_pos;
-
-        while row < rows {
-            if let Some(pos) = self.next_row(row_pos) {
-                row_pos = pos;
-                row += 1;
-            } else {
-                break;
-            }
-        }
-        (row_pos, row)
-    }
-
-    /// Returns the buffer position of the beginning of the previous row relative to
-    /// `row_pos`, which is assumed to be the beginning position of the current row.
-    ///
-    /// Returns `None` if the current row is already at the top of the buffer.
-    fn prev_row(&self, row_pos: usize) -> Option<usize> {
-        if row_pos > 0 {
-            let offset = match self.buffer().get_char(row_pos - 1) {
-                // Indicates that current row position is also beginning of line, so
-                // determine offset to prior row by finding beginning of prior line.
-                Some('\n') => {
-                    let pos = self.buffer().find_beg_line(row_pos - 1);
-                    let offset = (row_pos - pos) % self.view.cols as usize;
-                    if offset > 0 {
-                        offset
-                    } else {
-                        self.view.cols as usize
-                    }
-                }
-                // Indicates that current row position is not beginning of line, which
-                // means it wrapped, making offset to prior row trivially equal to width
-                // of window.
-                _ => self.view.cols as usize,
-            };
-            Some(row_pos - offset)
-        } else {
+    // todo
+    //
+    // returns the previous line or None if the given line is at the top of buffer
+    fn prev_line(&self, line: &Line) -> Option<Line> {
+        if line.is_top() {
             None
-        }
-    }
-
-    /// Returns the buffer position of the beginning of the next row relative to
-    /// `row_pos`, which is assumed to be the beginning position of the current row.
-    ///
-    /// Retuns `None` if the current row is alredy at the bottom of the buffer.
-    fn next_row(&self, row_pos: usize) -> Option<usize> {
-        // Scans forward until \n encountered or number of characters not to exceed
-        // width of window.
-        self.buffer()
-            .find_next_line_or(row_pos, self.view.cols as usize)
-    }
-
-    fn find_row_pos(&self, pos: usize) -> usize {
-        pos - ((pos - self.buffer().find_beg_line(pos)) % self.view.cols as usize)
-    }
-
-    /// Finds the buffer position of `col` relative to `row_pos`, which is assumed to be
-    /// the position corresponding to column `0`.
-    ///
-    /// Returns a tuple containing the _actual_ (column position, column number), which may
-    /// not correspond to `col`. Since `col` may extend beyond the end of line, the actual
-    /// column is bounded as such.
-    fn find_col(&self, row_pos: usize, col: u32) -> (usize, u32) {
-        // Scans forward until \n encountered or number of characters processed reaches
-        // specified column.
-        let col_pos = self.buffer().find_end_line_or(row_pos, col as usize);
-        (col_pos, (col_pos - row_pos) as u32)
-    }
-
-    /// Returns the column number corresponding to `pos`.
-    fn column_of(&self, pos: usize) -> u32 {
-        // Column number is derived by calculating distance between given position
-        // and beginning of line, though bounded by width of window.
-        (pos - self.buffer().find_beg_line(pos)) as u32 % self.view.cols
-    }
-
-    /// Returns the number of rows that wrap beyond the current row designated by
-    /// `row_pos`.
-    fn wrapped_rows(&self, row_pos: usize) -> u32 {
-        (self.buffer().find_end_line(row_pos) - row_pos) as u32 / self.view.cols
-    }
-
-    /// Finds the cursor and corresponding row position at the given cursor `pos`, returning
-    /// the tuple (row, col, row_pos).
-    ///
-    /// Note that the resulting _row_ is an `Option<u32>` because the calculated row
-    /// may extend beyond the visible portion of the window. Specifically, if the
-    /// resulting row would be outside the range [`0`, `self.window.rows()`), then the
-    /// value is `None`.
-    ///
-    /// This computation is relative to the current cursor position, which is assumed to
-    /// be in a correct state prior to calling this function.
-    fn find_cursor(&self, pos: usize) -> (Option<u32>, u32, usize) {
-        if pos > self.cur_pos {
-            let (row, col, row_pos) = self
-                .buffer()
-                .forward(self.cur_pos)
-                .index()
-                .take(pos - self.cur_pos)
-                .fold(
-                    (self.cursor.row, self.cursor.col, self.row_pos),
-                    |(row, col, row_pos), (pos, c)| {
-                        if c == '\n' || col == self.view.cols - 1 {
-                            // Move to next row when \n is encountered or cursor at right edge of
-                            // window, noting that next row position always follows the current
-                            // character.
-                            (row + 1, 0, pos + 1)
-                        } else {
-                            (row, col + 1, row_pos)
-                        }
-                    },
-                );
-            let maybe_row = if row < self.view.rows {
-                Some(row)
-            } else {
-                None
+        } else if line.has_wrapped() {
+            let row_pos = line.row_pos - self.view.cols as usize;
+            let l = Line {
+                row_pos,
+                row_len: self.view.cols as usize,
+                ..*line
             };
-            (maybe_row, col, row_pos)
-        } else if pos < self.cur_pos {
-            let (rows, _) = self
-                .buffer()
-                .backward(self.cur_pos)
-                .index()
-                .take(self.cur_pos - pos)
-                .fold((0, self.cursor.col), |(rows, col), (_, c)| {
-                    if c == '\n' || col == 0 {
-                        (rows + 1, self.view.cols - 1)
-                    } else {
-                        (rows, col - 1)
-                    }
-                });
-            let row_pos = self.find_row_pos(pos);
-            let maybe_row = if rows <= self.cursor.row {
-                Some(self.cursor.row - rows)
-            } else {
-                None
-            };
-            (maybe_row, (pos - row_pos) as u32, row_pos)
+            Some(l)
         } else {
-            (Some(self.cursor.row), self.cursor.col, self.row_pos)
+            let buffer = self.buffer.borrow();
+            let pos = line.line_pos - 1;
+            let line_pos = buffer.find_start_line(pos);
+            let line_len = buffer.find_end_line(pos) - line_pos;
+            let row_pos = pos - ((pos - line_pos) % self.view.cols as usize);
+            let row_len = cmp::min(line_len - (row_pos - line_pos), self.view.cols as usize);
+            let l = Line {
+                row_pos,
+                row_len,
+                line_pos,
+                line_len,
+                line_nbr: line.line_nbr - 1,
+            };
+            Some(l)
         }
+    }
+
+    fn prev_line_unchecked(&self, line: &Line) -> Line {
+        self.prev_line(line)
+            .unwrap_or_else(|| panic!("todo: add useful message"))
+    }
+
+    // todo
+    //
+    // returns the next line of None if the given line is at the bottom of buffer
+    fn next_line(&self, line: &Line) -> Option<Line> {
+        if line.row_len < self.view.cols as usize {
+            // this means that row does not wrap, so we need to find next line
+            let buffer = self.buffer.borrow();
+            let line_pos = line.line_pos + line.line_len + 1;
+            if line_pos <= buffer.size() {
+                let line_len = buffer.find_end_line(line_pos) - line_pos;
+                let row_pos = line_pos;
+                let row_len = cmp::min(line_len - (row_pos - line_pos), self.view.cols as usize);
+                let l = Line {
+                    row_pos,
+                    row_len,
+                    line_pos,
+                    line_len,
+                    line_nbr: line.line_nbr + 1,
+                };
+                Some(l)
+            } else {
+                // end of buffer reached
+                None
+            }
+        } else {
+            // this means that the row wraps
+            let row_pos = line.row_pos + line.row_len;
+            let row_len = cmp::min(
+                line.line_len - (row_pos - line.line_pos),
+                self.view.cols as usize,
+            );
+            let l = Line {
+                row_pos,
+                row_len,
+                ..*line
+            };
+            Some(l)
+        }
+    }
+
+    fn next_line_unchecked(&self, line: &Line) -> Line {
+        self.next_line(line)
+            .unwrap_or_else(|| panic!("todo: add useful message"))
     }
 
     fn buffer(&self) -> Ref<'_, Buffer> {
