@@ -254,7 +254,7 @@ impl Editor {
         self.insert(&vec![c])
     }
 
-    pub fn insert(&mut self, cs: &Vec<char>) {
+    pub fn insert(&mut self, cs: &[char]) {
         self.buffer_mut().set_pos(self.cur_pos);
         let cur_pos = self.buffer_mut().insert_chars(cs);
 

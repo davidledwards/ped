@@ -38,7 +38,9 @@ fn open_file(env: &mut Environment) -> Result<Option<Action>> {
         if let Some(file) = answer {
             if let Some(id) = env.open_view(Placement::Bottom) {
                 if let Some(editor) = env.get_editor(id) {
-                    editor.borrow_mut().insert(&file.chars().collect());
+                    editor
+                        .borrow_mut()
+                        .insert(&file.chars().collect::<Vec<_>>());
                 }
                 Ok(None)
             } else {

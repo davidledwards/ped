@@ -106,7 +106,7 @@ impl Buffer {
         self.gap
     }
 
-    pub fn insert_chars(&mut self, cs: &Vec<char>) -> usize {
+    pub fn insert_chars(&mut self, cs: &[char]) -> usize {
         let n = cs.len();
         self.ensure(n);
         unsafe {
@@ -245,7 +245,7 @@ impl Buffer {
                 // Inserts chunk into buffer when either condition occurs:
                 // - enough characters have been read to reach trigger, or
                 // - reader has reached EOF
-                let cs = chunk.chars().collect();
+                let cs = chunk.chars().collect::<Vec<_>>();
                 let _ = self.insert_chars(&cs);
                 count += cs.len();
                 chunk.clear();
@@ -550,7 +550,7 @@ mod tests {
         const TEXT: &str = "abcdef";
 
         let mut buf = Buffer::new();
-        let cs = TEXT.chars().collect();
+        let cs = TEXT.chars().collect::<Vec<_>>();
         let _ = buf.insert_chars(&cs);
         assert_eq!(buf.size(), cs.len());
 
@@ -567,7 +567,7 @@ mod tests {
         const TEXT: &str = "abcxyzdef";
 
         let mut buf = Buffer::new();
-        let text = TEXT.chars().collect();
+        let text = TEXT.chars().collect::<Vec<_>>();
         let _ = buf.insert_chars(&text);
         assert_eq!(buf.size(), text.len());
 
@@ -599,7 +599,7 @@ mod tests {
         const TEXT: &str = "ųų!)EÝ×vĶǑǟ²ȋØWÚųțòWůĪĎɎ«ƿǎǓC±ţOƹǅĠ/9ŷŌȈïĚſ°ǼȎ¢2^ÁǑī0ÄgŐĢśŧ¶";
 
         let mut buf = Buffer::new();
-        let _ = buf.insert_chars(&TEXT.chars().collect());
+        let _ = buf.insert_chars(&TEXT.chars().collect::<Vec<_>>());
         let mut writer = Cursor::new(Vec::new());
 
         let n = buf.write(&mut writer).unwrap();
@@ -617,7 +617,7 @@ mod tests {
         let mut buf = Buffer::new();
         assert_eq!(buf.forward(0).next(), None);
 
-        let cs = TEXT.chars().collect();
+        let cs = TEXT.chars().collect::<Vec<_>>();
         let n = buf.insert_chars(&cs);
         assert_eq!(cs.len(), n);
 
@@ -636,7 +636,7 @@ mod tests {
         const TEXT: &str = "Lorem ipsum dolor sit amet, consectetur porttitor";
 
         let mut buf = Buffer::new();
-        let cs = TEXT.chars().collect();
+        let cs = TEXT.chars().collect::<Vec<_>>();
         let _ = buf.insert_chars(&cs);
 
         for ((a_pos, a), (b_pos, b)) in zip(buf.forward(0).index(), zip(0..cs.len(), cs)) {
@@ -652,7 +652,7 @@ mod tests {
         let mut buf = Buffer::new();
         assert_eq!(buf.backward(buf.size()).next(), None);
 
-        let cs = TEXT.chars().collect();
+        let cs = TEXT.chars().collect::<Vec<_>>();
         let n = buf.insert_chars(&cs);
         assert_eq!(cs.len(), n);
 
@@ -671,7 +671,7 @@ mod tests {
         const TEXT: &str = "Lorem ipsum dolor sit amet, consectetur porttitor";
 
         let mut buf = Buffer::new();
-        let cs = TEXT.chars().collect();
+        let cs = TEXT.chars().collect::<Vec<_>>();
         let _ = buf.insert_chars(&cs);
 
         for ((a_pos, a), (b_pos, b)) in zip(
@@ -688,7 +688,7 @@ mod tests {
         const TEXT: &str = "abc\ndef\nghi";
 
         let mut buf = Buffer::new();
-        let cs = TEXT.chars().collect();
+        let cs = TEXT.chars().collect::<Vec<_>>();
         let _ = buf.insert_chars(&cs);
 
         // All chars in `def\n` range should find the same beginning of line.
