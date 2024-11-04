@@ -36,14 +36,28 @@ pub struct Editor {
 
 pub type EditorRef = Rc<RefCell<Editor>>;
 
+/// Represents contextual information for a line on the display.
+///
+/// A _line_ in this context should not be confused with the characterization of
+/// a line in [Buffer], which could conceivably span more than one line on the
+/// display.
 #[derive(Clone)]
 struct Line {
+    /// Buffer position corresponding to the first character of the display line,
+    /// which must always be >= `row_pos`.
     row_pos: usize,
-    // this value does NOT include \n
+
+    /// Length of the display line, excluding the `\n` if one exists.
     row_len: usize,
+
+    /// Buffer position corresponding to the first character of the buffer line,
+    /// which must always be <= `row_pos`.
     line_pos: usize,
-    // this value does NOT include \n
+
+    /// Length of the buffer line, excluding the `\n` if one exists.
     line_len: usize,
+
+    /// The `0`-based number of the buffer line.
     line_nbr: usize,
 }
 
@@ -489,7 +503,9 @@ impl Editor {
 
     fn find_down_cur_line(&mut self, pos: usize) -> u32 {
         let mut rows = 0;
-        while pos > self.cur_line.end_pos() {
+        while pos > self.cur_line.end_pos()
+            || pos == self.cur_line.row_pos + self.view.cols as usize
+        {
             self.cur_line = self.next_line_unchecked(&self.cur_line);
             rows += 1;
         }
