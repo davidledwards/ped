@@ -4,7 +4,6 @@ use crate::size::{Point, Size};
 use crate::writer::Writer;
 
 use std::cell::RefCell;
-use std::cmp;
 use std::rc::Rc;
 
 pub struct Canvas {
@@ -80,94 +79,6 @@ impl Canvas {
     pub fn fill_rows(&mut self, start_row: u32, end_row: u32, cell: Cell) {
         for row in start_row..end_row {
             self.fill_row(row, cell);
-        }
-    }
-
-    /// Scrolls _up_ the contents of the canvas above `row` by the number of `rows`, and
-    /// clears the vacated rows.
-    ///
-    /// # Example
-    /// Given the following contents indexed by row:
-    ///
-    /// ```text
-    ///    -----
-    /// 0 |the
-    /// 1 |quick
-    /// 2 |brown
-    /// 3 |fox
-    /// 4 |jumps
-    ///    -----
-    /// ```
-    ///
-    /// `scroll_up(3, 2)` yields:
-    ///
-    /// ```text
-    ///    -----
-    /// 0 |brown
-    /// 1 |
-    /// 2 |
-    /// 3 |fox
-    /// 4 |jumps
-    ///    -----
-    /// ```
-    pub fn scroll_up(&mut self, row: u32, rows: u32) {
-        debug_assert!(row <= self.size.rows);
-
-        if rows > 0 {
-            // Start row of move is maximally bounded by number of rows to scroll.
-            let from_row = cmp::min(rows, row);
-
-            // Move rows to top of grid.
-            if from_row < row {
-                self.back.move_rows(from_row, 0, row - from_row);
-            }
-
-            // Clears rows vacated by scroll.
-            self.back.clear_rows(row - from_row, row);
-        }
-    }
-
-    /// Scrolls _down_ the contents of the canvas at `row` by the number of `rows`, and
-    /// clears the vacated rows.
-    ///
-    /// # Example
-    /// Given the following contents indexed by row:
-    ///
-    /// ```text
-    ///    -----
-    /// 0 |the
-    /// 1 |quick
-    /// 2 |brown
-    /// 3 |fox
-    /// 4 |jumps
-    ///    -----
-    /// ```
-    ///
-    /// `scroll_down(1, 2)` yields:
-    ///
-    /// ```text
-    ///    -----
-    /// 0 |the
-    /// 1 |
-    /// 2 |
-    /// 3 |quick
-    /// 4 |brown
-    ///    -----
-    /// ```
-    pub fn scroll_down(&mut self, row: u32, rows: u32) {
-        debug_assert!(row < self.size.rows);
-
-        if rows > 0 {
-            // Target row of move is maximally bounded by total number of rows.
-            let to_row = cmp::min(row + rows, self.size.rows);
-
-            // Move rows to bottom of grid.
-            if to_row < self.size.rows {
-                self.back.move_rows(row, to_row, self.size.rows - to_row);
-            }
-
-            // Clears rows vacated by scroll.
-            self.back.clear_rows(row, to_row);
         }
     }
 

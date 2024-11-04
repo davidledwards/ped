@@ -251,52 +251,60 @@ impl Editor {
     }
 
     pub fn insert_char(&mut self, c: char) {
-        self.insert(&vec![c])
+        self.insert(&[c])
+    }
+
+    pub fn insert_str(&mut self, text: &str) {
+        self.insert(&text.chars().collect::<Vec<_>>())
     }
 
     pub fn insert(&mut self, cs: &[char]) {
-        self.buffer_mut().set_pos(self.cur_pos);
-        let cur_pos = self.buffer_mut().insert_chars(cs);
+        if cs.len() > 0 {
+            self.buffer_mut().set_pos(self.cur_pos);
+            let cur_pos = if cs.len() == 1 {
+                self.buffer_mut().insert_char(cs[0])
+            } else {
+                self.buffer_mut().insert(cs)
+            };
 
-        // update the current line since insertion will changed info
-        self.cur_line = self.update_line(&self.cur_line);
+            // update the current line since insertion will changed info
+            self.cur_line = self.update_line(&self.cur_line);
 
-        let rows = self.find_down_cur_line(cur_pos);
+            let rows = self.find_down_cur_line(cur_pos);
 
-        let row = self.cursor.row + rows;
-        let row = if row < self.view.rows {
-            // this means the new cursor has not moved beyond the bottom
-            // however, we need to update the top line in case it was affected by
-            // the insertion
-            self.top_line = self.update_line(&self.top_line);
-            row
-        } else {
-            // new row is beyond bottom, so find the new top line
-            self.set_top_line(self.view.rows - 1)
-        };
+            let row = self.cursor.row + rows;
+            let row = if row < self.view.rows {
+                // this means the new cursor has not moved beyond the bottom
+                // however, we need to update the top line in case it was affected by
+                // the insertion
+                self.top_line = self.update_line(&self.top_line);
+                row
+            } else {
+                // new row is beyond bottom, so find the new top line
+                self.set_top_line(self.view.rows - 1)
+            };
 
-        let col = self.cur_line.col_of(cur_pos);
-        self.cur_pos = cur_pos;
-        self.snap_col = None;
-        self.render();
-        self.set_cursor(row, col);
-    }
-
-    pub fn delete_left(&mut self) -> Option<char> {
-        if self.cur_pos > 0 {
-            let cs = self.remove(self.cur_pos - 1);
-            Some(cs[0])
-        } else {
-            None
+            let col = self.cur_line.col_of(cur_pos);
+            self.cur_pos = cur_pos;
+            self.snap_col = None;
+            self.render();
+            self.set_cursor(row, col);
         }
     }
 
-    pub fn delete_right(&mut self) -> Option<char> {
-        if self.cur_pos < self.buffer().size() {
-            let cs = self.remove(self.cur_pos + 1);
-            Some(cs[0])
+    pub fn remove_left(&mut self) -> Vec<char> {
+        if self.cur_pos > 0 {
+            self.remove(self.cur_pos - 1)
         } else {
-            None
+            vec![]
+        }
+    }
+
+    pub fn remove_right(&mut self) -> Vec<char> {
+        if self.cur_pos < self.buffer().size() {
+            self.remove(self.cur_pos + 1)
+        } else {
+            vec![]
         }
     }
 
@@ -312,42 +320,50 @@ impl Editor {
     /// if `to_pos` is greater than `self.cur_pos`, otherwise the operation is ignored
     /// and an empty vector is returned.
     pub fn remove(&mut self, pos: usize) -> Vec<char> {
-        let pos = cmp::min(pos, self.buffer().size());
-        let (from_pos, len) = if pos < self.cur_pos {
-            (pos, self.cur_pos - pos)
+        if pos == self.cur_pos {
+            vec![]
         } else {
-            (self.cur_pos, pos - self.cur_pos)
-        };
-
-        let row = if from_pos < self.cur_pos {
-            // backtrack to find cur line that contains from_pos
-            let rows = self.find_up_cur_line(from_pos);
-            if rows > self.cursor.row {
-                // new row is above top
-                self.set_top_line(0)
+            let pos = cmp::min(pos, self.buffer().size());
+            let (from_pos, len) = if pos < self.cur_pos {
+                (pos, self.cur_pos - pos)
             } else {
-                // new row is still visible
-                self.cursor.row - rows
-            }
-        } else {
-            // cursor will remain on same row
-            self.cursor.row
-        };
+                (self.cur_pos, pos - self.cur_pos)
+            };
 
-        self.buffer_mut().set_pos(from_pos);
-        let text = self.buffer_mut().remove_chars(len);
+            let row = if from_pos < self.cur_pos {
+                // backtrack to find cur line that contains from_pos
+                let rows = self.find_up_cur_line(from_pos);
+                if rows > self.cursor.row {
+                    // new row is above top
+                    self.set_top_line(0)
+                } else {
+                    // new row is still visible
+                    self.cursor.row - rows
+                }
+            } else {
+                // cursor will remain on same row
+                self.cursor.row
+            };
 
-        // both lines must be updated after removal since the information may have
-        // changed
-        self.cur_line = self.update_line(&self.cur_line);
-        self.top_line = self.update_line(&self.top_line);
+            self.buffer_mut().set_pos(from_pos);
+            let text = if len == 1 {
+                vec![self.buffer_mut().remove_char().unwrap()]
+            } else {
+                self.buffer_mut().remove(len)
+            };
 
-        let col = self.cur_line.col_of(from_pos);
-        self.cur_pos = from_pos;
-        self.snap_col = None;
-        self.render();
-        self.set_cursor(row, col);
-        text
+            // both lines must be updated after removal since the information may have
+            // changed
+            self.cur_line = self.update_line(&self.cur_line);
+            self.top_line = self.update_line(&self.top_line);
+
+            let col = self.cur_line.col_of(from_pos);
+            self.cur_pos = from_pos;
+            self.snap_col = None;
+            self.render();
+            self.set_cursor(row, col);
+            text
+        }
     }
 
     fn up_cur_line(&mut self, try_rows: u32) -> u32 {

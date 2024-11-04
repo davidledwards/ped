@@ -110,8 +110,8 @@ impl Bindings {
         ("page-up", "move-page-up"),
         ("ctrl-[:n", "move-page-down"),
         ("page-down", "move-page-down"),
-        ("ctrl-a", "move-begin-line"),
-        ("home", "move-begin-line"),
+        ("ctrl-a", "move-start-line"),
+        ("home", "move-start-line"),
         ("ctrl-e", "move-end-line"),
         ("end", "move-end-line"),
         ("ctrl-home", "move-top"),
@@ -122,9 +122,9 @@ impl Bindings {
         ("shift-ctrl-down", "scroll-down"),
         ("ctrl-l", "scroll-center"),
         // Insertion and deletion.
-        ("ctrl-d", "delete-char-right"),
-        ("ctrl-?", "delete-char-left"),
-        ("ctrl-h", "delete-char-left"),
+        ("ctrl-d", "remove-char-right"),
+        ("ctrl-?", "remove-char-left"),
+        ("ctrl-h", "remove-char-left"),
         ("ctrl-m", "insert-line"),
         // Windows (FIXME: temporary until we find proper home)
         ("ctrl-w:/", "open-window-top"),

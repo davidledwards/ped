@@ -48,14 +48,12 @@ impl Buffer {
         Rc::new(RefCell::new(self))
     }
 
-    pub fn capacity(&self) -> usize {
-        self.capacity
-    }
-
+    #[inline]
     pub fn size(&self) -> usize {
         self.size
     }
 
+    #[inline]
     pub fn get_pos(&self) -> usize {
         self.gap
     }
@@ -106,7 +104,7 @@ impl Buffer {
         self.gap
     }
 
-    pub fn insert_chars(&mut self, cs: &[char]) -> usize {
+    pub fn insert(&mut self, cs: &[char]) -> usize {
         let n = cs.len();
         self.ensure(n);
         unsafe {
@@ -130,21 +128,20 @@ impl Buffer {
         }
     }
 
-    pub fn remove_chars(&mut self, count: usize) -> Vec<char> {
+    pub fn remove(&mut self, count: usize) -> Vec<char> {
         if self.gap < self.size {
             let end = self.gap + self.gap_len;
             let n = cmp::min(count, self.capacity - end);
-            let cs =
-                Vec::from(unsafe { NonNull::slice_from_raw_parts(self.ptr_at(end), n).as_ref() });
+            let cs = unsafe { NonNull::slice_from_raw_parts(self.ptr_at(end), n).as_ref() };
             self.gap_len += n;
             self.size -= n;
-            cs
+            Vec::from(cs)
         } else {
             vec![]
         }
     }
 
-    /// Returns the line number corresponding to `pos`.
+    /// Returns the `0`-based line number corresponding to `pos`.
     pub fn line_of(&self, pos: usize) -> usize {
         self.forward(0).take(pos).filter(|c| *c == '\n').count()
     }
@@ -178,55 +175,6 @@ impl Buffer {
             .unwrap_or(self.size)
     }
 
-    /// Returns either the position of the end of line relative to `pos` or `n` characters
-    /// forward, whichever comes first.
-    ///
-    /// This function behaves similar to [`find_end_line`](Self::find_end_line), but stops
-    /// searching if `n` characters are scanned before `\n` is encountered, essentially
-    /// placing a bound on the search range.
-    pub fn find_end_line_or(&self, pos: usize, n: usize) -> usize {
-        self.forward(pos)
-            .index()
-            .take(n)
-            .find(|&(_, c)| c == '\n')
-            .map(|(_pos, _)| _pos)
-            .unwrap_or_else(|| cmp::min(pos + n, self.size))
-    }
-
-    pub fn find_next_line(&self, pos: usize) -> usize {
-        self.forward(pos)
-            .index()
-            .find(|&(_, c)| c == '\n')
-            .map(|(_pos, _)| _pos + 1)
-            .unwrap_or(self.size)
-    }
-
-    /// Returns a `Some` containing either the position of the first character of the line
-    /// that follows the current line referenced by `pos` or `n` characters forward,
-    /// otherwise `None` if end of buffer is reached.
-    pub fn find_next_line_or(&self, pos: usize, n: usize) -> Option<usize> {
-        self.forward(pos)
-            .index()
-            .take(n)
-            .find(|&(_, c)| c == '\n')
-            .map(|(_pos, _)| _pos + 1)
-            .or_else(|| (pos + n < self.size).then(|| pos + n))
-    }
-
-    pub fn find_prev(&self, pos: usize) -> Option<usize> {
-        // find end of previous line first, then find beginning of previous line
-        self.backward(pos)
-            .index()
-            .find(|&(_, c)| c == '\n')
-            .and_then(|(_pos, _)| {
-                self.backward(_pos)
-                    .index()
-                    .find(|&(_, c)| c == '\n')
-                    .map(|(_pos, _)| _pos + 1)
-                    .or(Some(0))
-            })
-    }
-
     pub fn read<R>(&mut self, reader: &mut R) -> Result<usize>
     where
         R: BufRead,
@@ -246,7 +194,7 @@ impl Buffer {
                 // - enough characters have been read to reach trigger, or
                 // - reader has reached EOF
                 let cs = chunk.chars().collect::<Vec<_>>();
-                let _ = self.insert_chars(&cs);
+                let _ = self.insert(&cs);
                 count += cs.len();
                 chunk.clear();
             }
@@ -500,7 +448,7 @@ mod tests {
     }
 
     #[test]
-    fn insert() {
+    fn insert_char() {
         let mut buf = Buffer::new();
         let pos = buf.insert_char('a');
         assert_eq!(pos, 1);
@@ -523,9 +471,9 @@ mod tests {
     }
 
     #[test]
-    fn insert_chars() {
+    fn insert() {
         let mut buf = Buffer::new();
-        let pos = buf.insert_chars(&vec!['a', 'b', 'c']);
+        let pos = buf.insert(&['a', 'b', 'c']);
         assert_eq!(pos, 3);
         assert_eq!(buf.get_char(0), Some('a'));
         assert_eq!(buf.get_char(1), Some('b'));
@@ -534,7 +482,7 @@ mod tests {
 
         let pos = buf.set_pos(1);
         assert_eq!(pos, 1);
-        let pos = buf.insert_chars(&vec!['d', 'e', 'f']);
+        let pos = buf.insert(&['d', 'e', 'f']);
         assert_eq!(pos, 4);
         assert_eq!(buf.get_char(0), Some('a'));
         assert_eq!(buf.get_char(1), Some('d'));
@@ -546,12 +494,12 @@ mod tests {
     }
 
     #[test]
-    fn delete() {
+    fn remove_char() {
         const TEXT: &str = "abcdef";
 
         let mut buf = Buffer::new();
         let cs = TEXT.chars().collect::<Vec<_>>();
-        let _ = buf.insert_chars(&cs);
+        let _ = buf.insert(&cs);
         assert_eq!(buf.size(), cs.len());
 
         let pos = buf.set_pos(1);
@@ -563,25 +511,25 @@ mod tests {
     }
 
     #[test]
-    fn delete_chars() {
+    fn remove() {
         const TEXT: &str = "abcxyzdef";
 
         let mut buf = Buffer::new();
         let text = TEXT.chars().collect::<Vec<_>>();
-        let _ = buf.insert_chars(&text);
+        let _ = buf.insert(&text);
         assert_eq!(buf.size(), text.len());
 
         let pos = buf.set_pos(3);
         assert_eq!(pos, 3);
-        let cs = buf.remove_chars(3);
+        let cs = buf.remove(3);
         assert_eq!(cs, vec!['x', 'y', 'z']);
         assert_eq!(buf.get_char(3), Some('d'));
         assert_eq!(buf.size(), text.len() - 3);
 
         buf.set_pos(buf.size());
-        assert_eq!(buf.remove_chars(1), vec![]);
+        assert_eq!(buf.remove(1), vec![]);
         buf.set_pos(0);
-        assert_eq!(buf.remove_chars(0), vec![]);
+        assert_eq!(buf.remove(0), vec![]);
     }
 
     #[test]
@@ -604,7 +552,7 @@ mod tests {
         const TEXT: &str = "ųų!)EÝ×vĶǑǟ²ȋØWÚųțòWůĪĎɎ«ƿǎǓC±ţOƹǅĠ/9ŷŌȈïĚſ°ǼȎ¢2^ÁǑī0ÄgŐĢśŧ¶";
 
         let mut buf = Buffer::new();
-        let _ = buf.insert_chars(&TEXT.chars().collect::<Vec<_>>());
+        let _ = buf.insert(&TEXT.chars().collect::<Vec<_>>());
         let mut writer = Cursor::new(Vec::new());
 
         let n = buf.write(&mut writer).unwrap();
@@ -623,7 +571,7 @@ mod tests {
         assert_eq!(buf.forward(0).next(), None);
 
         let cs = TEXT.chars().collect::<Vec<_>>();
-        let n = buf.insert_chars(&cs);
+        let n = buf.insert(&cs);
         assert_eq!(cs.len(), n);
 
         for (a, b) in zip(buf.forward(0), cs.iter()) {
@@ -642,7 +590,7 @@ mod tests {
 
         let mut buf = Buffer::new();
         let cs = TEXT.chars().collect::<Vec<_>>();
-        let _ = buf.insert_chars(&cs);
+        let _ = buf.insert(&cs);
 
         for ((a_pos, a), (b_pos, b)) in zip(buf.forward(0).index(), zip(0..cs.len(), cs)) {
             assert_eq!(a_pos, b_pos);
@@ -658,7 +606,7 @@ mod tests {
         assert_eq!(buf.backward(buf.size()).next(), None);
 
         let cs = TEXT.chars().collect::<Vec<_>>();
-        let n = buf.insert_chars(&cs);
+        let n = buf.insert(&cs);
         assert_eq!(cs.len(), n);
 
         for (a, b) in zip(buf.backward(buf.size()), cs.iter().rev()) {
@@ -677,7 +625,7 @@ mod tests {
 
         let mut buf = Buffer::new();
         let cs = TEXT.chars().collect::<Vec<_>>();
-        let _ = buf.insert_chars(&cs);
+        let _ = buf.insert(&cs);
 
         for ((a_pos, a), (b_pos, b)) in zip(
             buf.backward(buf.size()).index(),
@@ -694,7 +642,7 @@ mod tests {
 
         let mut buf = Buffer::new();
         let cs = TEXT.chars().collect::<Vec<_>>();
-        let _ = buf.insert_chars(&cs);
+        let _ = buf.insert(&cs);
 
         // All chars in `def\n` range should find the same beginning of line.
         for pos in 4..8 {

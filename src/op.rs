@@ -32,15 +32,13 @@ pub enum Action {
     Question(String, Box<AnswerFn>),
 }
 
-fn open_file(env: &mut Environment) -> Result<Option<Action>> {
+fn open_file(_: &mut Environment) -> Result<Option<Action>> {
     let answer_fn = move |env: &mut Environment, answer: Option<&str>| {
         // FIXME: for testing purposes
         if let Some(file) = answer {
             if let Some(id) = env.open_view(Placement::Bottom) {
                 if let Some(editor) = env.get_editor(id) {
-                    editor
-                        .borrow_mut()
-                        .insert(&file.chars().collect::<Vec<_>>());
+                    editor.borrow_mut().insert_str(file);
                 }
                 Ok(None)
             } else {
@@ -64,16 +62,15 @@ fn insert_line(env: &mut Environment) -> Result<Option<Action>> {
     Ok(None)
 }
 
-/// Operation: `delete-char-left`
-fn delete_char_left(env: &mut Environment) -> Result<Option<Action>> {
-    // todo: should we return deleted char in result?
-    let _ = env.active_editor().delete_left();
+/// Operation: `remove-char-left`
+fn remove_char_left(env: &mut Environment) -> Result<Option<Action>> {
+    let _ = env.active_editor().remove_left();
     Ok(None)
 }
 
-/// Operation: `delete-char-right`
-fn delete_char_right(env: &mut Environment) -> Result<Option<Action>> {
-    let _ = env.active_editor().delete_right();
+/// Operation: `remove-char-right`
+fn remove_char_right(env: &mut Environment) -> Result<Option<Action>> {
+    let _ = env.active_editor().remove_right();
     Ok(None)
 }
 
@@ -137,8 +134,8 @@ fn scroll_down(env: &mut Environment) -> Result<Option<Action>> {
     Ok(None)
 }
 
-/// Operation: `move-begin-line`
-fn move_begin_line(env: &mut Environment) -> Result<Option<Action>> {
+/// Operation: `move-start-line`
+fn move_start_line(env: &mut Environment) -> Result<Option<Action>> {
     env.active_editor().move_start();
     Ok(None)
 }
@@ -237,8 +234,8 @@ fn next_window(env: &mut Environment) -> Result<Option<Action>> {
 /// Predefined mapping of editing operations to editing functions.
 const OP_MAPPINGS: [(&'static str, OpFn); 26] = [
     ("insert-line", insert_line),
-    ("delete-char-left", delete_char_left),
-    ("delete-char-right", delete_char_right),
+    ("remove-char-left", remove_char_left),
+    ("remove-char-right", remove_char_right),
     ("move-up", move_up),
     ("move-down", move_down),
     ("move-left", move_left),
@@ -249,7 +246,7 @@ const OP_MAPPINGS: [(&'static str, OpFn); 26] = [
     ("move-bottom", move_bottom),
     ("scroll-up", scroll_up),
     ("scroll-down", scroll_down),
-    ("move-begin-line", move_begin_line),
+    ("move-start-line", move_start_line),
     ("move-end-line", move_end_line),
     ("redraw", redraw),
     ("scroll-center", scroll_center),
