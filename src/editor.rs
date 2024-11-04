@@ -335,7 +335,7 @@ impl Editor {
         };
 
         self.buffer_mut().set_pos(from_pos);
-        let text = self.buffer_mut().remove_chars(len).unwrap();
+        let text = self.buffer_mut().remove_chars(len);
 
         // both lines must be updated after removal since the information may have
         // changed

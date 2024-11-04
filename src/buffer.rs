@@ -130,7 +130,7 @@ impl Buffer {
         }
     }
 
-    pub fn remove_chars(&mut self, count: usize) -> Option<Vec<char>> {
+    pub fn remove_chars(&mut self, count: usize) -> Vec<char> {
         if self.gap < self.size {
             let end = self.gap + self.gap_len;
             let n = cmp::min(count, self.capacity - end);
@@ -138,9 +138,9 @@ impl Buffer {
                 Vec::from(unsafe { NonNull::slice_from_raw_parts(self.ptr_at(end), n).as_ref() });
             self.gap_len += n;
             self.size -= n;
-            Some(cs)
+            cs
         } else {
-            None
+            vec![]
         }
     }
 
@@ -574,9 +574,14 @@ mod tests {
         let pos = buf.set_pos(3);
         assert_eq!(pos, 3);
         let cs = buf.remove_chars(3);
-        assert_eq!(cs, Some(vec!['x', 'y', 'z']));
+        assert_eq!(cs, vec!['x', 'y', 'z']);
         assert_eq!(buf.get_char(3), Some('d'));
         assert_eq!(buf.size(), text.len() - 3);
+
+        buf.set_pos(buf.size());
+        assert_eq!(buf.remove_chars(1), vec![]);
+        buf.set_pos(0);
+        assert_eq!(buf.remove_chars(0), vec![]);
     }
 
     #[test]
