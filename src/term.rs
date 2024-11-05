@@ -1,6 +1,5 @@
 //! Terminal handling.
 use crate::error::{Error, Result};
-
 use libc::{c_int, c_void, sigaction, sighandler_t, siginfo_t, termios, winsize};
 use libc::{SA_SIGINFO, SIGWINCH, STDIN_FILENO, STDOUT_FILENO, TCSADRAIN, TIOCGWINSZ, VMIN, VTIME};
 use std::mem::MaybeUninit;

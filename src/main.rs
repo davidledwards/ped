@@ -47,7 +47,6 @@ use crate::key::Keyboard;
 use crate::opt::Options;
 use crate::theme::Theme;
 use crate::workspace::Workspace;
-
 use std::ops::Drop;
 use std::path::PathBuf;
 use std::process::ExitCode;

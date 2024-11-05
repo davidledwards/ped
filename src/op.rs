@@ -15,7 +15,6 @@ use crate::env::Environment;
 use crate::error::Result;
 use crate::size::{Point, Size};
 use crate::workspace::Placement;
-
 use std::collections::HashMap;
 
 /// A function type that implements an editing operation.
@@ -30,6 +29,18 @@ pub enum Action {
     Quit,
     Alert(String),
     Question(String, Box<AnswerFn>),
+}
+
+fn insert_text_block(env: &mut Environment) -> Result<Option<Action>> {
+    const TEXT: &str = "Lorem ipsum dolor sit amet, consectetur porttitor\nLorem ipsum dolor sit amet, consectetur porttitor\nLorem ipsum dolor sit amet, consectetur porttitor\nLorem ipsum dolor sit amet, consectetur porttitor\nLorem ipsum dolor sit amet, consectetur porttitor\nLorem ipsum dolor sit amet, consectetur porttitor";
+
+    env.active_editor().insert_str(TEXT);
+    Ok(None)
+}
+
+fn remove_text_block(env: &mut Environment) -> Result<Option<Action>> {
+    let text = env.active_editor().remove(300);
+    Ok(Some(Action::Alert(format!("removed {} chars", text.len()))))
 }
 
 fn open_file(_: &mut Environment) -> Result<Option<Action>> {
@@ -232,7 +243,7 @@ fn next_window(env: &mut Environment) -> Result<Option<Action>> {
 }
 
 /// Predefined mapping of editing operations to editing functions.
-const OP_MAPPINGS: [(&'static str, OpFn); 26] = [
+const OP_MAPPINGS: [(&'static str, OpFn); 28] = [
     ("insert-line", insert_line),
     ("remove-char-left", remove_char_left),
     ("remove-char-right", remove_char_right),
@@ -260,6 +271,8 @@ const OP_MAPPINGS: [(&'static str, OpFn); 26] = [
     ("next-window", next_window),
     // FIXME: added for testing
     ("open-file", open_file),
+    ("insert-text-block", insert_text_block),
+    ("remove-text-block", remove_text_block),
 ];
 
 pub fn init_op_map() -> OpMap {

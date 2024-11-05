@@ -2,7 +2,6 @@
 use crate::ansi;
 use crate::color::Color;
 use crate::size::Point;
-
 use std::io::{self, Write};
 
 /// A buffered abstraction over standard output that sends content to the terminal

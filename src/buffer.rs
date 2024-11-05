@@ -1,6 +1,5 @@
 //! Gap buffer.
 use crate::error::{Error, Result};
-
 use std::alloc::{self, Layout};
 use std::cell::RefCell;
 use std::cmp;
@@ -161,20 +160,15 @@ impl Buffer {
             .unwrap_or(0)
     }
 
-    /// Returns the position of the end of line relative to `pos`.
+    /// Returns a tuple containing the position of the next line relative to `pos` and
+    /// whether or not the prior line was terminated with `\n`.
     ///
-    /// Specifically, this function returns the position of the first `\n` encountered when
-    /// scanning forward from `pos`, or returns the end of buffer position if reached first.
+    /// Specifically, this function returns the position following the first `\n`
+    /// encountered when scanning forward from `pos`, or returns the end of buffer
+    /// position if reached first. The end-of-buufer scenario is the only condition which
+    /// would cause the second tuple value to return `false`.
     ///
     /// Note that when scanning forward, `pos` is an _inclusive_ bound.
-    pub fn find_end_line(&self, pos: usize) -> usize {
-        self.forward(pos)
-            .index()
-            .find(|&(_, c)| c == '\n')
-            .map(|(_pos, _)| _pos)
-            .unwrap_or(self.size)
-    }
-
     pub fn find_next_line(&self, pos: usize) -> (usize, bool) {
         self.forward(pos)
             .index()

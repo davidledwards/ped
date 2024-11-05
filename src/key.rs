@@ -1,6 +1,5 @@
 //! Keyboard reader.
 use crate::error::{Error, Result};
-
 use std::collections::HashMap;
 use std::fmt;
 use std::io::{self, Bytes, Read, Stdin};

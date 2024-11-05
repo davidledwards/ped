@@ -9,7 +9,6 @@ use crate::key::{Key, Keyboard, CTRL_G};
 use crate::op::{Action, AnswerFn};
 use crate::term;
 use crate::workspace::Workspace;
-
 use std::fmt;
 use std::time::Instant;
 

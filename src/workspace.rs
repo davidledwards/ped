@@ -4,7 +4,6 @@ use crate::term;
 use crate::theme::{Theme, ThemeRef};
 use crate::window::{Window, WindowRef};
 use crate::writer::Writer;
-
 use std::cell::RefCell;
 use std::cmp;
 use std::rc::Rc;

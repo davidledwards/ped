@@ -8,7 +8,6 @@ use crate::key::{
 use crate::size::{Point, Size};
 use crate::workspace::WorkspaceRef;
 use crate::writer::Writer;
-
 use std::cmp;
 
 pub struct InputEditor {

@@ -3,7 +3,6 @@ use crate::canvas::{Canvas, CanvasRef};
 use crate::size::{Point, Size};
 use crate::theme::{Theme, ThemeRef};
 use crate::writer::Writer;
-
 use std::cell::RefCell;
 use std::rc::Rc;
 

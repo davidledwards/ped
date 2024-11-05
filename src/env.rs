@@ -2,7 +2,6 @@
 use crate::editor::{Editor, EditorRef};
 use crate::window::Window;
 use crate::workspace::{Placement, Workspace, WorkspaceRef};
-
 use std::cell::{Ref, RefMut};
 use std::collections::HashMap;
 

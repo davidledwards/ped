@@ -1,7 +1,6 @@
 //! Color theme.
-use std::rc::Rc;
-
 use crate::color::Color;
+use std::rc::Rc;
 
 pub struct Theme {
     pub text_color: Color,

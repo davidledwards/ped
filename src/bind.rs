@@ -2,7 +2,6 @@
 use crate::error::{Error, Result};
 use crate::key::{self, Key, KeyMap};
 use crate::op::{self, OpFn, OpMap};
-
 use std::collections::{HashMap, HashSet};
 
 /// Map of [`Key`] sequences to editing operations.
@@ -94,7 +93,7 @@ impl Bindings {
     }
 
     /// Default mapping of keys to editing operations.
-    const DEFAULT_BINDINGS: [(&'static str, &'static str); 36] = [
+    const DEFAULT_BINDINGS: [(&'static str, &'static str); 38] = [
         // Exit and cancellation.
         ("ctrl-q", "quit"),
         // Navigation.
@@ -136,5 +135,8 @@ impl Bindings {
         ("ctrl-w:n", "next-window"),
         // Files.
         ("ctrl-o", "open-file"),
+        // FIXME: added for testing
+        ("fn-1", "insert-text-block"),
+        ("fn-2", "remove-text-block"),
     ];
 }

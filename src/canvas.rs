@@ -2,7 +2,6 @@
 use crate::grid::{Cell, Grid};
 use crate::size::{Point, Size};
 use crate::writer::Writer;
-
 use std::cell::RefCell;
 use std::rc::Rc;
 
