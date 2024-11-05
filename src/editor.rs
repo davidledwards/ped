@@ -249,7 +249,6 @@ impl Editor {
     pub fn draw(&mut self) {
         self.canvas_mut().clear();
         self.render();
-        self.show_cursor();
     }
 
     pub fn get_size(&self) -> Size {
@@ -301,8 +300,8 @@ impl Editor {
             let col = self.cur_line.col_of(cur_pos);
             self.cur_pos = cur_pos;
             self.snap_col = None;
+            self.cursor = Point::new(row, col);
             self.render();
-            self.set_cursor(row, col);
         }
     }
 
@@ -374,8 +373,8 @@ impl Editor {
             let col = self.cur_line.col_of(from_pos);
             self.cur_pos = from_pos;
             self.snap_col = None;
+            self.cursor = Point::new(row, col);
             self.render();
-            self.set_cursor(row, col);
             text
         }
     }
@@ -418,8 +417,8 @@ impl Editor {
             let col = self.cur_line.snap_col(try_col);
             self.cur_pos = self.cur_line.pos_of(col);
             self.snap_col = Some(try_col);
+            self.cursor = Point::new(row, col);
             self.render();
-            self.set_cursor(row, col);
         }
     }
 
@@ -478,8 +477,8 @@ impl Editor {
             let col = self.cur_line.snap_col(try_col);
             self.cur_pos = self.cur_line.pos_of(col);
             self.snap_col = Some(try_col);
+            self.cursor = Point::new(row, col);
             self.render();
-            self.set_cursor(row, col);
         }
     }
 
@@ -574,8 +573,8 @@ impl Editor {
         let col = self.cur_line.col_of(pos);
         self.cur_pos = pos;
         self.snap_col = None;
+        self.cursor = Point::new(row, col);
         self.render();
-        self.set_cursor(row, col);
     }
 
     pub fn move_left(&mut self, len: usize) {
@@ -604,8 +603,8 @@ impl Editor {
     pub fn move_start(&mut self) {
         if self.cursor.col > 0 {
             self.cur_pos = self.cur_line.row_pos;
+            self.cursor.col = 0;
             self.render();
-            self.set_cursor_col(0);
         }
         self.snap_col = None;
     }
@@ -614,8 +613,8 @@ impl Editor {
     pub fn move_end(&mut self) {
         if self.cursor.col < self.cur_line.end_col() {
             self.cur_pos = self.cur_line.end_pos();
+            self.cursor.col = self.cur_line.end_col();
             self.render();
-            self.set_cursor_col(self.cur_line.end_col());
         }
         self.snap_col = None;
     }
@@ -653,8 +652,8 @@ impl Editor {
                 (self.cursor.row - rows, self.cursor.col)
             };
 
+            self.cursor = Point::new(row, col);
             self.render();
-            self.set_cursor(row, col);
         }
     }
 
@@ -681,26 +680,9 @@ impl Editor {
                 (self.view.rows - 1 as u32, col)
             };
 
+            self.cursor = Point::new(row, col);
             self.render();
-            self.set_cursor(row, col);
         }
-    }
-
-    /// Sets the cursor to (`row`, `col`) and updates the window.
-    fn set_cursor(&mut self, row: u32, col: u32) {
-        self.cursor = Point::new(row, col);
-        self.view
-            .banner
-            .borrow_mut()
-            .set_cursor(self.cur_line.point_of(self.cursor.col))
-            .draw();
-        self.canvas_mut().set_cursor(self.cursor);
-    }
-
-    /// Sets the cursor column to `col`, retaining the current row, and updates the
-    /// window.
-    fn set_cursor_col(&mut self, col: u32) {
-        self.set_cursor(self.cursor.row, col);
     }
 
     fn render(&mut self) {
@@ -732,6 +714,14 @@ impl Editor {
             canvas.fill_rows(row + 1, self.view.rows, self.view.blank_cell);
         }
         canvas.draw();
+
+        self.view
+            .banner
+            .borrow_mut()
+            .set_cursor(self.cur_line.point_of(self.cursor.col))
+            .draw();
+
+        canvas.set_cursor(self.cursor);
     }
 
     // todo
