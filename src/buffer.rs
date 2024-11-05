@@ -175,6 +175,14 @@ impl Buffer {
             .unwrap_or(self.size)
     }
 
+    pub fn find_next_line(&self, pos: usize) -> (usize, bool) {
+        self.forward(pos)
+            .index()
+            .find(|&(_, c)| c == '\n')
+            .map(|(_pos, _)| (_pos + 1, true))
+            .unwrap_or((self.size, false))
+    }
+
     pub fn read<R>(&mut self, reader: &mut R) -> Result<usize>
     where
         R: BufRead,

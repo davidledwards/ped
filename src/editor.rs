@@ -51,7 +51,7 @@ struct Line {
     /// which must always be >= `row_pos`.
     row_pos: usize,
 
-    /// Length of the display line, excluding the `\n` if one exists.
+    /// Length of the display line, including the `\n` if one exists.
     row_len: usize,
 
     /// Buffer position corresponding to the first character of the buffer line,
@@ -63,6 +63,8 @@ struct Line {
 
     /// The `0`-based number of the buffer line.
     line_nbr: usize,
+
+    line_bottom: bool,
 }
 
 /// Cursor alignment directives.
@@ -108,6 +110,7 @@ impl Line {
             line_pos: 0,
             line_len: 0,
             line_nbr: 0,
+            line_bottom: false,
         }
     }
 
@@ -117,18 +120,38 @@ impl Line {
         self.row_pos == 0
     }
 
+    /// Returns `true` if the row of this line points to the bottom of the buffer.
+    fn is_bottom(&self) -> bool {
+        !self.wraps() && self.line_bottom
+        // self.row_len == 0
+    }
+
     /// Returns `true` if the row of this line has wrapped from at least one prior
     /// row.
     #[inline]
-    fn has_wrapped(&self) -> bool {
+    fn wrapped(&self) -> bool {
         self.row_pos > self.line_pos
+    }
+
+    /// Returns `true` if the buffer line on this row wraps at least to the next
+    /// row.
+    #[inline]
+    fn wraps(&self) -> bool {
+        // fixme: this might be incorrect if last row len == self.cols
+        self.row_pos + self.row_len < self.line_pos + self.line_len
     }
 
     /// Returns a possibly smaller value of `col` if it extends beyond the end of
     /// the row.
     #[inline]
     fn snap_col(&self, col: u32) -> u32 {
-        cmp::min(col, self.row_len as u32)
+        if self.row_len == 0 {
+            0
+        } else if self.is_bottom() {
+            cmp::min(col, self.row_len as u32)
+        } else {
+            cmp::min(col, self.row_len as u32 - 1)
+        }
     }
 
     /// Returns the buffer position of `col` relative to the starting position of
@@ -146,7 +169,19 @@ impl Line {
     }
 
     #[inline]
+    fn end_col(&self) -> u32 {
+        if self.row_len == 0 {
+            0
+        } else if self.is_bottom() {
+            self.row_len as u32
+        } else {
+            (self.row_len - 1) as u32
+        }
+    }
+
+    #[inline]
     fn end_pos(&self) -> usize {
+        // self.row_pos + self.row_len - 1
         self.row_pos + self.row_len
     }
 
@@ -517,9 +552,7 @@ impl Editor {
 
     fn find_down_cur_line(&mut self, pos: usize) -> u32 {
         let mut rows = 0;
-        while pos > self.cur_line.end_pos()
-            || pos == self.cur_line.row_pos + self.view.cols as usize
-        {
+        while pos >= self.cur_line.end_pos() && !self.cur_line.is_bottom() {
             self.cur_line = self.next_line_unchecked(&self.cur_line);
             rows += 1;
         }
@@ -626,7 +659,7 @@ impl Editor {
 
     /// Moves the cursor to the end of the current row.
     pub fn move_end(&mut self) {
-        let end_col = cmp::min(self.cur_line.row_len as u32, self.view.cols - 1);
+        let end_col = self.cur_line.end_col();
         if self.cursor.col < end_col {
             self.cur_pos = self.cur_line.pos_of(end_col);
             self.cursor.col = end_col;
@@ -746,7 +779,12 @@ impl Editor {
     fn find_line(&self, pos: usize) -> Line {
         let buffer = self.buffer.borrow();
         let line_pos = buffer.find_start_line(pos);
-        let line_len = buffer.find_end_line(pos) - line_pos;
+
+        // let line_len = buffer.find_next_line(pos) - line_pos;
+        let (end_pos, terminated) = buffer.find_next_line(pos);
+        let line_len = end_pos - line_pos;
+        let line_bottom = !terminated;
+
         let row_pos = pos - ((pos - line_pos) % self.view.cols as usize);
         let row_len = cmp::min(line_len - (row_pos - line_pos), self.view.cols as usize);
         Line {
@@ -755,6 +793,7 @@ impl Editor {
             line_pos,
             line_len,
             line_nbr: buffer.line_of(line_pos),
+            line_bottom,
         }
     }
 
@@ -769,7 +808,13 @@ impl Editor {
         // cur_line, and even if the insertion happened at col 0, this does not
         // change any values above
         let buffer = self.buffer.borrow();
-        let line_len = buffer.find_end_line(line.line_pos) - line.line_pos;
+
+        // let line_len = buffer.find_end_line(line.line_pos) - line.line_pos;
+        // let line_len = buffer.find_next_line(line.line_pos) - line.line_pos;
+        let (end_pos, terminated) = buffer.find_next_line(line.line_pos);
+        let line_len = end_pos - line.line_pos;
+        let line_bottom = !terminated;
+
         let row_len = cmp::min(
             line_len - (line.row_pos - line.line_pos),
             self.view.cols as usize,
@@ -777,6 +822,7 @@ impl Editor {
         Line {
             row_len,
             line_len,
+            line_bottom,
             ..*line
         }
     }
@@ -787,7 +833,7 @@ impl Editor {
     fn prev_line(&self, line: &Line) -> Option<Line> {
         if line.is_top() {
             None
-        } else if line.has_wrapped() {
+        } else if line.wrapped() {
             let row_pos = line.row_pos - self.view.cols as usize;
             let l = Line {
                 row_pos,
@@ -799,7 +845,13 @@ impl Editor {
             let buffer = self.buffer.borrow();
             let pos = line.line_pos - 1;
             let line_pos = buffer.find_start_line(pos);
-            let line_len = buffer.find_end_line(pos) - line_pos;
+
+            // let line_len = buffer.find_end_line(pos) - line_pos;
+            // let line_len = buffer.find_next_line(pos) - line_pos;
+            let (end_pos, terminated) = buffer.find_next_line(pos);
+            let line_len = end_pos - line_pos;
+            let line_bottom = !terminated;
+
             let row_pos = pos - ((pos - line_pos) % self.view.cols as usize);
             let row_len = cmp::min(line_len - (row_pos - line_pos), self.view.cols as usize);
             let l = Line {
@@ -808,6 +860,7 @@ impl Editor {
                 line_pos,
                 line_len,
                 line_nbr: line.line_nbr - 1,
+                line_bottom,
             };
             Some(l)
         }
@@ -820,30 +873,11 @@ impl Editor {
 
     // todo
     //
-    // returns the next line of None if the given line is at the bottom of buffer
+    // returns the next line or None if the given line is at the bottom of buffer
     fn next_line(&self, line: &Line) -> Option<Line> {
-        if line.row_len < self.view.cols as usize {
-            // this means that row does not wrap, so we need to find next line
-            let buffer = self.buffer.borrow();
-            let line_pos = line.line_pos + line.line_len + 1;
-            if line_pos <= buffer.size() {
-                let line_len = buffer.find_end_line(line_pos) - line_pos;
-                let row_pos = line_pos;
-                let row_len = cmp::min(line_len - (row_pos - line_pos), self.view.cols as usize);
-                let l = Line {
-                    row_pos,
-                    row_len,
-                    line_pos,
-                    line_len,
-                    line_nbr: line.line_nbr + 1,
-                };
-                Some(l)
-            } else {
-                // end of buffer reached
-                None
-            }
-        } else {
-            // this means that the row wraps
+        if line.is_bottom() {
+            None
+        } else if line.wraps() {
             let row_pos = line.row_pos + line.row_len;
             let row_len = cmp::min(
                 line.line_len - (row_pos - line.line_pos),
@@ -853,6 +887,30 @@ impl Editor {
                 row_pos,
                 row_len,
                 ..*line
+            };
+            Some(l)
+        } else {
+            // this means that row does not wrap, so we need to find next line
+            let buffer = self.buffer.borrow();
+
+            // let line_pos = line.line_pos + line.line_len + 1;
+            let line_pos = line.line_pos + line.line_len;
+
+            //            let line_len = buffer.find_next_line(line_pos) - line_pos;
+
+            let (end_pos, terminated) = buffer.find_next_line(line_pos);
+            let line_len = end_pos - line_pos;
+            let line_bottom = !terminated;
+
+            let row_pos = line_pos;
+            let row_len = cmp::min(line_len - (row_pos - line_pos), self.view.cols as usize);
+            let l = Line {
+                row_pos,
+                row_len,
+                line_pos,
+                line_len,
+                line_nbr: line.line_nbr + 1,
+                line_bottom,
             };
             Some(l)
         }
