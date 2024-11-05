@@ -5,12 +5,13 @@ use crate::grid::Cell;
 use crate::size::{Point, Size};
 use crate::theme::ThemeRef;
 use crate::window::{BannerRef, Window, WindowRef};
-
 use std::cell::{Ref, RefCell, RefMut};
 use std::cmp;
 use std::path::PathBuf;
 use std::rc::Rc;
 
+/// An editing controller with an underlying [Buffer] and an attachable
+/// [Window].
 pub struct Editor {
     /// An optional path if the buffer is associated with a file.
     path: Option<PathBuf>,
@@ -21,7 +22,10 @@ pub struct Editor {
     /// Buffer position corresponding to the cursor.
     cur_pos: usize,
 
+    /// Line on the display representing the top row.
     top_line: Line,
+
+    /// Line on the display representing the cursor row.
     cur_line: Line,
 
     /// An optional column to which the cursor should *snap* when moving up and down.
@@ -38,7 +42,7 @@ pub type EditorRef = Rc<RefCell<Editor>>;
 
 /// Represents contextual information for a line on the display.
 ///
-/// A _line_ in this context should not be confused with the characterization of
+/// A *line* in this context should not be confused with the characterization of
 /// a line in [Buffer], which could conceivably span more than one line on the
 /// display.
 #[derive(Clone)]
@@ -61,56 +65,9 @@ struct Line {
     line_nbr: usize,
 }
 
-impl Line {
-    fn zero() -> Line {
-        Line {
-            row_pos: 0,
-            row_len: 0,
-            line_pos: 0,
-            line_len: 0,
-            line_nbr: 0,
-        }
-    }
-
-    fn is_top(&self) -> bool {
-        self.row_pos == 0
-    }
-
-    fn has_wrapped(&self) -> bool {
-        self.row_pos > self.line_pos
-    }
-
-    fn snap_col(&self, col: u32) -> u32 {
-        cmp::min(col, self.row_len as u32)
-    }
-
-    fn pos_of(&self, col: u32) -> usize {
-        self.row_pos + col as usize
-    }
-
-    fn col_of(&self, pos: usize) -> u32 {
-        (pos - self.row_pos) as u32
-    }
-
-    fn end_col(&self) -> u32 {
-        self.row_len as u32
-    }
-
-    fn end_pos(&self) -> usize {
-        self.row_pos + self.row_len
-    }
-
-    fn point_of(&self, col: u32) -> Point {
-        Point::new(
-            self.line_nbr as u32 + 1,
-            (self.row_pos - self.line_pos) as u32 + col + 1,
-        )
-    }
-}
-
-/// Various cursor alignment directives.
+/// Cursor alignment directives.
 pub enum Align {
-    /// Try aligning to the current cursor position captured by [`Editor::cursor`].
+    /// Try aligning the cursor based on its contextual use.
     Auto,
 
     /// Try aligning the cursor in the center of the window.
@@ -141,6 +98,64 @@ struct View {
 
     /// Cached value of *blank* cell honoring the color [`View::theme`].
     blank_cell: Cell,
+}
+
+impl Line {
+    fn zero() -> Line {
+        Line {
+            row_pos: 0,
+            row_len: 0,
+            line_pos: 0,
+            line_len: 0,
+            line_nbr: 0,
+        }
+    }
+
+    /// Returns `true` if the row of this line points to the top of the buffer.
+    #[inline]
+    fn is_top(&self) -> bool {
+        self.row_pos == 0
+    }
+
+    /// Returns `true` if the row of this line has wrapped from at least one prior
+    /// row.
+    #[inline]
+    fn has_wrapped(&self) -> bool {
+        self.row_pos > self.line_pos
+    }
+
+    /// Returns a possibly smaller value of `col` if it extends beyond the end of
+    /// the row.
+    #[inline]
+    fn snap_col(&self, col: u32) -> u32 {
+        cmp::min(col, self.row_len as u32)
+    }
+
+    /// Returns the buffer position of `col` relative to the starting position of
+    /// the row.
+    #[inline]
+    fn pos_of(&self, col: u32) -> usize {
+        self.row_pos + col as usize
+    }
+
+    /// Returns the column number of `pos` relative to the starting position of the
+    /// row, but be advised that the column may extend beyond the end of the row.
+    #[inline]
+    fn col_of(&self, pos: usize) -> u32 {
+        (pos - self.row_pos) as u32
+    }
+
+    #[inline]
+    fn end_pos(&self) -> usize {
+        self.row_pos + self.row_len
+    }
+
+    fn point_of(&self, col: u32) -> Point {
+        Point::new(
+            self.line_nbr as u32 + 1,
+            (self.row_pos - self.line_pos) as u32 + col + 1,
+        )
+    }
 }
 
 impl View {
@@ -611,9 +626,10 @@ impl Editor {
 
     /// Moves the cursor to the end of the current row.
     pub fn move_end(&mut self) {
-        if self.cursor.col < self.cur_line.end_col() {
-            self.cur_pos = self.cur_line.end_pos();
-            self.cursor.col = self.cur_line.end_col();
+        let end_col = cmp::min(self.cur_line.row_len as u32, self.view.cols - 1);
+        if self.cursor.col < end_col {
+            self.cur_pos = self.cur_line.pos_of(end_col);
+            self.cursor.col = end_col;
             self.render();
         }
         self.snap_col = None;
