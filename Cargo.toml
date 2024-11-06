@@ -10,4 +10,4 @@ repository = "https://github.com/davidledwards/ped"
 license = "Apache-2.0"
 
 [dependencies]
-libc = "0.2.154"
+libc = "0.2.161"
