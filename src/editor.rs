@@ -1,6 +1,6 @@
 //! Editor.
 use crate::buffer::{Buffer, BufferRef};
-use crate::canvas::{Canvas, CanvasRef};
+use crate::canvas::CanvasRef;
 use crate::grid::Cell;
 use crate::size::{Point, Size};
 use crate::theme::ThemeRef;
@@ -34,8 +34,8 @@ pub struct Editor {
     /// Position of the cursor in the window.
     cursor: Point,
 
-    /// Attached window.
-    view: View,
+    /// Pane that controls output to the attached window.
+    pane: Pane,
 }
 
 pub type EditorRef = Rc<RefCell<Editor>>;
@@ -68,22 +68,8 @@ struct Line {
     line_bottom: bool,
 }
 
-/// Cursor alignment directives.
-pub enum Align {
-    /// Try aligning the cursor based on its contextual use.
-    Auto,
-
-    /// Try aligning the cursor in the center of the window.
-    Center,
-
-    /// Try aligning the cursor at the top of the window.
-    Top,
-
-    /// Try aligning the cursor at the bottom of the window.
-    Bottom,
-}
-
-struct View {
+/// Controls the rendering of displayable content to a [Window].
+struct Pane {
     /// Color theme that applies to the window.
     theme: ThemeRef,
 
@@ -101,6 +87,21 @@ struct View {
 
     /// Cached value of *blank* cell honoring the color [`View::theme`].
     blank_cell: Cell,
+}
+
+/// Cursor alignment directives.
+pub enum Align {
+    /// Try aligning the cursor based on its contextual use.
+    Auto,
+
+    /// Try aligning the cursor in the center of the window.
+    Center,
+
+    /// Try aligning the cursor at the top of the window.
+    Top,
+
+    /// Try aligning the cursor at the bottom of the window.
+    Bottom,
 }
 
 impl Line {
@@ -204,15 +205,15 @@ impl Default for Line {
     }
 }
 
-impl View {
-    fn new(window: WindowRef) -> View {
+impl Pane {
+    fn new(window: WindowRef) -> Pane {
         let theme = window.borrow().theme().clone();
         let canvas = window.borrow().canvas().clone();
         let banner = window.borrow().banner().clone();
         let Size { rows, cols } = canvas.borrow().size();
         let blank_cell = Cell::new(' ', theme.text_color);
 
-        View {
+        Pane {
             theme,
             canvas,
             banner,
@@ -220,6 +221,57 @@ impl View {
             cols,
             blank_cell,
         }
+    }
+
+    fn clear(&mut self) {
+        self.canvas.borrow_mut().clear();
+    }
+
+    fn draw(&mut self, row: u32, col: u32, c: char) -> Option<(u32, u32)> {
+        let mut canvas = self.canvas.borrow_mut();
+        let (row, col) = if c == '\n' {
+            canvas.fill_row_from(row, col, self.blank_cell);
+            (row + 1, 0)
+        } else {
+            canvas.set_cell(row, col, Cell::new(c, self.theme.text_color));
+            if col + 1 < self.cols {
+                (row, col + 1)
+            } else {
+                (row + 1, 0)
+            }
+        };
+        if row < self.rows {
+            Some((row, col))
+        } else {
+            None
+        }
+    }
+
+    fn draw_rest(&mut self, row: u32, col: u32) -> Option<(u32, u32)> {
+        let mut canvas = self.canvas.borrow_mut();
+        canvas.fill_row_from(row, col, self.blank_cell);
+        canvas.fill_rows(row + 1, self.rows, self.blank_cell);
+        None
+    }
+
+    fn draw_finish(&mut self) {
+        self.canvas.borrow_mut().draw();
+    }
+
+    fn draw_cursor(&mut self, cursor: Point) {
+        self.canvas.borrow_mut().set_cursor(cursor);
+    }
+
+    fn draw_banner(&mut self, title: String, loc: Point) {
+        self.banner
+            .borrow_mut()
+            .set_title(title)
+            .set_cursor(loc)
+            .draw();
+    }
+
+    fn draw_location(&mut self, loc: Point) {
+        self.banner.borrow_mut().set_cursor(loc).draw();
     }
 }
 
@@ -243,7 +295,7 @@ impl Editor {
             cur_line: Line::default(),
             snap_col: None,
             cursor: Point::ORIGIN,
-            view: View::new(Window::zombie().to_ref()),
+            pane: Pane::new(Window::zombie().to_ref()),
         }
     }
 
@@ -252,8 +304,18 @@ impl Editor {
         Rc::new(RefCell::new(self))
     }
 
+    #[inline(always)]
+    fn rows(&self) -> u32 {
+        self.pane.rows
+    }
+
+    #[inline(always)]
+    fn cols(&self) -> u32 {
+        self.pane.cols
+    }
+
     pub fn get_size(&self) -> Size {
-        (self.view.rows, self.view.cols).into()
+        (self.rows(), self.cols()).into()
     }
 
     pub fn get_cursor(&self) -> Point {
@@ -268,29 +330,16 @@ impl Editor {
     }
 
     pub fn show_cursor(&mut self) {
-        self.canvas_mut().set_cursor(self.cursor);
+        self.pane.draw_cursor(self.cursor);
     }
 
-    /// Attaches `window` to this editor.
+    /// Attaches the `window` to this editor.
     pub fn attach(&mut self, window: WindowRef) {
         let is_zombie = window.borrow().is_zombie();
-        self.view = View::new(window);
+        self.pane = Pane::new(window);
 
         if !is_zombie {
-            let title = match self.path {
-                Some(ref path) => path.to_string_lossy().to_string(),
-                None => "new".to_string(),
-            };
-
             self.align_cursor(Align::Auto);
-
-            self.view
-                .banner
-                .borrow_mut()
-                .set_title(title)
-                .set_cursor(self.get_location())
-                .draw();
-
             self.draw();
         }
     }
@@ -299,10 +348,10 @@ impl Editor {
         // Determine ideal row where cursor would like to be focused, though this should
         // be considered a hint.
         let try_row = match align {
-            Align::Auto => cmp::min(self.cursor.row, self.view.rows - 1),
-            Align::Center => self.view.rows / 2,
+            Align::Auto => cmp::min(self.cursor.row, self.rows() - 1),
+            Align::Center => self.rows() / 2,
             Align::Top => 0,
-            Align::Bottom => self.view.rows - 1,
+            Align::Bottom => self.rows() - 1,
         };
 
         // Tries to position cursor on target row, but no guarantee depending on proximity
@@ -314,8 +363,16 @@ impl Editor {
         self.cursor = Point::new(row, col);
     }
 
+    fn get_title(&self) -> String {
+        match self.path {
+            Some(ref path) => path.to_string_lossy().to_string(),
+            None => "new".to_string(),
+        }
+    }
+
     pub fn draw(&mut self) {
-        self.canvas_mut().clear();
+        self.pane.clear();
+        self.pane.draw_banner(self.get_title(), self.get_location());
         self.render();
     }
 
@@ -342,7 +399,7 @@ impl Editor {
             let rows = self.find_down_cur_line(cur_pos);
 
             let row = self.cursor.row + rows;
-            let row = if row < self.view.rows {
+            let row = if row < self.rows() {
                 // this means the new cursor has not moved beyond the bottom
                 // however, we need to update the top line in case it was affected by
                 // the insertion
@@ -350,7 +407,7 @@ impl Editor {
                 row
             } else {
                 // new row is beyond bottom, so find the new top line
-                self.set_top_line(self.view.rows - 1)
+                self.set_top_line(self.rows() - 1)
             };
 
             let col = self.cur_line.col_of(cur_pos);
@@ -475,13 +532,13 @@ impl Editor {
                 self.down_top_line(rows);
                 self.cursor.row
             } else {
-                if self.cursor.row + rows < self.view.rows {
+                if self.cursor.row + rows < self.rows() {
                     // this means the new cursor has not moved beyond the bottom, and the
                     // current top line does not change
                     self.cursor.row + rows
                 } else {
                     // new row is beyond bottom, so we need to find the new top line
-                    self.set_top_line(self.view.rows - 1)
+                    self.set_top_line(self.rows() - 1)
                 }
             };
 
@@ -501,8 +558,8 @@ impl Editor {
 
             let rows = match align {
                 Align::Top | Align::Auto => 0,
-                Align::Center => self.view.rows / 2,
-                Align::Bottom => self.view.rows - 1,
+                Align::Center => self.rows() / 2,
+                Align::Bottom => self.rows() - 1,
             };
 
             self.cur_line = self.top_line.clone();
@@ -516,8 +573,8 @@ impl Editor {
             let maybe_rows = match align {
                 Align::Auto => None,
                 Align::Top => Some(0),
-                Align::Center => Some(self.view.rows / 2),
-                Align::Bottom => Some(self.view.rows - 1),
+                Align::Center => Some(self.rows() / 2),
+                Align::Bottom => Some(self.rows() - 1),
             };
 
             if let Some(rows) = maybe_rows {
@@ -530,8 +587,8 @@ impl Editor {
             let maybe_rows = match align {
                 Align::Auto => None,
                 Align::Top => Some(0),
-                Align::Center => Some(self.view.rows / 2),
-                Align::Bottom => Some(self.view.rows - 1),
+                Align::Center => Some(self.rows() / 2),
+                Align::Bottom => Some(self.rows() - 1),
             };
 
             if let Some(rows) = maybe_rows {
@@ -544,10 +601,10 @@ impl Editor {
             let rows = self.find_down_cur_line(pos);
 
             let row = match align {
-                Align::Auto => cmp::min(self.cursor.row + rows, self.view.rows - 1),
+                Align::Auto => cmp::min(self.cursor.row + rows, self.rows() - 1),
                 Align::Top => 0,
-                Align::Center => self.view.rows / 2,
-                Align::Bottom => self.view.rows - 1,
+                Align::Center => self.rows() / 2,
+                Align::Bottom => self.rows() - 1,
             };
 
             self.set_top_line(row)
@@ -575,11 +632,11 @@ impl Editor {
     }
 
     pub fn move_page_up(&mut self) {
-        self.move_up(self.view.rows, true);
+        self.move_up(self.rows(), true);
     }
 
     pub fn move_page_down(&mut self) {
-        self.move_down(self.view.rows, true);
+        self.move_down(self.rows(), true);
     }
 
     /// Moves the cursor to the beginning of the current row.
@@ -650,18 +707,18 @@ impl Editor {
         let rows = self.up_top_line(try_rows);
         if rows > 0 {
             let row = self.cursor.row + rows;
-            let (row, col) = if row < self.view.rows {
+            let (row, col) = if row < self.rows() {
                 // this means that cursor is still visible on display
                 (row, self.cursor.col)
             } else {
                 // this means that scrolling would have pushed the cursor below the bottom
                 // back up from cur line to find the line at the bottom of the display
-                self.up_cur_line(row - self.view.rows + 1);
+                self.up_cur_line(row - self.rows() + 1);
                 let try_col = self.snap_col.take().unwrap_or(self.cursor.col);
                 let col = self.cur_line.snap_col(try_col);
                 self.cur_pos = self.cur_line.pos_of(col);
                 self.snap_col = Some(try_col);
-                (self.view.rows - 1 as u32, col)
+                (self.rows() - 1 as u32, col)
             };
 
             self.cursor = Point::new(row, col);
@@ -670,42 +727,14 @@ impl Editor {
     }
 
     fn render(&mut self) {
-        let mut canvas = self.view.canvas.borrow_mut();
-        let rest = self
-            .buffer
+        self.buffer
             .borrow()
             .forward(self.top_line.row_pos)
-            .try_fold((0, 0), |(row, col), c| {
-                let (row, col) = if c == '\n' {
-                    canvas.fill_row_from(row, col, self.view.blank_cell);
-                    (row + 1, 0)
-                } else {
-                    canvas.set_cell(row, col, Cell::new(c, self.view.theme.text_color));
-                    if col + 1 < self.view.cols {
-                        (row, col + 1)
-                    } else {
-                        (row + 1, 0)
-                    }
-                };
-                if row < self.view.rows {
-                    Some((row, col))
-                } else {
-                    None
-                }
-            });
-        if let Some((row, col)) = rest {
-            canvas.fill_row_from(row, col, self.view.blank_cell);
-            canvas.fill_rows(row + 1, self.view.rows, self.view.blank_cell);
-        }
-        canvas.draw();
-
-        self.view
-            .banner
-            .borrow_mut()
-            .set_cursor(self.get_location())
-            .draw();
-
-        canvas.set_cursor(self.cursor);
+            .try_fold((0, 0), |(row, col), c| self.pane.draw(row, col, c))
+            .and_then(|(row, col)| self.pane.draw_rest(row, col));
+        self.pane.draw_finish();
+        self.pane.draw_location(self.get_location());
+        self.pane.draw_cursor(self.cursor);
     }
 
     fn set_top_line(&mut self, try_rows: u32) -> u32 {
@@ -788,8 +817,8 @@ impl Editor {
     fn find_line(&self, pos: usize) -> Line {
         let (line_pos, next_pos, terminated) = self.find_line_bounds(pos);
         let line_len = next_pos - line_pos;
-        let row_pos = pos - ((pos - line_pos) % self.view.cols as usize);
-        let row_len = cmp::min(line_len - (row_pos - line_pos), self.view.cols as usize);
+        let row_pos = pos - ((pos - line_pos) % self.cols() as usize);
+        let row_len = cmp::min(line_len - (row_pos - line_pos), self.cols() as usize);
         Line {
             row_pos,
             row_len,
@@ -814,7 +843,7 @@ impl Editor {
         let line_len = next_pos - line.line_pos;
         let row_len = cmp::min(
             line_len - (line.row_pos - line.line_pos),
-            self.view.cols as usize,
+            self.cols() as usize,
         );
         Line {
             row_len,
@@ -831,8 +860,8 @@ impl Editor {
             None
         } else if line.has_wrapped() {
             let l = Line {
-                row_pos: line.row_pos - self.view.cols as usize,
-                row_len: self.view.cols as usize,
+                row_pos: line.row_pos - self.cols() as usize,
+                row_len: self.cols() as usize,
                 ..*line
             };
             Some(l)
@@ -840,8 +869,8 @@ impl Editor {
             let pos = line.line_pos - 1;
             let (line_pos, next_pos, terminated) = self.find_line_bounds(pos);
             let line_len = next_pos - line_pos;
-            let row_pos = pos - ((pos - line_pos) % self.view.cols as usize);
-            let row_len = cmp::min(line_len - (row_pos - line_pos), self.view.cols as usize);
+            let row_pos = pos - ((pos - line_pos) % self.cols() as usize);
+            let row_len = cmp::min(line_len - (row_pos - line_pos), self.cols() as usize);
             let l = Line {
                 row_pos,
                 row_len,
@@ -870,7 +899,7 @@ impl Editor {
             let row_pos = line.row_pos + line.row_len;
             let row_len = cmp::min(
                 line.line_len - (row_pos - line.line_pos),
-                self.view.cols as usize,
+                self.cols() as usize,
             );
             let l = Line {
                 row_pos,
@@ -882,7 +911,7 @@ impl Editor {
             let line_pos = line.line_pos + line.line_len;
             let (next_pos, terminated) = self.buffer().find_next_line(line_pos);
             let line_len = next_pos - line_pos;
-            let row_len = cmp::min(line_len, self.view.cols as usize);
+            let row_len = cmp::min(line_len, self.cols() as usize);
             let l = Line {
                 row_pos: line_pos,
                 row_len,
@@ -915,9 +944,5 @@ impl Editor {
 
     fn buffer_mut(&self) -> RefMut<'_, Buffer> {
         self.buffer.borrow_mut()
-    }
-
-    fn canvas_mut(&self) -> RefMut<'_, Canvas> {
-        self.view.canvas.borrow_mut()
     }
 }
