@@ -93,7 +93,7 @@ impl Bindings {
     }
 
     /// Default mapping of keys to editing operations.
-    const DEFAULT_BINDINGS: [(&'static str, &'static str); 38] = [
+    const DEFAULT_BINDINGS: [(&'static str, &'static str); 49] = [
         // Exit and cancellation.
         ("ctrl-q", "quit"),
         // Navigation.
@@ -109,10 +109,10 @@ impl Bindings {
         ("page-up", "move-page-up"),
         ("ctrl-[:n", "move-page-down"),
         ("page-down", "move-page-down"),
-        ("ctrl-a", "move-start-line"),
-        ("home", "move-start-line"),
-        ("ctrl-e", "move-end-line"),
-        ("end", "move-end-line"),
+        ("ctrl-a", "move-start"),
+        ("home", "move-start"),
+        ("ctrl-e", "move-end"),
+        ("end", "move-end"),
         ("ctrl-home", "move-top"),
         ("ctrl-[:a", "move-top"),
         ("ctrl-end", "move-bottom"),
@@ -125,6 +125,18 @@ impl Bindings {
         ("ctrl-?", "remove-char-left"),
         ("ctrl-h", "remove-char-left"),
         ("ctrl-m", "insert-line"),
+        // Text selection.
+        ("ctrl-@", "set-mark"),
+        ("shift-up", "move-up-select"),
+        ("shift-down", "move-down-select"),
+        ("shift-left", "move-left-select"),
+        ("shift-right", "move-right-select"),
+        ("shift-page-up", "move-page-up-select"),
+        ("shift-page-down", "move-page-down-select"),
+        ("shift-home", "move-start-select"),
+        ("shift-end", "move-end-select"),
+        ("shift-ctrl-home", "move-top-select"),
+        ("shift-ctrl-end", "move-bottom-select"),
         // Windows (FIXME: temporary until we find proper home)
         ("ctrl-w:/", "open-window-top"),
         ("ctrl-w:\\", "open-window-bottom"),

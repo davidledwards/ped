@@ -123,11 +123,18 @@ impl Controller {
             // Inserting text is statistically most prevalent scenario, so this
             // short circuits detection and bypasses normal indirection of key
             // binding.
-            self.env.active_editor().insert_char(c);
             self.clear_echo();
+            let mut editor = self.env.active_editor();
+            editor.clear_mark();
+            editor.insert_char(c);
         } else if key == CTRL_G {
-            self.clear_keys();
             self.clear_echo();
+            if !self.clear_keys() {
+                let mut editor = self.env.active_editor();
+                if let Some(_) = editor.clear_mark() {
+                    editor.render();
+                }
+            }
         } else {
             self.key_seq.push(key.clone());
             if let Some(op_fn) = self.bindings.find(&self.key_seq) {
@@ -232,8 +239,10 @@ impl Controller {
         }
     }
 
-    fn clear_keys(&mut self) {
+    fn clear_keys(&mut self) -> bool {
+        let cleared = self.key_seq.len() > 0;
         self.key_seq.clear();
+        cleared
     }
 
     fn show_keys(&mut self) {

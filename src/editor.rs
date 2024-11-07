@@ -1,12 +1,14 @@
 //! Editor.
 use crate::buffer::{Buffer, BufferRef};
 use crate::canvas::CanvasRef;
+use crate::color::Color;
 use crate::grid::Cell;
 use crate::size::{Point, Size};
 use crate::theme::ThemeRef;
 use crate::window::{BannerRef, Window, WindowRef};
 use std::cell::{Ref, RefCell, RefMut};
 use std::cmp;
+use std::ops::Range;
 use std::path::PathBuf;
 use std::rc::Rc;
 
@@ -33,6 +35,9 @@ pub struct Editor {
 
     /// Position of the cursor in the window.
     cursor: Point,
+
+    /// An optional mark used when selecting text.
+    mark: Option<Mark>,
 
     /// Pane that controls output to the attached window.
     pane: Pane,
@@ -84,9 +89,23 @@ struct Pane {
 
     /// Number of columns in [`View::canvas`].
     cols: u32,
+}
 
-    /// Cached value of *blank* cell honoring the color [`View::theme`].
-    blank_cell: Cell,
+/// Context provided to draw functions in [`Pane`].
+///
+/// By encapsulating theme-dependent decisions and relevant state information in this
+/// drawing context, [`Pane`] only needs to concern itself with the general rendering
+/// algorithm.
+struct Draw {
+    /// Color theme that dictates colors and behaviors.
+    theme: ThemeRef,
+
+    /// Current cursor position.
+    cursor: Point,
+
+    /// Range in the buffer containing selected text, if applicable, otherwise this
+    /// span is assumed to be `0`..`0`.
+    select_span: Range<usize>,
 }
 
 /// Cursor alignment directives.
@@ -103,6 +122,13 @@ pub enum Align {
     /// Try aligning the cursor at the bottom of the window.
     Bottom,
 }
+
+/// Marks the starting point of a selection in the buffer.
+///
+/// The first value is the buffer position, and the second value is `true` if the
+/// mark is *soft*, and `false` if *hard*.
+#[derive(Copy, Clone)]
+pub struct Mark(pub usize, pub bool);
 
 impl Line {
     /// Returns `true` if the row of this line points to the top of the buffer.
@@ -211,7 +237,6 @@ impl Pane {
         let canvas = window.borrow().canvas().clone();
         let banner = window.borrow().banner().clone();
         let Size { rows, cols } = canvas.borrow().size();
-        let blank_cell = Cell::new(' ', theme.text_color);
 
         Pane {
             theme,
@@ -219,7 +244,6 @@ impl Pane {
             banner,
             rows,
             cols,
-            blank_cell,
         }
     }
 
@@ -227,34 +251,40 @@ impl Pane {
         self.canvas.borrow_mut().clear();
     }
 
-    fn draw(&mut self, row: u32, col: u32, c: char) -> Option<(u32, u32)> {
+    fn draw(&mut self, draw: &Draw, p: Point, pos: usize, c: char) -> Option<Point> {
         let mut canvas = self.canvas.borrow_mut();
         let (row, col) = if c == '\n' {
-            canvas.fill_row_from(row, col, self.blank_cell);
-            (row + 1, 0)
+            let color = draw.blank_color(p.row);
+            canvas.fill_row_from(p.row, p.col, Cell::new(' ', color));
+            (p.row + 1, 0)
         } else {
-            canvas.set_cell(row, col, Cell::new(c, self.theme.text_color));
-            if col + 1 < self.cols {
-                (row, col + 1)
+            let color = draw.cell_color(p, pos);
+            canvas.set_cell(p.row, p.col, Cell::new(c, color));
+            if p.col + 1 < self.cols {
+                (p.row, p.col + 1)
             } else {
-                (row + 1, 0)
+                (p.row + 1, 0)
             }
         };
         if row < self.rows {
-            Some((row, col))
+            Some(Point::new(row, col))
         } else {
             None
         }
     }
 
-    fn draw_rest(&mut self, row: u32, col: u32) -> Option<(u32, u32)> {
+    fn draw_rest(&mut self, draw: &Draw, p: Point) -> Option<Point> {
         let mut canvas = self.canvas.borrow_mut();
-        canvas.fill_row_from(row, col, self.blank_cell);
-        canvas.fill_rows(row + 1, self.rows, self.blank_cell);
+        let color = draw.blank_color(p.row);
+        canvas.fill_row_from(p.row, p.col, Cell::new(' ', color));
+        for r in (p.row + 1)..self.rows {
+            let color = draw.blank_color(r);
+            canvas.fill_row(r, Cell::new(' ', color));
+        }
         None
     }
 
-    fn draw_finish(&mut self) {
+    fn draw_finish(&mut self, draw: &Draw) {
         self.canvas.borrow_mut().draw();
     }
 
@@ -272,6 +302,45 @@ impl Pane {
 
     fn draw_location(&mut self, loc: Point) {
         self.banner.borrow_mut().set_cursor(loc).draw();
+    }
+}
+
+impl Draw {
+    fn new(editor: &Editor) -> Draw {
+        let select_span = editor
+            .mark
+            .map(|Mark(mark_pos, _)| {
+                if mark_pos < editor.cur_pos {
+                    mark_pos..editor.cur_pos
+                } else {
+                    editor.cur_pos..mark_pos
+                }
+            })
+            .unwrap_or(0..0);
+
+        Draw {
+            theme: editor.pane.theme.clone(),
+            cursor: editor.get_cursor(),
+            select_span,
+        }
+    }
+
+    fn cell_color(&self, p: Point, pos: usize) -> Color {
+        if self.select_span.contains(&pos) {
+            self.theme.select_color
+        } else if self.theme.highlight_row && p.row == self.cursor.row {
+            self.theme.highlight_color
+        } else {
+            self.theme.text_color
+        }
+    }
+
+    fn blank_color(&self, row: u32) -> Color {
+        if self.theme.highlight_row && row == self.cursor.row {
+            self.theme.highlight_color
+        } else {
+            self.theme.text_color
+        }
     }
 }
 
@@ -295,6 +364,7 @@ impl Editor {
             cur_line: Line::default(),
             snap_col: None,
             cursor: Point::ORIGIN,
+            mark: None,
             pane: Pane::new(Window::zombie().to_ref()),
         }
     }
@@ -305,12 +375,12 @@ impl Editor {
     }
 
     #[inline(always)]
-    fn rows(&self) -> u32 {
+    pub fn rows(&self) -> u32 {
         self.pane.rows
     }
 
     #[inline(always)]
-    fn cols(&self) -> u32 {
+    pub fn cols(&self) -> u32 {
         self.pane.cols
     }
 
@@ -337,10 +407,8 @@ impl Editor {
     pub fn attach(&mut self, window: WindowRef) {
         let is_zombie = window.borrow().is_zombie();
         self.pane = Pane::new(window);
-
         if !is_zombie {
             self.align_cursor(Align::Auto);
-            self.draw();
         }
     }
 
@@ -361,6 +429,7 @@ impl Editor {
         let col = self.cur_line.col_of(self.cur_pos);
         self.snap_col = None;
         self.cursor = Point::new(row, col);
+        self.draw();
     }
 
     fn get_title(&self) -> String {
@@ -631,14 +700,6 @@ impl Editor {
         }
     }
 
-    pub fn move_page_up(&mut self) {
-        self.move_up(self.rows(), true);
-    }
-
-    pub fn move_page_down(&mut self) {
-        self.move_down(self.rows(), true);
-    }
-
     /// Moves the cursor to the beginning of the current row.
     pub fn move_start(&mut self) {
         if self.cursor.col > 0 {
@@ -726,13 +787,64 @@ impl Editor {
         }
     }
 
-    fn render(&mut self) {
+    /// Sets a *hard* mark at the current buffer position and returns the previous
+    /// mark if set.
+    pub fn set_hard_mark(&mut self) -> Option<Mark> {
+        self.mark.replace(Mark(self.cur_pos, false))
+    }
+
+    /// Sets a *soft* mark at the current buffer position unless a *soft* mark was
+    /// previously set.
+    ///
+    /// Note that if a *hard* mark was previously set, the *soft* mark will replace
+    /// it.
+    ///
+    /// Returns the previous *hard* mark if set, otherwise `None`.
+    pub fn set_soft_mark(&mut self) -> Option<Mark> {
+        if let Some(mark @ Mark(_, soft)) = self.mark {
+            if soft {
+                None
+            } else {
+                self.mark = Some(Mark(self.cur_pos, true));
+                Some(mark)
+            }
+        } else {
+            self.mark = Some(Mark(self.cur_pos, true));
+            None
+        }
+    }
+
+    /// Clears and returns the mark if *soft*, otherwise `None` is returned.
+    pub fn clear_soft_mark(&mut self) -> Option<Mark> {
+        if let Some(Mark(_, true)) = self.mark {
+            self.clear_mark()
+        } else {
+            None
+        }
+    }
+
+    /// Clears and returns the mark.
+    pub fn clear_mark(&mut self) -> Option<Mark> {
+        self.mark.take()
+    }
+
+    /// Renders the content of the editor.
+    pub fn render(&mut self) {
+        // Sets up draw context.
+        let draw = Draw::new(&self);
+
+        // Renders contents of visible editor contents.
         self.buffer
             .borrow()
             .forward(self.top_line.row_pos)
-            .try_fold((0, 0), |(row, col), c| self.pane.draw(row, col, c))
-            .and_then(|(row, col)| self.pane.draw_rest(row, col));
-        self.pane.draw_finish();
+            .index()
+            .try_fold(Point::ORIGIN, |p, (pos, c)| {
+                self.pane.draw(&draw, p, pos, c)
+            })
+            .and_then(|p| self.pane.draw_rest(&draw, p));
+
+        // Finalizes drawing and updates additional meta information.
+        self.pane.draw_finish(&draw);
         self.pane.draw_location(self.get_location());
         self.pane.draw_cursor(self.cursor);
     }

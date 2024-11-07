@@ -69,67 +69,157 @@ fn open_file(_: &mut Environment) -> Result<Option<Action>> {
 
 /// Operation: `insert-line`
 fn insert_line(env: &mut Environment) -> Result<Option<Action>> {
-    env.active_editor().insert_char('\n');
+    let mut editor = env.active_editor();
+    editor.clear_mark();
+    editor.insert_char('\n');
     Ok(None)
 }
 
 /// Operation: `remove-char-left`
 fn remove_char_left(env: &mut Environment) -> Result<Option<Action>> {
-    let _ = env.active_editor().remove_left();
+    let mut editor = env.active_editor();
+    editor.clear_mark();
+    let _ = editor.remove_left();
     Ok(None)
 }
 
 /// Operation: `remove-char-right`
 fn remove_char_right(env: &mut Environment) -> Result<Option<Action>> {
-    let _ = env.active_editor().remove_right();
+    let mut editor = env.active_editor();
+    editor.clear_mark();
+    let _ = editor.remove_right();
     Ok(None)
 }
 
 /// Operation: `move-up`
 fn move_up(env: &mut Environment) -> Result<Option<Action>> {
-    env.active_editor().move_up(1, false);
+    let mut editor = env.active_editor();
+    editor.clear_soft_mark();
+    editor.move_up(1, false);
+    Ok(None)
+}
+
+/// Operation: `move-up-select`
+fn move_up_select(env: &mut Environment) -> Result<Option<Action>> {
+    let mut editor = env.active_editor();
+    editor.set_soft_mark();
+    editor.move_up(1, false);
     Ok(None)
 }
 
 /// Operation: `move-down`
 fn move_down(env: &mut Environment) -> Result<Option<Action>> {
-    env.active_editor().move_down(1, false);
+    let mut editor = env.active_editor();
+    editor.clear_soft_mark();
+    editor.move_down(1, false);
+    Ok(None)
+}
+
+/// Operation: `move-down-select`
+fn move_down_select(env: &mut Environment) -> Result<Option<Action>> {
+    let mut editor = env.active_editor();
+    editor.set_soft_mark();
+    editor.move_down(1, false);
     Ok(None)
 }
 
 /// Operation: `move-left`
 fn move_left(env: &mut Environment) -> Result<Option<Action>> {
-    env.active_editor().move_left(1);
+    let mut editor = env.active_editor();
+    editor.clear_soft_mark();
+    editor.move_left(1);
+    Ok(None)
+}
+
+/// Operation: `move-left-select`
+fn move_left_select(env: &mut Environment) -> Result<Option<Action>> {
+    let mut editor = env.active_editor();
+    editor.set_soft_mark();
+    editor.move_left(1);
     Ok(None)
 }
 
 /// Operation: `move-right`
 fn move_right(env: &mut Environment) -> Result<Option<Action>> {
-    env.active_editor().move_right(1);
+    let mut editor = env.active_editor();
+    editor.clear_soft_mark();
+    editor.move_right(1);
+    Ok(None)
+}
+
+/// Operation: `move-right-select`
+fn move_right_select(env: &mut Environment) -> Result<Option<Action>> {
+    let mut editor = env.active_editor();
+    editor.set_soft_mark();
+    editor.move_right(1);
     Ok(None)
 }
 
 /// Operation: `move-page-up`
 fn move_page_up(env: &mut Environment) -> Result<Option<Action>> {
-    env.active_editor().move_page_up();
+    let mut editor = env.active_editor();
+    editor.clear_soft_mark();
+    let rows = editor.rows();
+    editor.move_up(rows, true);
+    Ok(None)
+}
+
+/// Operation: `move-page-up-select`
+fn move_page_up_select(env: &mut Environment) -> Result<Option<Action>> {
+    let mut editor = env.active_editor();
+    editor.set_soft_mark();
+    let rows = editor.rows();
+    editor.move_up(rows, true);
     Ok(None)
 }
 
 /// Operation: `move-page-down`
 fn move_page_down(env: &mut Environment) -> Result<Option<Action>> {
-    env.active_editor().move_page_down();
+    let mut editor = env.active_editor();
+    editor.clear_soft_mark();
+    let rows = editor.rows();
+    editor.move_down(rows, true);
+    Ok(None)
+}
+
+/// Operation: `move-page-down-select`
+fn move_page_down_select(env: &mut Environment) -> Result<Option<Action>> {
+    let mut editor = env.active_editor();
+    editor.set_soft_mark();
+    let rows = editor.rows();
+    editor.move_down(rows, true);
     Ok(None)
 }
 
 /// Operation: `move-top`
 fn move_top(env: &mut Environment) -> Result<Option<Action>> {
-    env.active_editor().move_top();
+    let mut editor = env.active_editor();
+    editor.clear_soft_mark();
+    editor.move_top();
+    Ok(None)
+}
+
+/// Operation: `move-top-select`
+fn move_top_select(env: &mut Environment) -> Result<Option<Action>> {
+    let mut editor = env.active_editor();
+    editor.set_soft_mark();
+    editor.move_top();
     Ok(None)
 }
 
 /// Operation: `move-bottom`
 fn move_bottom(env: &mut Environment) -> Result<Option<Action>> {
-    env.active_editor().move_bottom();
+    let mut editor = env.active_editor();
+    editor.clear_soft_mark();
+    editor.move_bottom();
+    Ok(None)
+}
+
+/// Operation: `move-bottom-select`
+fn move_bottom_select(env: &mut Environment) -> Result<Option<Action>> {
+    let mut editor = env.active_editor();
+    editor.set_soft_mark();
+    editor.move_bottom();
     Ok(None)
 }
 
@@ -145,15 +235,35 @@ fn scroll_down(env: &mut Environment) -> Result<Option<Action>> {
     Ok(None)
 }
 
-/// Operation: `move-start-line`
-fn move_start_line(env: &mut Environment) -> Result<Option<Action>> {
-    env.active_editor().move_start();
+/// Operation: `move-start`
+fn move_start(env: &mut Environment) -> Result<Option<Action>> {
+    let mut editor = env.active_editor();
+    editor.clear_soft_mark();
+    editor.move_start();
     Ok(None)
 }
 
-/// Operation: `move-end-line`
-fn move_end_line(env: &mut Environment) -> Result<Option<Action>> {
-    env.active_editor().move_end();
+/// Operation: `move-start-select`
+fn move_start_select(env: &mut Environment) -> Result<Option<Action>> {
+    let mut editor = env.active_editor();
+    editor.set_soft_mark();
+    editor.move_start();
+    Ok(None)
+}
+
+/// Operation: `move-end`
+fn move_end(env: &mut Environment) -> Result<Option<Action>> {
+    let mut editor = env.active_editor();
+    editor.clear_soft_mark();
+    editor.move_end();
+    Ok(None)
+}
+
+/// Operation: `move-end-select`
+fn move_end_select(env: &mut Environment) -> Result<Option<Action>> {
+    let mut editor = env.active_editor();
+    editor.set_soft_mark();
+    editor.move_end();
     Ok(None)
 }
 
@@ -182,7 +292,6 @@ fn scroll_center(env: &mut Environment) -> Result<Option<Action>> {
         Align::Center
     };
     editor.align_cursor(align);
-    editor.draw();
     Ok(None)
 }
 
@@ -190,6 +299,15 @@ fn scroll_center(env: &mut Environment) -> Result<Option<Action>> {
 fn quit(_: &mut Environment) -> Result<Option<Action>> {
     // FIXME: ask to save dirty buffers
     Ok(Some(Action::Quit))
+}
+
+/// Operation: `set-mark`
+fn set_mark(env: &mut Environment) -> Result<Option<Action>> {
+    let mut editor = env.active_editor();
+    if let Some(_) = editor.set_hard_mark() {
+        editor.render();
+    }
+    Ok(None)
 }
 
 fn open_window_top(env: &mut Environment) -> Result<Option<Action>> {
@@ -243,22 +361,32 @@ fn next_window(env: &mut Environment) -> Result<Option<Action>> {
 }
 
 /// Predefined mapping of editing operations to editing functions.
-const OP_MAPPINGS: [(&'static str, OpFn); 28] = [
+const OP_MAPPINGS: [(&'static str, OpFn); 39] = [
     ("insert-line", insert_line),
     ("remove-char-left", remove_char_left),
     ("remove-char-right", remove_char_right),
     ("move-up", move_up),
+    ("move-up-select", move_up_select),
     ("move-down", move_down),
+    ("move-down-select", move_down_select),
     ("move-left", move_left),
+    ("move-left-select", move_left_select),
     ("move-right", move_right),
+    ("move-right-select", move_right_select),
     ("move-page-up", move_page_up),
+    ("move-page-up-select", move_page_up_select),
     ("move-page-down", move_page_down),
+    ("move-page-down-select", move_page_down_select),
     ("move-top", move_top),
+    ("move-top-select", move_top_select),
     ("move-bottom", move_bottom),
+    ("move-bottom-select", move_bottom_select),
     ("scroll-up", scroll_up),
     ("scroll-down", scroll_down),
-    ("move-start-line", move_start_line),
-    ("move-end-line", move_end_line),
+    ("move-start", move_start),
+    ("move-start-select", move_start_select),
+    ("move-end", move_end),
+    ("move-end-select", move_end_select),
     ("redraw", redraw),
     ("scroll-center", scroll_center),
     ("quit", quit),
@@ -269,6 +397,7 @@ const OP_MAPPINGS: [(&'static str, OpFn); 28] = [
     ("close-window", close_window),
     ("prev-window", prev_window),
     ("next-window", next_window),
+    ("set-mark", set_mark),
     // FIXME: added for testing
     ("open-file", open_file),
     ("insert-text-block", insert_text_block),
