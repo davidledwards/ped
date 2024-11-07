@@ -445,48 +445,54 @@ impl Editor {
         self.render();
     }
 
+    /// Inserts the character `c` at the current buffer position.
     pub fn insert_char(&mut self, c: char) {
         self.insert(&[c])
     }
 
+    /// Inserts the string slice `str` at the current buffer position.
     pub fn insert_str(&mut self, text: &str) {
         self.insert(&text.chars().collect::<Vec<_>>())
     }
 
-    pub fn insert(&mut self, cs: &[char]) {
-        if cs.len() > 0 {
+    /// Inserts the array of `text` at the current buffer position.
+    pub fn insert(&mut self, text: &[char]) {
+        if text.len() > 0 {
+            // Most common use case is single-character insertions, so favor use
+            // more efficient buffer insertion in that case.
             self.buffer_mut().set_pos(self.cur_pos);
-            let cur_pos = if cs.len() == 1 {
-                self.buffer_mut().insert_char(cs[0])
+            let cur_pos = if text.len() == 1 {
+                self.buffer_mut().insert_char(text[0])
             } else {
-                self.buffer_mut().insert(cs)
+                self.buffer_mut().insert(text)
             };
 
-            // update the current line since insertion will changed info
+            // Update current line since insertion will have changed critical
+            // information for navigation. New cursor location follows inserted text,
+            // so need to find new current line. Top line must also be updated even if
+            // new cursor location is still visible because insertion may have changed
+            // its attributes as well.
             self.cur_line = self.update_line(&self.cur_line);
-
             let rows = self.find_down_cur_line(cur_pos);
-
             let row = self.cursor.row + rows;
             let row = if row < self.rows() {
-                // this means the new cursor has not moved beyond the bottom
-                // however, we need to update the top line in case it was affected by
-                // the insertion
                 self.top_line = self.update_line(&self.top_line);
                 row
             } else {
-                // new row is beyond bottom, so find the new top line
                 self.set_top_line(self.rows() - 1)
             };
-
-            let col = self.cur_line.col_of(cur_pos);
             self.cur_pos = cur_pos;
+            let col = self.cur_line.col_of(self.cur_pos);
             self.snap_col = None;
             self.cursor = Point::new(row, col);
             self.render();
         }
     }
 
+    /// Removes and returns the character left of the current buffer position.
+    ///
+    /// An empty vector is returned if the current position is already at the top
+    /// of the buffer.
     pub fn remove_left(&mut self) -> Vec<char> {
         if self.cur_pos > 0 {
             self.remove(self.cur_pos - 1)
@@ -495,6 +501,10 @@ impl Editor {
         }
     }
 
+    /// Removes and returns the character right of the current buffer position.
+    ///
+    /// An empty vector is returned if the current position is already at the
+    /// bottom of the buffer.
     pub fn remove_right(&mut self) -> Vec<char> {
         if self.cur_pos < self.buffer().size() {
             self.remove(self.cur_pos + 1)
@@ -503,21 +513,19 @@ impl Editor {
         }
     }
 
-    /// Removes and returns characters from `from_pos` to the cursor position.
+    /// Removes and returns the text between the current buffer position and `pos`.
     ///
-    /// Specifically, characters in the range [`from_pos`, `self.cur_pos`) are removed
-    /// if `from_pos` is less than `self.cur_pos`, otherwise the operation is ignored
-    /// and an empty vector is returned.
+    /// Specifically, the range of characters is bounded *inclusively below* and
+    /// *exclusively above*. If `pos` is less than the current buffer position, then
+    /// the range is [`pos`, `cur_pos`), otherwise it is [`cur_pos`, `pos`).
     ///
-    /// Removes and returns characters from the cursor position to `to_pos`.
-    ///
-    /// Specifically, characters in the range [`self.cur_pos`, `to_pos`) are removed
-    /// if `to_pos` is greater than `self.cur_pos`, otherwise the operation is ignored
-    /// and an empty vector is returned.
+    /// This function will return an empty vector if `pos` is equal to `cur_pos`.
     pub fn remove(&mut self, pos: usize) -> Vec<char> {
         if pos == self.cur_pos {
             vec![]
         } else {
+            // Form range depending on location of `pos` relative to current buffer
+            // position.
             let pos = cmp::min(pos, self.buffer().size());
             let (from_pos, len) = if pos < self.cur_pos {
                 (pos, self.cur_pos - pos)
@@ -525,21 +533,25 @@ impl Editor {
                 (self.cur_pos, pos - self.cur_pos)
             };
 
+            // Find new current line which depends on location of `pos` relative to
+            // current buffer position. If prior to current position, this requires
+            // backtracking since intuition is that resulting cursor would be placed
+            // at that lower bound position. Conversely, if following current position,
+            // resulting cursor would stay on existing row.
             let row = if from_pos < self.cur_pos {
-                // backtrack to find cur line that contains from_pos
                 let rows = self.find_up_cur_line(from_pos);
                 if rows > self.cursor.row {
-                    // new row is above top
                     self.set_top_line(0)
                 } else {
-                    // new row is still visible
                     self.cursor.row - rows
                 }
             } else {
-                // cursor will remain on same row
                 self.cursor.row
             };
 
+            // Note that buffer modification comes after finding new current line, and
+            // that common use case of single-character removal allows more efficient
+            // buffer function to be used.
             self.buffer_mut().set_pos(from_pos);
             let text = if len == 1 {
                 vec![self.buffer_mut().remove_char().unwrap()]
@@ -547,13 +559,12 @@ impl Editor {
                 self.buffer_mut().remove(len)
             };
 
-            // both lines must be updated after removal since the information may have
-            // changed
+            // Removal of text requires current and top lines to be updated since may
+            // have changed.
             self.cur_line = self.update_line(&self.cur_line);
             self.top_line = self.update_line(&self.top_line);
-
-            let col = self.cur_line.col_of(from_pos);
             self.cur_pos = from_pos;
+            let col = self.cur_line.col_of(self.cur_pos);
             self.snap_col = None;
             self.cursor = Point::new(row, col);
             self.render();
@@ -561,131 +572,79 @@ impl Editor {
         }
     }
 
+    /// Tries to move the cursor *up* by the specified number of `try_rows`.
+    ///
+    /// If `pin` is `true`, then the cursor will remain on the current row if the
+    /// resulting display makes it possible. Pinning is useful when *paging up*.
+    ///
+    /// If `pin` is `false`, then the cursor will move up in tandem with `try_rows`,
+    /// though not to extend beyond the top of the display.
     pub fn move_up(&mut self, try_rows: u32, pin: bool) {
         let rows = self.up_cur_line(try_rows);
         if rows > 0 {
             let row = if pin {
                 if rows < try_rows {
-                    // this cursor reached the top of the buffer before the desired number
-                    // of rows could be processed, so the resulting row is always 0
+                    // Cursor reached top of buffer before advancing by desired number of
+                    // rows, so resulting row is always top of display.
                     self.set_top_line(0)
                 } else {
-                    // try to find the new top pos by stepping backwards by the cursor.row
-                    // number of rows
+                    // Try finding new top line by stepping backwards by number of rows
+                    // equivalent to current row of cursor.
                     self.set_top_line(self.cursor.row)
                 }
             } else {
                 if rows > self.cursor.row {
-                    // new row is above current top, so just make current row the top
+                    // Cursor would have moved beyond top of display.
                     self.set_top_line(0)
                 } else {
-                    // new row does not require a change in the top
+                    // Cursor remains visible without changing top line.
                     self.cursor.row - rows
                 }
             };
-
             let try_col = self.snap_col.take().unwrap_or(self.cursor.col);
+            self.snap_col = Some(try_col);
             let col = self.cur_line.snap_col(try_col);
             self.cur_pos = self.cur_line.pos_of(col);
-            self.snap_col = Some(try_col);
             self.cursor = Point::new(row, col);
             self.render();
         }
     }
 
+    /// Tries to move the cursor *down* by the specified number of `try_rows`.
+    ///
+    /// If `pin` is `true`, then the cursor will remain on the current row. Pinning is
+    /// useful when *paging down*.
+    ///
+    /// If `pin` is `false`, then the cursor will move down in tandem with `try_rows`,
+    /// though not to extend beyond the bottom of the display.
     pub fn move_down(&mut self, try_rows: u32, pin: bool) {
         let rows = self.down_cur_line(try_rows);
         if rows > 0 {
             let row = if pin {
-                // just move top line down by same number of rows
+                // Keeping cursor on current row is guaranteed, because top line can
+                // always move down without reaching bottom of buffer.
                 self.down_top_line(rows);
                 self.cursor.row
             } else {
                 if self.cursor.row + rows < self.rows() {
-                    // this means the new cursor has not moved beyond the bottom, and the
-                    // current top line does not change
+                    // Cursor remains visible without changing top line.
                     self.cursor.row + rows
                 } else {
-                    // new row is beyond bottom, so we need to find the new top line
+                    // Cursor would have moved beyond bottom of display.
                     self.set_top_line(self.rows() - 1)
                 }
             };
-
             let try_col = self.snap_col.take().unwrap_or(self.cursor.col);
+            self.snap_col = Some(try_col);
             let col = self.cur_line.snap_col(try_col);
             self.cur_pos = self.cur_line.pos_of(col);
-            self.snap_col = Some(try_col);
             self.cursor = Point::new(row, col);
             self.render();
         }
     }
 
-    pub fn move_to(&mut self, pos: usize, align: Align) {
-        let row = if pos < self.top_line.row_pos {
-            // pos is above top of page, so find new top line and cur line
-            self.find_up_top_line(pos);
-
-            let rows = match align {
-                Align::Top | Align::Auto => 0,
-                Align::Center => self.rows() / 2,
-                Align::Bottom => self.rows() - 1,
-            };
-
-            self.cur_line = self.top_line.clone();
-            self.down_cur_line(rows)
-        } else if pos < self.cur_line.row_pos {
-            // pos is above cur row, but still visible, so find cur line, but keep
-            // top line
-            // find the new cur line which is needed for all cursor alignment scenarios
-            let row = self.cursor.row - self.find_up_cur_line(pos);
-
-            let maybe_rows = match align {
-                Align::Auto => None,
-                Align::Top => Some(0),
-                Align::Center => Some(self.rows() / 2),
-                Align::Bottom => Some(self.rows() - 1),
-            };
-
-            if let Some(rows) = maybe_rows {
-                self.set_top_line(rows)
-            } else {
-                row
-            }
-        } else if pos < self.cur_line.end_pos() {
-            // pos is already on cur row
-            let maybe_rows = match align {
-                Align::Auto => None,
-                Align::Top => Some(0),
-                Align::Center => Some(self.rows() / 2),
-                Align::Bottom => Some(self.rows() - 1),
-            };
-
-            if let Some(rows) = maybe_rows {
-                self.set_top_line(rows)
-            } else {
-                self.cursor.row
-            }
-        } else {
-            // pos comes after cur row, so find cur line and then top line
-            let rows = self.find_down_cur_line(pos);
-
-            let row = match align {
-                Align::Auto => cmp::min(self.cursor.row + rows, self.rows() - 1),
-                Align::Top => 0,
-                Align::Center => self.rows() / 2,
-                Align::Bottom => self.rows() - 1,
-            };
-
-            self.set_top_line(row)
-        };
-
-        let col = self.cur_line.col_of(pos);
-        self.cur_pos = pos;
-        self.snap_col = None;
-        self.cursor = Point::new(row, col);
-        self.render();
-    }
-
+    /// Tries to move the cursor *left* of the current buffer position by `len`
+    /// characters.
     pub fn move_left(&mut self, len: usize) {
         let pos = self.cur_pos - cmp::min(len, self.cur_pos);
         if pos < self.cur_pos {
@@ -693,6 +652,8 @@ impl Editor {
         }
     }
 
+    /// Tries to move the cursor *right* of the current buffer position by `len`
+    /// characters.
     pub fn move_right(&mut self, len: usize) {
         let pos = cmp::min(self.cur_pos + len, self.buffer().size());
         if pos > self.cur_pos {
@@ -700,7 +661,7 @@ impl Editor {
         }
     }
 
-    /// Moves the cursor to the beginning of the current row.
+    /// Moves the cursor to the *start* of the current row.
     pub fn move_start(&mut self) {
         if self.cursor.col > 0 {
             self.cur_pos = self.cur_line.row_pos;
@@ -710,7 +671,7 @@ impl Editor {
         self.snap_col = None;
     }
 
-    /// Moves the cursor to the end of the current row.
+    /// Moves the cursor to the *end* of the current row.
     pub fn move_end(&mut self) {
         let end_col = self.cur_line.end_col();
         if self.cursor.col < end_col {
@@ -721,67 +682,125 @@ impl Editor {
         self.snap_col = None;
     }
 
-    /// Moves the cursor to the top of the buffer.
+    /// Moves the cursor to the *top* of the buffer.
     pub fn move_top(&mut self) {
         self.move_to(0, Align::Top);
     }
 
-    /// Moves the cursor to the bottom of the buffer.
+    /// Moves the cursor to the *bottom* of the buffer.
     pub fn move_bottom(&mut self) {
         let pos = self.buffer().size();
         self.move_to(pos, Align::Bottom);
     }
 
-    /// Scrolls the contents of the window up while preserving the cursor position, which
-    /// means the cursor moves up as the contents scroll.
+    /// Moves the current buffer position to `pos` and places the cursor on the
+    /// display according to the `align` objective.
     ///
-    /// If this operation would result in the cursor moving beyond the top row, then it
-    /// is moved to the next row, essentially staying on the top row.
+    /// When [`Align::Auto`] is specified, the placement of the cursor depends on
+    /// the target `pos` relative to the current buffer position. Specifically, it
+    /// behaves as follows:
+    /// - *when `pos` is above the current line but still visible on the display*:
+    ///   aligns the cursor on the target row above the current line, though not to
+    ///   extend beyond the top row
+    /// - *when `pos` is on the current line*: aligns the cursor on the current row
+    /// - *when `pos` is beyond the current line*: aligns the cursor on the target
+    ///   row below the current line, though not to extend beyond the borrom row
+    pub fn move_to(&mut self, pos: usize, align: Align) {
+        let row = if pos < self.top_line.row_pos {
+            self.find_up_top_line(pos);
+            let rows = match align {
+                Align::Top | Align::Auto => 0,
+                Align::Center => self.rows() / 2,
+                Align::Bottom => self.rows() - 1,
+            };
+            self.cur_line = self.top_line.clone();
+            self.down_cur_line(rows)
+        } else if pos < self.cur_line.row_pos {
+            let row = self.cursor.row - self.find_up_cur_line(pos);
+            let maybe_rows = match align {
+                Align::Auto => None,
+                Align::Top => Some(0),
+                Align::Center => Some(self.rows() / 2),
+                Align::Bottom => Some(self.rows() - 1),
+            };
+            if let Some(rows) = maybe_rows {
+                self.set_top_line(rows)
+            } else {
+                row
+            }
+        } else if pos < self.cur_line.end_pos() {
+            let maybe_rows = match align {
+                Align::Auto => None,
+                Align::Top => Some(0),
+                Align::Center => Some(self.rows() / 2),
+                Align::Bottom => Some(self.rows() - 1),
+            };
+            if let Some(rows) = maybe_rows {
+                self.set_top_line(rows)
+            } else {
+                self.cursor.row
+            }
+        } else {
+            let rows = self.find_down_cur_line(pos);
+            let row = match align {
+                Align::Auto => cmp::min(self.cursor.row + rows, self.rows() - 1),
+                Align::Top => 0,
+                Align::Center => self.rows() / 2,
+                Align::Bottom => self.rows() - 1,
+            };
+            self.set_top_line(row)
+        };
+        self.cur_pos = pos;
+        let col = self.cur_line.col_of(self.cur_pos);
+        self.snap_col = None;
+        self.cursor = Point::new(row, col);
+        self.render();
+    }
+
+    /// Tries scrolling *up* the contents of the display by the specified number of
+    /// `try_rows` while preserving the cursor position, which also means the cursor
+    /// moves *up* as the contents scroll.
     pub fn scroll_up(&mut self, try_rows: u32) {
         let rows = self.down_top_line(try_rows);
         if rows > 0 {
             let (row, col) = if rows > self.cursor.row {
-                // this means that scrolling would have pushed the cursor above the top
-                // row, so set cur line to top line and row to 0
+                // Cursor would have moved beyond top of display, which means current
+                // buffer position changes accordingly.
                 self.cur_line = self.top_line.clone();
                 let try_col = self.snap_col.take().unwrap_or(self.cursor.col);
+                self.snap_col = Some(try_col);
                 let col = self.cur_line.snap_col(try_col);
                 self.cur_pos = self.cur_line.pos_of(col);
-                self.snap_col = Some(try_col);
                 (0, col)
             } else {
-                // this means that cursor still remains visible
+                // Cursor still visible on display.
                 (self.cursor.row - rows, self.cursor.col)
             };
-
             self.cursor = Point::new(row, col);
             self.render();
         }
     }
 
-    /// Scrolls the contents of the window down while preserving the cursor position, which
-    /// means the cursor moves down as the contents scroll.
-    ///
-    /// If this operation would result in the cursor moving beyond the bottom row, then it
-    /// is moved to the previous row, essentiall staying on the bottow row.
+    /// Tries scrolling *down* the contents of the display by the specified number of
+    /// `try_rows` while preserving the cursor position, which also means the cursor
+    /// moves *down* as the contents scroll.
     pub fn scroll_down(&mut self, try_rows: u32) {
         let rows = self.up_top_line(try_rows);
         if rows > 0 {
             let row = self.cursor.row + rows;
             let (row, col) = if row < self.rows() {
-                // this means that cursor is still visible on display
+                // Cursor still visible on display.
                 (row, self.cursor.col)
             } else {
-                // this means that scrolling would have pushed the cursor below the bottom
-                // back up from cur line to find the line at the bottom of the display
+                // Cursor would have moved beyond bottom of display, which means current
+                // buffer position changes accordingly.
                 self.up_cur_line(row - self.rows() + 1);
                 let try_col = self.snap_col.take().unwrap_or(self.cursor.col);
+                self.snap_col = Some(try_col);
                 let col = self.cur_line.snap_col(try_col);
                 self.cur_pos = self.cur_line.pos_of(col);
-                self.snap_col = Some(try_col);
                 (self.rows() - 1 as u32, col)
             };
-
             self.cursor = Point::new(row, col);
             self.render();
         }
@@ -1043,6 +1062,10 @@ impl Editor {
             .unwrap_or_else(|| panic!("line already at bottom of buffer"))
     }
 
+    /// Returns a tuple, relative to the buffer line corresponding to `pos`, containing
+    /// the position of the first character on that line, the position of the first
+    /// character of the next line, and a boolean value indicating if that the line was
+    /// terminated with `\n`.
     fn find_line_bounds(&self, pos: usize) -> (usize, usize, bool) {
         let buffer = self.buffer.borrow();
         let line_pos = buffer.find_start_line(pos);
@@ -1050,10 +1073,12 @@ impl Editor {
         (line_pos, next_pos, terminated)
     }
 
+    #[inline]
     fn buffer(&self) -> Ref<'_, Buffer> {
         self.buffer.borrow()
     }
 
+    #[inline]
     fn buffer_mut(&self) -> RefMut<'_, Buffer> {
         self.buffer.borrow_mut()
     }
