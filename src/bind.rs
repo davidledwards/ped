@@ -93,7 +93,7 @@ impl Bindings {
     }
 
     /// Default mapping of keys to editing operations.
-    const DEFAULT_BINDINGS: [(&'static str, &'static str); 49] = [
+    const DEFAULT_BINDINGS: [(&'static str, &'static str); 51] = [
         // Exit and cancellation.
         ("ctrl-q", "quit"),
         // Navigation.
@@ -137,6 +137,9 @@ impl Bindings {
         ("shift-end", "move-end-select"),
         ("shift-ctrl-home", "move-top-select"),
         ("shift-ctrl-end", "move-bottom-select"),
+        // Clipboard.
+        ("ctrl-c", "copy-to-clipboard"),
+        ("ctrl-v", "paste-from-clipboard"),
         // Windows (FIXME: temporary until we find proper home)
         ("ctrl-w:/", "open-window-top"),
         ("ctrl-w:\\", "open-window-bottom"),

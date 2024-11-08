@@ -216,6 +216,10 @@ impl Line {
     fn end_pos(&self) -> usize {
         self.row_pos + self.row_len
     }
+
+    fn line_range(&self) -> Range<usize> {
+        self.line_pos..(self.line_pos + self.line_len)
+    }
 }
 
 impl Default for Line {
@@ -845,6 +849,25 @@ impl Editor {
     /// Clears and returns the mark.
     pub fn clear_mark(&mut self) -> Option<Mark> {
         self.mark.take()
+    }
+
+    pub fn get_mark_range(&self, mark: Mark) -> Range<usize> {
+        let Mark(pos, _) = mark;
+        if pos < self.cur_pos {
+            pos..self.cur_pos
+        } else {
+            self.cur_pos..pos
+        }
+    }
+
+    pub fn copy(&self, mark: Mark) -> Vec<char> {
+        let range = self.get_mark_range(mark);
+        self.buffer().copy(range.start, range.end)
+    }
+
+    pub fn copy_line(&self) -> Vec<char> {
+        let range = self.cur_line.line_range();
+        self.buffer().copy(range.start, range.end)
     }
 
     /// Renders the content of the editor.

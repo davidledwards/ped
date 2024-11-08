@@ -1,5 +1,6 @@
 //! Gap buffer.
 use crate::error::{Error, Result};
+use core::slice;
 use std::alloc::{self, Layout};
 use std::cell::RefCell;
 use std::cmp;
@@ -137,6 +138,38 @@ impl Buffer {
             Vec::from(cs)
         } else {
             vec![]
+        }
+    }
+
+    pub fn copy(&self, from_pos: usize, to_pos: usize) -> Vec<char> {
+        if from_pos == to_pos {
+            vec![]
+        } else {
+            let (from_pos, to_pos) = if from_pos < to_pos {
+                (from_pos, cmp::min(to_pos, self.size))
+            } else {
+                (to_pos, cmp::min(from_pos, self.size))
+            };
+            let count = to_pos - from_pos;
+            let mut cs = Vec::with_capacity(count);
+            let (from_pos, count) = if from_pos < self.gap {
+                let n = cmp::min(to_pos, self.gap) - from_pos;
+                unsafe {
+                    let s = slice::from_raw_parts(self.buf.add(from_pos).as_ptr(), n);
+                    cs.extend_from_slice(s);
+                }
+                (from_pos + n, count - n)
+            } else {
+                (from_pos, count)
+            };
+            if count > 0 {
+                let pos = self.index_of(from_pos);
+                unsafe {
+                    let s = slice::from_raw_parts(self.buf.add(pos).as_ptr(), count);
+                    cs.extend_from_slice(s);
+                }
+            }
+            cs
         }
     }
 
@@ -416,6 +449,7 @@ mod tests {
     use super::*;
     use std::io::Cursor;
     use std::iter::{self, zip};
+    use std::u32;
 
     #[test]
     fn new_buffer() {
@@ -532,6 +566,36 @@ mod tests {
         assert_eq!(buf.remove(1), vec![]);
         buf.set_pos(0);
         assert_eq!(buf.remove(0), vec![]);
+    }
+
+    #[test]
+    fn copy() {
+        const TEXT: &str = "abcdefghijklmnopqrstuvwxyz";
+
+        let mut buf = Buffer::new();
+        let text = TEXT.chars().collect::<Vec<_>>();
+        let _ = buf.insert(&text);
+
+        // Test copy range when entirely before gap.
+        buf.set_pos(10);
+        let cs = buf.copy(2, 7);
+        assert_eq!(cs, vec!['c', 'd', 'e', 'f', 'g']);
+
+        // Test copy range when entirely after gap.
+        let cs = buf.copy(12, 17);
+        assert_eq!(cs, vec!['m', 'n', 'o', 'p', 'q']);
+
+        // Test copy range when straddling gap.
+        let cs = buf.copy(6, 15);
+        assert_eq!(cs, vec!['g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o']);
+
+        // Test empty copy.
+        let cs = buf.copy(10, 10);
+        assert_eq!(cs, vec![]);
+
+        // Test copy with range outside of actual size.
+        let cs = buf.copy(0, usize::MAX);
+        assert_eq!(cs, TEXT.chars().collect::<Vec<_>>());
     }
 
     #[test]

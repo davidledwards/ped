@@ -13,6 +13,7 @@ pub struct Environment {
     editors: Vec<EditorRef>,
     editor_map: EditorMap,
     active_id: u32,
+    clipboard: Option<Vec<char>>,
 }
 
 impl Environment {
@@ -56,6 +57,7 @@ impl Environment {
             editors,
             editor_map,
             active_id,
+            clipboard: None,
         }
     }
 
@@ -144,6 +146,14 @@ impl Environment {
 
     pub fn get_editor(&self, id: u32) -> Option<EditorRef> {
         self.editor_map.get(&id).cloned()
+    }
+
+    pub fn set_clipboard(&mut self, text: Vec<char>) {
+        self.clipboard = Some(text);
+    }
+
+    pub fn get_clipboard(&self) -> Option<&Vec<char>> {
+        self.clipboard.as_ref()
     }
 
     pub fn workspace(&self) -> Ref<'_, Workspace> {

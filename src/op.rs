@@ -310,6 +310,28 @@ fn set_mark(env: &mut Environment) -> Result<Option<Action>> {
     Ok(None)
 }
 
+/// Operation: `copy-to-clipboard`
+fn copy_to_clipboard(env: &mut Environment) -> Result<Option<Action>> {
+    let maybe_mark = env.active_editor().clear_mark();
+    let text = if let Some(mark) = maybe_mark {
+        env.active_editor().copy(mark)
+    } else {
+        env.active_editor().copy_line()
+    };
+    env.set_clipboard(text);
+    env.active_editor().render();
+    Ok(None)
+}
+
+/// Operation: `paste-from-clipboard`
+fn paste_from_clipboard(env: &mut Environment) -> Result<Option<Action>> {
+    let maybe_text = env.get_clipboard();
+    if let Some(text) = maybe_text {
+        env.active_editor().insert(text);
+    }
+    Ok(None)
+}
+
 fn open_window_top(env: &mut Environment) -> Result<Option<Action>> {
     let action = env
         .open_view(Placement::Top)
@@ -361,7 +383,7 @@ fn next_window(env: &mut Environment) -> Result<Option<Action>> {
 }
 
 /// Predefined mapping of editing operations to editing functions.
-const OP_MAPPINGS: [(&'static str, OpFn); 39] = [
+const OP_MAPPINGS: [(&'static str, OpFn); 41] = [
     ("insert-line", insert_line),
     ("remove-char-left", remove_char_left),
     ("remove-char-right", remove_char_right),
@@ -398,6 +420,8 @@ const OP_MAPPINGS: [(&'static str, OpFn); 39] = [
     ("prev-window", prev_window),
     ("next-window", next_window),
     ("set-mark", set_mark),
+    ("copy-to-clipboard", copy_to_clipboard),
+    ("paste-from-clipboard", paste_from_clipboard),
     // FIXME: added for testing
     ("open-file", open_file),
     ("insert-text-block", insert_text_block),
