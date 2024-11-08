@@ -449,7 +449,6 @@ mod tests {
     use super::*;
     use std::io::Cursor;
     use std::iter::{self, zip};
-    use std::u32;
 
     #[test]
     fn new_buffer() {

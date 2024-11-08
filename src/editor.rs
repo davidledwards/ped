@@ -84,10 +84,10 @@ struct Pane {
     /// Banner associated with the window.
     banner: BannerRef,
 
-    /// Number of rows in [`View::canvas`].
+    /// Number of rows provided by the window.
     rows: u32,
 
-    /// Number of columns in [`View::canvas`].
+    /// Number of columns provided by the window.
     cols: u32,
 }
 
@@ -449,130 +449,21 @@ impl Editor {
         self.render();
     }
 
-    /// Inserts the character `c` at the current buffer position.
-    pub fn insert_char(&mut self, c: char) {
-        self.insert(&[c])
-    }
-
-    /// Inserts the string slice `str` at the current buffer position.
-    pub fn insert_str(&mut self, text: &str) {
-        self.insert(&text.chars().collect::<Vec<_>>())
-    }
-
-    /// Inserts the array of `text` at the current buffer position.
-    pub fn insert(&mut self, text: &[char]) {
-        if text.len() > 0 {
-            // Most common use case is single-character insertions, so favor use
-            // more efficient buffer insertion in that case.
-            self.buffer_mut().set_pos(self.cur_pos);
-            let cur_pos = if text.len() == 1 {
-                self.buffer_mut().insert_char(text[0])
-            } else {
-                self.buffer_mut().insert(text)
-            };
-
-            // Update current line since insertion will have changed critical
-            // information for navigation. New cursor location follows inserted text,
-            // so need to find new current line. Top line must also be updated even if
-            // new cursor location is still visible because insertion may have changed
-            // its attributes as well.
-            self.cur_line = self.update_line(&self.cur_line);
-            let rows = self.find_down_cur_line(cur_pos);
-            let row = self.cursor.row + rows;
-            let row = if row < self.rows() {
-                self.top_line = self.update_line(&self.top_line);
-                row
-            } else {
-                self.set_top_line(self.rows() - 1)
-            };
-            self.cur_pos = cur_pos;
-            let col = self.cur_line.col_of(self.cur_pos);
-            self.snap_col = None;
-            self.cursor = Point::new(row, col);
-            self.render();
+    /// Tries to move the cursor *left* of the current buffer position by `len`
+    /// characters.
+    pub fn move_left(&mut self, len: usize) {
+        let pos = self.cur_pos - cmp::min(len, self.cur_pos);
+        if pos < self.cur_pos {
+            self.move_to(pos, Align::Auto);
         }
     }
 
-    /// Removes and returns the character left of the current buffer position.
-    ///
-    /// An empty vector is returned if the current position is already at the top
-    /// of the buffer.
-    pub fn remove_left(&mut self) -> Vec<char> {
-        if self.cur_pos > 0 {
-            self.remove(self.cur_pos - 1)
-        } else {
-            vec![]
-        }
-    }
-
-    /// Removes and returns the character right of the current buffer position.
-    ///
-    /// An empty vector is returned if the current position is already at the
-    /// bottom of the buffer.
-    pub fn remove_right(&mut self) -> Vec<char> {
-        if self.cur_pos < self.buffer().size() {
-            self.remove(self.cur_pos + 1)
-        } else {
-            vec![]
-        }
-    }
-
-    /// Removes and returns the text between the current buffer position and `pos`.
-    ///
-    /// Specifically, the range of characters is bounded *inclusively below* and
-    /// *exclusively above*. If `pos` is less than the current buffer position, then
-    /// the range is [`pos`, `cur_pos`), otherwise it is [`cur_pos`, `pos`).
-    ///
-    /// This function will return an empty vector if `pos` is equal to `cur_pos`.
-    pub fn remove(&mut self, pos: usize) -> Vec<char> {
-        if pos == self.cur_pos {
-            vec![]
-        } else {
-            // Form range depending on location of `pos` relative to current buffer
-            // position.
-            let pos = cmp::min(pos, self.buffer().size());
-            let (from_pos, len) = if pos < self.cur_pos {
-                (pos, self.cur_pos - pos)
-            } else {
-                (self.cur_pos, pos - self.cur_pos)
-            };
-
-            // Find new current line which depends on location of `pos` relative to
-            // current buffer position. If prior to current position, this requires
-            // backtracking since intuition is that resulting cursor would be placed
-            // at that lower bound position. Conversely, if following current position,
-            // resulting cursor would stay on existing row.
-            let row = if from_pos < self.cur_pos {
-                let rows = self.find_up_cur_line(from_pos);
-                if rows > self.cursor.row {
-                    self.set_top_line(0)
-                } else {
-                    self.cursor.row - rows
-                }
-            } else {
-                self.cursor.row
-            };
-
-            // Note that buffer modification comes after finding new current line, and
-            // that common use case of single-character removal allows more efficient
-            // buffer function to be used.
-            self.buffer_mut().set_pos(from_pos);
-            let text = if len == 1 {
-                vec![self.buffer_mut().remove_char().unwrap()]
-            } else {
-                self.buffer_mut().remove(len)
-            };
-
-            // Removal of text requires current and top lines to be updated since may
-            // have changed.
-            self.cur_line = self.update_line(&self.cur_line);
-            self.top_line = self.update_line(&self.top_line);
-            self.cur_pos = from_pos;
-            let col = self.cur_line.col_of(self.cur_pos);
-            self.snap_col = None;
-            self.cursor = Point::new(row, col);
-            self.render();
-            text
+    /// Tries to move the cursor *right* of the current buffer position by `len`
+    /// characters.
+    pub fn move_right(&mut self, len: usize) {
+        let pos = cmp::min(self.cur_pos + len, self.buffer().size());
+        if pos > self.cur_pos {
+            self.move_to(pos, Align::Auto);
         }
     }
 
@@ -644,24 +535,6 @@ impl Editor {
             self.cur_pos = self.cur_line.pos_of(col);
             self.cursor = Point::new(row, col);
             self.render();
-        }
-    }
-
-    /// Tries to move the cursor *left* of the current buffer position by `len`
-    /// characters.
-    pub fn move_left(&mut self, len: usize) {
-        let pos = self.cur_pos - cmp::min(len, self.cur_pos);
-        if pos < self.cur_pos {
-            self.move_to(pos, Align::Auto);
-        }
-    }
-
-    /// Tries to move the cursor *right* of the current buffer position by `len`
-    /// characters.
-    pub fn move_right(&mut self, len: usize) {
-        let pos = cmp::min(self.cur_pos + len, self.buffer().size());
-        if pos > self.cur_pos {
-            self.move_to(pos, Align::Auto);
         }
     }
 
@@ -810,6 +683,163 @@ impl Editor {
         }
     }
 
+    /// Inserts the character `c` at the current buffer position.
+    pub fn insert_char(&mut self, c: char) {
+        self.insert(&[c])
+    }
+
+    /// Inserts the string slice `str` at the current buffer position.
+    pub fn insert_str(&mut self, text: &str) {
+        self.insert(&text.chars().collect::<Vec<_>>())
+    }
+
+    /// Inserts the array of `text` at the current buffer position.
+    pub fn insert(&mut self, text: &[char]) {
+        if text.len() > 0 {
+            // Most common use case is single-character insertions, so favor use
+            // more efficient buffer insertion in that case.
+            self.buffer_mut().set_pos(self.cur_pos);
+            let cur_pos = if text.len() == 1 {
+                self.buffer_mut().insert_char(text[0])
+            } else {
+                self.buffer_mut().insert(text)
+            };
+
+            // Update current line since insertion will have changed critical
+            // information for navigation. New cursor location follows inserted text,
+            // so need to find new current line. Top line must also be updated even if
+            // new cursor location is still visible because insertion may have changed
+            // its attributes as well.
+            self.cur_line = self.update_line(&self.cur_line);
+            let rows = self.find_down_cur_line(cur_pos);
+            let row = self.cursor.row + rows;
+            let row = if row < self.rows() {
+                self.top_line = self.update_line(&self.top_line);
+                row
+            } else {
+                self.set_top_line(self.rows() - 1)
+            };
+            self.cur_pos = cur_pos;
+            let col = self.cur_line.col_of(self.cur_pos);
+            self.snap_col = None;
+            self.cursor = Point::new(row, col);
+            self.render();
+        }
+    }
+
+    /// Removes and returns the character left of the current buffer position.
+    ///
+    /// An empty vector is returned if the current position is already at the top
+    /// of the buffer.
+    pub fn remove_left(&mut self) -> Vec<char> {
+        if self.cur_pos > 0 {
+            self.remove(self.cur_pos - 1)
+        } else {
+            vec![]
+        }
+    }
+
+    /// Removes and returns the character right of the current buffer position.
+    ///
+    /// An empty vector is returned if the current position is already at the
+    /// bottom of the buffer.
+    pub fn remove_right(&mut self) -> Vec<char> {
+        if self.cur_pos < self.buffer().size() {
+            self.remove(self.cur_pos + 1)
+        } else {
+            vec![]
+        }
+    }
+
+    /// Removes and returns the text between the current buffer position and `mark`.
+    pub fn remove_mark(&mut self, mark: Mark) -> Vec<char> {
+        let Mark(pos, _) = mark;
+        self.remove(pos)
+    }
+
+    /// Removes and returns the text of the line on which the current buffer position
+    /// rests.
+    pub fn remove_line(&mut self) -> Vec<char> {
+        let Range { start, end } = self.cur_line.line_range();
+        self.move_to(start, Align::Auto);
+        self.remove(end)
+    }
+
+    /// Removes and returns the text between the start of the current line and the
+    /// current buffer position.
+    pub fn remove_start(&mut self) -> Vec<char> {
+        if self.cur_pos == self.cur_line.line_pos {
+            self.remove_left()
+        } else {
+            self.remove(self.cur_line.line_pos)
+        }
+    }
+
+    /// Removes and returns the text between the current buffer position and the end
+    /// of the current line.
+    pub fn remove_end(&mut self) -> Vec<char> {
+        self.remove(self.cur_line.line_pos + self.cur_line.line_len)
+    }
+
+    /// Removes and returns the text between the current buffer position and `pos`.
+    ///
+    /// Specifically, the range of characters is bounded *inclusively below* and
+    /// *exclusively above*. If `pos` is less than the current buffer position, then
+    /// the range is [`pos`, `cur_pos`), otherwise it is [`cur_pos`, `pos`).
+    ///
+    /// This function will return an empty vector if `pos` is equal to `cur_pos`.
+    pub fn remove(&mut self, pos: usize) -> Vec<char> {
+        if pos == self.cur_pos {
+            vec![]
+        } else {
+            // Form range depending on location of `pos` relative to current buffer
+            // position.
+            let pos = cmp::min(pos, self.buffer().size());
+            let (from_pos, len) = if pos < self.cur_pos {
+                (pos, self.cur_pos - pos)
+            } else {
+                (self.cur_pos, pos - self.cur_pos)
+            };
+
+            // Find new current line which depends on location of `pos` relative to
+            // current buffer position. If prior to current position, this requires
+            // backtracking since intuition is that resulting cursor would be placed
+            // at that lower bound position. Conversely, if following current position,
+            // resulting cursor would stay on existing row.
+            let row = if from_pos < self.cur_pos {
+                let rows = self.find_up_cur_line(from_pos);
+                if rows > self.cursor.row {
+                    self.set_top_line(0)
+                } else {
+                    self.cursor.row - rows
+                }
+            } else {
+                self.cursor.row
+            };
+
+            // Note that buffer modification comes after finding new current line, and
+            // that common use case of single-character removal allows more efficient
+            // buffer function to be used.
+            self.buffer_mut().set_pos(from_pos);
+            let text = if len == 1 {
+                vec![self.buffer_mut().remove_char().unwrap()]
+            } else {
+                self.buffer_mut().remove(len)
+            };
+
+            // Removal of text requires current and top lines to be updated since may
+            // have changed.
+            self.cur_line = self.update_line(&self.cur_line);
+            self.top_line = self.update_line(&self.top_line);
+            self.cur_pos = from_pos;
+            let col = self.cur_line.col_of(self.cur_pos);
+            self.snap_col = None;
+            self.cursor = Point::new(row, col);
+            self.render();
+            text
+        }
+    }
+
     /// Sets a *hard* mark at the current buffer position and returns the previous
     /// mark if set.
     pub fn set_hard_mark(&mut self) -> Option<Mark> {
@@ -851,7 +881,7 @@ impl Editor {
         self.mark.take()
     }
 
-    pub fn get_mark_range(&self, mark: Mark) -> Range<usize> {
+    fn get_mark_range(&self, mark: Mark) -> Range<usize> {
         let Mark(pos, _) = mark;
         if pos < self.cur_pos {
             pos..self.cur_pos
@@ -860,14 +890,27 @@ impl Editor {
         }
     }
 
-    pub fn copy(&self, mark: Mark) -> Vec<char> {
-        let range = self.get_mark_range(mark);
-        self.buffer().copy(range.start, range.end)
+    /// Returns the text between the current buffer position and `mark`.
+    pub fn copy_mark(&self, mark: Mark) -> Vec<char> {
+        let Range { start, end } = self.get_mark_range(mark);
+        self.copy(start, end)
     }
 
+    /// Returns the text of the line on which the current buffer position rests.
     pub fn copy_line(&self) -> Vec<char> {
-        let range = self.cur_line.line_range();
-        self.buffer().copy(range.start, range.end)
+        let Range { start, end } = self.cur_line.line_range();
+        self.copy(start, end)
+    }
+
+    /// Returns the text between `from_pos` and `end_pos`.
+    ///
+    /// Specifically, the range of characters is bounded *inclusively below* and
+    /// *exclusively above*. If `from_pos` is less than `to_pos`, then the range is
+    /// [`from_pos`, `to_pos`), otherwise it is [`to_pos`, `from_pos`).
+    ///
+    /// This function will return an empty vector if `from_pos` is equal to `to_pos`.
+    pub fn copy(&self, from_pos: usize, to_pos: usize) -> Vec<char> {
+        self.buffer().copy(from_pos, to_pos)
     }
 
     /// Renders the content of the editor.

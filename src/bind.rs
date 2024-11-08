@@ -93,54 +93,56 @@ impl Bindings {
     }
 
     /// Default mapping of keys to editing operations.
-    const DEFAULT_BINDINGS: [(&'static str, &'static str); 51] = [
-        // Exit and cancellation.
+    const DEFAULT_BINDINGS: [(&'static str, &'static str); 52] = [
+        // --- exit and cancellation ---
         ("ctrl-q", "quit"),
-        // Navigation.
+        // --- navigation and selection ---
         ("ctrl-b", "move-left"),
         ("left", "move-left"),
+        ("shift-left", "move-left-select"),
         ("ctrl-f", "move-right"),
         ("right", "move-right"),
+        ("shift-right", "move-right-select"),
         ("ctrl-p", "move-up"),
         ("up", "move-up"),
+        ("shift-up", "move-up-select"),
         ("ctrl-n", "move-down"),
         ("down", "move-down"),
-        ("ctrl-[:p", "move-page-up"),
-        ("page-up", "move-page-up"),
-        ("ctrl-[:n", "move-page-down"),
-        ("page-down", "move-page-down"),
+        ("shift-down", "move-down-select"),
+        ("ctrl-[:p", "move-up-page"),
+        ("page-up", "move-up-page"),
+        ("shift-page-up", "move-up-page-select"),
+        ("ctrl-[:n", "move-down-page"),
+        ("page-down", "move-down-page"),
+        ("shift-page-down", "move-down-page-select"),
         ("ctrl-a", "move-start"),
         ("home", "move-start"),
+        ("shift-home", "move-start-select"),
         ("ctrl-e", "move-end"),
         ("end", "move-end"),
+        ("shift-end", "move-end-select"),
         ("ctrl-home", "move-top"),
         ("ctrl-[:a", "move-top"),
+        ("shift-ctrl-home", "move-top-select"),
         ("ctrl-end", "move-bottom"),
         ("ctrl-[:e", "move-bottom"),
+        ("shift-ctrl-end", "move-bottom-select"),
         ("shift-ctrl-up", "scroll-up"),
         ("shift-ctrl-down", "scroll-down"),
         ("ctrl-l", "scroll-center"),
-        // Insertion and deletion.
-        ("ctrl-d", "remove-char-right"),
-        ("ctrl-?", "remove-char-left"),
-        ("ctrl-h", "remove-char-left"),
-        ("ctrl-m", "insert-line"),
-        // Text selection.
         ("ctrl-@", "set-mark"),
-        ("shift-up", "move-up-select"),
-        ("shift-down", "move-down-select"),
-        ("shift-left", "move-left-select"),
-        ("shift-right", "move-right-select"),
-        ("shift-page-up", "move-page-up-select"),
-        ("shift-page-down", "move-page-down-select"),
-        ("shift-home", "move-start-select"),
-        ("shift-end", "move-end-select"),
-        ("shift-ctrl-home", "move-top-select"),
-        ("shift-ctrl-end", "move-bottom-select"),
-        // Clipboard.
-        ("ctrl-c", "copy-to-clipboard"),
-        ("ctrl-v", "paste-from-clipboard"),
-        // Windows (FIXME: temporary until we find proper home)
+        // --- insertion and removal ---
+        ("ctrl-m", "insert-line"),
+        ("ctrl-d", "remove-right"),
+        ("ctrl-?", "remove-left"),
+        ("ctrl-h", "remove-left"),
+        ("ctrl-j", "remove-start"),
+        ("ctrl-k", "remove-end"),
+        // --- selection actions ---
+        ("ctrl-c", "copy"),
+        ("ctrl-v", "paste"),
+        ("ctrl-x", "cut"),
+        // --- todo: following are temporary and for testing purposes ---
         ("ctrl-w:/", "open-window-top"),
         ("ctrl-w:\\", "open-window-bottom"),
         ("ctrl-w:[", "open-window-above"),
@@ -148,10 +150,6 @@ impl Bindings {
         ("ctrl-w:k", "close-window"),
         ("ctrl-w:p", "prev-window"),
         ("ctrl-w:n", "next-window"),
-        // Files.
         ("ctrl-o", "open-file"),
-        // FIXME: added for testing
-        ("fn-1", "insert-text-block"),
-        ("fn-2", "remove-text-block"),
     ];
 }

@@ -20,74 +20,55 @@ use std::collections::HashMap;
 /// A function type that implements an editing operation.
 pub type OpFn = fn(&mut Environment) -> Result<Option<Action>>;
 
-/// Map of editing operations to editing functions.
-pub type OpMap = HashMap<&'static str, OpFn>;
-
-pub type AnswerFn = dyn FnMut(&mut Environment, Option<&str>) -> Result<Option<Action>>;
-
+/// An action returned by an [`OpFn`] that is carried out by a controller orchestrating
+/// calls to such functions.
 pub enum Action {
     Quit,
     Alert(String),
     Question(String, Box<AnswerFn>),
 }
 
-fn insert_text_block(env: &mut Environment) -> Result<Option<Action>> {
-    const TEXT: &str = "Lorem ipsum dolor sit amet, consectetur porttitor\nLorem ipsum dolor sit amet, consectetur porttitor\nLorem ipsum dolor sit amet, consectetur porttitor\nLorem ipsum dolor sit amet, consectetur porttitor\nLorem ipsum dolor sit amet, consectetur porttitor\nLorem ipsum dolor sit amet, consectetur porttitor";
+/// A callback function that handles answers to [`Action::Question`] actions.
+pub type AnswerFn = dyn FnMut(&mut Environment, Option<&str>) -> Result<Option<Action>>;
 
-    env.active_editor().insert_str(TEXT);
+/// Map of editing operations to editing functions.
+pub type OpMap = HashMap<&'static str, OpFn>;
+
+/// Operation: `quit`
+fn quit(_: &mut Environment) -> Result<Option<Action>> {
+    // todo: ask to save dirty buffers
+    Ok(Some(Action::Quit))
+}
+
+/// Operation: `move-left`
+fn move_left(env: &mut Environment) -> Result<Option<Action>> {
+    let mut editor = env.active_editor();
+    editor.clear_soft_mark();
+    editor.move_left(1);
     Ok(None)
 }
 
-fn remove_text_block(env: &mut Environment) -> Result<Option<Action>> {
-    let text = env.active_editor().remove(300);
-    Ok(Some(Action::Alert(format!("removed {} chars", text.len()))))
-}
-
-fn open_file(_: &mut Environment) -> Result<Option<Action>> {
-    let answer_fn = move |env: &mut Environment, answer: Option<&str>| {
-        // FIXME: for testing purposes
-        if let Some(file) = answer {
-            if let Some(id) = env.open_view(Placement::Bottom) {
-                if let Some(editor) = env.get_editor(id) {
-                    editor.borrow_mut().insert_str(file);
-                }
-                Ok(None)
-            } else {
-                Ok(Some(Action::Alert(format!(
-                    "{file}: not enough room for new window"
-                ))))
-            }
-        } else {
-            Ok(None)
-        }
-    };
-    Ok(Some(Action::Question(
-        "open file:".to_string(),
-        Box::new(answer_fn),
-    )))
-}
-
-/// Operation: `insert-line`
-fn insert_line(env: &mut Environment) -> Result<Option<Action>> {
+/// Operation: `move-left-select`
+fn move_left_select(env: &mut Environment) -> Result<Option<Action>> {
     let mut editor = env.active_editor();
-    editor.clear_mark();
-    editor.insert_char('\n');
+    editor.set_soft_mark();
+    editor.move_left(1);
     Ok(None)
 }
 
-/// Operation: `remove-char-left`
-fn remove_char_left(env: &mut Environment) -> Result<Option<Action>> {
+/// Operation: `move-right`
+fn move_right(env: &mut Environment) -> Result<Option<Action>> {
     let mut editor = env.active_editor();
-    editor.clear_mark();
-    let _ = editor.remove_left();
+    editor.clear_soft_mark();
+    editor.move_right(1);
     Ok(None)
 }
 
-/// Operation: `remove-char-right`
-fn remove_char_right(env: &mut Environment) -> Result<Option<Action>> {
+/// Operation: `move-right-select`
+fn move_right_select(env: &mut Environment) -> Result<Option<Action>> {
     let mut editor = env.active_editor();
-    editor.clear_mark();
-    let _ = editor.remove_right();
+    editor.set_soft_mark();
+    editor.move_right(1);
     Ok(None)
 }
 
@@ -123,40 +104,8 @@ fn move_down_select(env: &mut Environment) -> Result<Option<Action>> {
     Ok(None)
 }
 
-/// Operation: `move-left`
-fn move_left(env: &mut Environment) -> Result<Option<Action>> {
-    let mut editor = env.active_editor();
-    editor.clear_soft_mark();
-    editor.move_left(1);
-    Ok(None)
-}
-
-/// Operation: `move-left-select`
-fn move_left_select(env: &mut Environment) -> Result<Option<Action>> {
-    let mut editor = env.active_editor();
-    editor.set_soft_mark();
-    editor.move_left(1);
-    Ok(None)
-}
-
-/// Operation: `move-right`
-fn move_right(env: &mut Environment) -> Result<Option<Action>> {
-    let mut editor = env.active_editor();
-    editor.clear_soft_mark();
-    editor.move_right(1);
-    Ok(None)
-}
-
-/// Operation: `move-right-select`
-fn move_right_select(env: &mut Environment) -> Result<Option<Action>> {
-    let mut editor = env.active_editor();
-    editor.set_soft_mark();
-    editor.move_right(1);
-    Ok(None)
-}
-
-/// Operation: `move-page-up`
-fn move_page_up(env: &mut Environment) -> Result<Option<Action>> {
+/// Operation: `move-up-page`
+fn move_up_page(env: &mut Environment) -> Result<Option<Action>> {
     let mut editor = env.active_editor();
     editor.clear_soft_mark();
     let rows = editor.rows();
@@ -164,8 +113,8 @@ fn move_page_up(env: &mut Environment) -> Result<Option<Action>> {
     Ok(None)
 }
 
-/// Operation: `move-page-up-select`
-fn move_page_up_select(env: &mut Environment) -> Result<Option<Action>> {
+/// Operation: `move-up-page-select`
+fn move_up_page_select(env: &mut Environment) -> Result<Option<Action>> {
     let mut editor = env.active_editor();
     editor.set_soft_mark();
     let rows = editor.rows();
@@ -173,8 +122,8 @@ fn move_page_up_select(env: &mut Environment) -> Result<Option<Action>> {
     Ok(None)
 }
 
-/// Operation: `move-page-down`
-fn move_page_down(env: &mut Environment) -> Result<Option<Action>> {
+/// Operation: `move-down-page`
+fn move_down_page(env: &mut Environment) -> Result<Option<Action>> {
     let mut editor = env.active_editor();
     editor.clear_soft_mark();
     let rows = editor.rows();
@@ -182,12 +131,44 @@ fn move_page_down(env: &mut Environment) -> Result<Option<Action>> {
     Ok(None)
 }
 
-/// Operation: `move-page-down-select`
-fn move_page_down_select(env: &mut Environment) -> Result<Option<Action>> {
+/// Operation: `move-down-page-select`
+fn move_down_page_select(env: &mut Environment) -> Result<Option<Action>> {
     let mut editor = env.active_editor();
     editor.set_soft_mark();
     let rows = editor.rows();
     editor.move_down(rows, true);
+    Ok(None)
+}
+
+/// Operation: `move-start`
+fn move_start(env: &mut Environment) -> Result<Option<Action>> {
+    let mut editor = env.active_editor();
+    editor.clear_soft_mark();
+    editor.move_start();
+    Ok(None)
+}
+
+/// Operation: `move-start-select`
+fn move_start_select(env: &mut Environment) -> Result<Option<Action>> {
+    let mut editor = env.active_editor();
+    editor.set_soft_mark();
+    editor.move_start();
+    Ok(None)
+}
+
+/// Operation: `move-end`
+fn move_end(env: &mut Environment) -> Result<Option<Action>> {
+    let mut editor = env.active_editor();
+    editor.clear_soft_mark();
+    editor.move_end();
+    Ok(None)
+}
+
+/// Operation: `move-end-select`
+fn move_end_select(env: &mut Environment) -> Result<Option<Action>> {
+    let mut editor = env.active_editor();
+    editor.set_soft_mark();
+    editor.move_end();
     Ok(None)
 }
 
@@ -235,50 +216,13 @@ fn scroll_down(env: &mut Environment) -> Result<Option<Action>> {
     Ok(None)
 }
 
-/// Operation: `move-start`
-fn move_start(env: &mut Environment) -> Result<Option<Action>> {
-    let mut editor = env.active_editor();
-    editor.clear_soft_mark();
-    editor.move_start();
-    Ok(None)
-}
-
-/// Operation: `move-start-select`
-fn move_start_select(env: &mut Environment) -> Result<Option<Action>> {
-    let mut editor = env.active_editor();
-    editor.set_soft_mark();
-    editor.move_start();
-    Ok(None)
-}
-
-/// Operation: `move-end`
-fn move_end(env: &mut Environment) -> Result<Option<Action>> {
-    let mut editor = env.active_editor();
-    editor.clear_soft_mark();
-    editor.move_end();
-    Ok(None)
-}
-
-/// Operation: `move-end-select`
-fn move_end_select(env: &mut Environment) -> Result<Option<Action>> {
-    let mut editor = env.active_editor();
-    editor.set_soft_mark();
-    editor.move_end();
-    Ok(None)
-}
-
-/// Operation: `redraw`
-fn redraw(env: &mut Environment) -> Result<Option<Action>> {
-    env.active_editor().draw();
-    Ok(None)
-}
-
 /// Operation: `scroll-center`
 fn scroll_center(env: &mut Environment) -> Result<Option<Action>> {
     // Rotate through alignment based on current cursor position using following
-    // cycle: center -> bottom -> top. If position is not precisely on one of
-    // these rows, then start at center. This behavior allows user to quickly
-    // align cursor with successive key presses.
+    // cycle: center -> bottom -> top.
+    //
+    // If position is not precisely on one of these rows, then start at center. This
+    // behavior allows user to quickly align cursor with successive key presses.
     let mut editor = env.active_editor();
     let Size { rows, .. } = editor.get_size();
     let Point { row, .. } = editor.get_cursor();
@@ -295,12 +239,6 @@ fn scroll_center(env: &mut Environment) -> Result<Option<Action>> {
     Ok(None)
 }
 
-/// Operation: `quit`
-fn quit(_: &mut Environment) -> Result<Option<Action>> {
-    // FIXME: ask to save dirty buffers
-    Ok(Some(Action::Quit))
-}
-
 /// Operation: `set-mark`
 fn set_mark(env: &mut Environment) -> Result<Option<Action>> {
     let mut editor = env.active_editor();
@@ -310,11 +248,51 @@ fn set_mark(env: &mut Environment) -> Result<Option<Action>> {
     Ok(None)
 }
 
-/// Operation: `copy-to-clipboard`
-fn copy_to_clipboard(env: &mut Environment) -> Result<Option<Action>> {
+/// Operation: `insert-line`
+fn insert_line(env: &mut Environment) -> Result<Option<Action>> {
+    let mut editor = env.active_editor();
+    editor.clear_mark();
+    editor.insert_char('\n');
+    Ok(None)
+}
+
+/// Operation: `remove-left`
+fn remove_left(env: &mut Environment) -> Result<Option<Action>> {
+    let mut editor = env.active_editor();
+    editor.clear_mark();
+    let _ = editor.remove_left();
+    Ok(None)
+}
+
+/// Operation: `remove-right`
+fn remove_right(env: &mut Environment) -> Result<Option<Action>> {
+    let mut editor = env.active_editor();
+    editor.clear_mark();
+    let _ = editor.remove_right();
+    Ok(None)
+}
+
+/// Operation: `remove-start`
+fn remove_start(env: &mut Environment) -> Result<Option<Action>> {
+    let mut editor = env.active_editor();
+    editor.clear_mark();
+    let _ = editor.remove_start();
+    Ok(None)
+}
+
+/// Operation: `remove-end`
+fn remove_end(env: &mut Environment) -> Result<Option<Action>> {
+    let mut editor = env.active_editor();
+    editor.clear_mark();
+    let _ = editor.remove_end();
+    Ok(None)
+}
+
+/// Operation: `copy`
+fn copy(env: &mut Environment) -> Result<Option<Action>> {
     let maybe_mark = env.active_editor().clear_mark();
     let text = if let Some(mark) = maybe_mark {
-        env.active_editor().copy(mark)
+        env.active_editor().copy_mark(mark)
     } else {
         env.active_editor().copy_line()
     };
@@ -323,13 +301,49 @@ fn copy_to_clipboard(env: &mut Environment) -> Result<Option<Action>> {
     Ok(None)
 }
 
-/// Operation: `paste-from-clipboard`
-fn paste_from_clipboard(env: &mut Environment) -> Result<Option<Action>> {
+/// Operation: `paste`
+fn paste(env: &mut Environment) -> Result<Option<Action>> {
     let maybe_text = env.get_clipboard();
     if let Some(text) = maybe_text {
         env.active_editor().insert(text);
     }
     Ok(None)
+}
+
+/// Operation: `cut`
+fn cut(env: &mut Environment) -> Result<Option<Action>> {
+    let maybe_mark = env.active_editor().clear_mark();
+    let _ = if let Some(mark) = maybe_mark {
+        env.active_editor().remove_mark(mark)
+    } else {
+        env.active_editor().remove_line()
+    };
+    env.active_editor().render();
+    Ok(None)
+}
+
+fn open_file(_: &mut Environment) -> Result<Option<Action>> {
+    let answer_fn = move |env: &mut Environment, answer: Option<&str>| {
+        // FIXME: for testing purposes
+        if let Some(file) = answer {
+            if let Some(id) = env.open_view(Placement::Bottom) {
+                if let Some(editor) = env.get_editor(id) {
+                    editor.borrow_mut().insert_str(file);
+                }
+                Ok(None)
+            } else {
+                Ok(Some(Action::Alert(format!(
+                    "{file}: not enough room for new window"
+                ))))
+            }
+        } else {
+            Ok(None)
+        }
+    };
+    Ok(Some(Action::Question(
+        "open file:".to_string(),
+        Box::new(answer_fn),
+    )))
 }
 
 fn open_window_top(env: &mut Environment) -> Result<Option<Action>> {
@@ -384,34 +398,44 @@ fn next_window(env: &mut Environment) -> Result<Option<Action>> {
 
 /// Predefined mapping of editing operations to editing functions.
 const OP_MAPPINGS: [(&'static str, OpFn); 41] = [
-    ("insert-line", insert_line),
-    ("remove-char-left", remove_char_left),
-    ("remove-char-right", remove_char_right),
-    ("move-up", move_up),
-    ("move-up-select", move_up_select),
-    ("move-down", move_down),
-    ("move-down-select", move_down_select),
+    // --- exit and cancellation ---
+    ("quit", quit),
+    // --- navigation and selection ---
     ("move-left", move_left),
     ("move-left-select", move_left_select),
     ("move-right", move_right),
     ("move-right-select", move_right_select),
-    ("move-page-up", move_page_up),
-    ("move-page-up-select", move_page_up_select),
-    ("move-page-down", move_page_down),
-    ("move-page-down-select", move_page_down_select),
+    ("move-up", move_up),
+    ("move-up-select", move_up_select),
+    ("move-down", move_down),
+    ("move-down-select", move_down_select),
+    ("move-up-page", move_up_page),
+    ("move-up-page-select", move_up_page_select),
+    ("move-down-page", move_down_page),
+    ("move-down-page-select", move_down_page_select),
+    ("move-start", move_start),
+    ("move-start-select", move_start_select),
+    ("move-end", move_end),
+    ("move-end-select", move_end_select),
     ("move-top", move_top),
     ("move-top-select", move_top_select),
     ("move-bottom", move_bottom),
     ("move-bottom-select", move_bottom_select),
     ("scroll-up", scroll_up),
     ("scroll-down", scroll_down),
-    ("move-start", move_start),
-    ("move-start-select", move_start_select),
-    ("move-end", move_end),
-    ("move-end-select", move_end_select),
-    ("redraw", redraw),
     ("scroll-center", scroll_center),
-    ("quit", quit),
+    ("set-mark", set_mark),
+    // --- insertion and removal ---
+    ("insert-line", insert_line),
+    ("remove-left", remove_left),
+    ("remove-right", remove_right),
+    ("remove-start", remove_start),
+    ("remove-end", remove_end),
+    // --- selection actions ---
+    ("copy", copy),
+    ("paste", paste),
+    ("cut", cut),
+    // --- todo: temporary and added for testing ---
     ("open-window-top", open_window_top),
     ("open-window-bottom", open_window_bottom),
     ("open-window-above", open_window_above),
@@ -419,13 +443,7 @@ const OP_MAPPINGS: [(&'static str, OpFn); 41] = [
     ("close-window", close_window),
     ("prev-window", prev_window),
     ("next-window", next_window),
-    ("set-mark", set_mark),
-    ("copy-to-clipboard", copy_to_clipboard),
-    ("paste-from-clipboard", paste_from_clipboard),
-    // FIXME: added for testing
     ("open-file", open_file),
-    ("insert-text-block", insert_text_block),
-    ("remove-text-block", remove_text_block),
 ];
 
 pub fn init_op_map() -> OpMap {
