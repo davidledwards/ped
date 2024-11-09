@@ -313,11 +313,12 @@ fn paste(env: &mut Environment) -> Result<Option<Action>> {
 /// Operation: `cut`
 fn cut(env: &mut Environment) -> Result<Option<Action>> {
     let maybe_mark = env.active_editor().clear_mark();
-    let _ = if let Some(mark) = maybe_mark {
+    let text = if let Some(mark) = maybe_mark {
         env.active_editor().remove_mark(mark)
     } else {
         env.active_editor().remove_line()
     };
+    env.set_clipboard(text);
     env.active_editor().render();
     Ok(None)
 }
