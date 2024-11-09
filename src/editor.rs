@@ -723,6 +723,7 @@ impl Editor {
             let col = self.cur_line.col_of(self.cur_pos);
             self.snap_col = None;
             self.cursor = Point::new(row, col);
+            self.set_dirty();
             self.render();
         }
     }
@@ -835,9 +836,14 @@ impl Editor {
             let col = self.cur_line.col_of(self.cur_pos);
             self.snap_col = None;
             self.cursor = Point::new(row, col);
+            self.set_dirty();
             self.render();
             text
         }
+    }
+
+    fn set_dirty(&mut self) {
+        self.pane.banner.borrow_mut().set_dirty(true);
     }
 
     /// Sets a *hard* mark at the current buffer position and returns the previous
