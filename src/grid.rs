@@ -66,41 +66,9 @@ impl Grid {
         self.content[start..end].fill(cell);
     }
 
-    /// Moves `rows` rows starting from `from_row` to `to_row`.
-    ///
-    /// This function is safe to move overlapping rows. However, if the range of rows
-    /// relative to either `from_row` or `to_row` would extend beyond the grid size, then
-    /// this function will panic.
-    pub fn move_rows(&mut self, from_row: u32, to_row: u32, rows: u32) {
-        debug_assert!(from_row < self.size.rows);
-        debug_assert!(to_row < self.size.rows);
-        debug_assert!(if from_row < to_row {
-            to_row + rows <= self.size.rows
-        } else {
-            from_row + rows <= self.size.rows
-        });
-
-        let start = (from_row * self.size.cols) as usize;
-        let end = start + (rows * self.size.cols) as usize;
-        let dest = (to_row * self.size.cols) as usize;
-        self.content.copy_within(start..end, dest);
-    }
-
     /// Sets all cells to [`Cell::EMPTY`].
     pub fn clear(&mut self) {
         self.content.fill(Cell::EMPTY);
-    }
-
-    /// Sets the cells of all rows in the range [`start_row`, `end_row`) to
-    /// [`Cell::EMPTY`].
-    pub fn clear_rows(&mut self, start_row: u32, end_row: u32) {
-        debug_assert!(start_row < self.size.rows);
-        debug_assert!(end_row <= self.size.rows);
-        debug_assert!(start_row <= end_row);
-
-        let start = (start_row * self.size.cols) as usize;
-        let end = (end_row * self.size.cols) as usize;
-        self.content[start..end].fill(Cell::EMPTY);
     }
 
     // Apply differences in `other` grid with respect to this grid and return a vector

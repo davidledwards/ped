@@ -1,19 +1,18 @@
 //! Editor.
 use crate::buffer::{Buffer, BufferRef};
-use crate::canvas::CanvasRef;
-use crate::color::Color;
+use crate::canvas::{Canvas, CanvasRef};
 use crate::grid::Cell;
 use crate::size::{Point, Size};
-use crate::theme::ThemeRef;
-use crate::window::{BannerRef, Window, WindowRef};
+use crate::theme::{Theme, ThemeRef};
+use crate::window::{Banner, BannerRef, WindowRef};
 use std::cell::{Ref, RefCell, RefMut};
 use std::cmp;
 use std::ops::Range;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-/// An editing controller with an underlying [Buffer] and an attachable
-/// [Window].
+/// An editing controller with an underlying [`Buffer`] and an attachable
+/// [`Window`](crate::window::Window).
 pub struct Editor {
     /// An optional path if the buffer is associated with a file.
     path: Option<PathBuf>,
@@ -39,8 +38,23 @@ pub struct Editor {
     /// An optional mark used when selecting text.
     mark: Option<Mark>,
 
-    /// Pane that controls output to the attached window.
-    pane: Pane,
+    /// Color theme that applies to the window.
+    theme: ThemeRef,
+
+    /// Canvas associated with the window.
+    canvas: CanvasRef,
+
+    /// Banner associated with the window.
+    banner: BannerRef,
+
+    /// Number of rows available for text.
+    rows: u32,
+
+    /// Number of columns available for text.
+    cols: u32,
+
+    /// Number of columns allocated to the left margin for displaying line numbers.
+    margin_cols: u32,
 }
 
 pub type EditorRef = Rc<RefCell<Editor>>;
@@ -73,41 +87,6 @@ struct Line {
     line_bottom: bool,
 }
 
-/// Controls the rendering of displayable content to a [Window].
-struct Pane {
-    /// Color theme that applies to the window.
-    theme: ThemeRef,
-
-    /// Canvas associated with the window.
-    canvas: CanvasRef,
-
-    /// Banner associated with the window.
-    banner: BannerRef,
-
-    /// Number of rows provided by the window.
-    rows: u32,
-
-    /// Number of columns provided by the window.
-    cols: u32,
-}
-
-/// Context provided to draw functions in [`Pane`].
-///
-/// By encapsulating theme-dependent decisions and relevant state information in this
-/// drawing context, [`Pane`] only needs to concern itself with the general rendering
-/// algorithm.
-struct Draw {
-    /// Color theme that dictates colors and behaviors.
-    theme: ThemeRef,
-
-    /// Current cursor position.
-    cursor: Point,
-
-    /// Range in the buffer containing selected text, if applicable, otherwise this
-    /// span is assumed to be `0`..`0`.
-    select_span: Range<usize>,
-}
-
 /// Cursor alignment directives.
 pub enum Align {
     /// Try aligning the cursor based on its contextual use.
@@ -129,6 +108,28 @@ pub enum Align {
 /// mark is *soft*, and `false` if *hard*.
 #[derive(Copy, Clone)]
 pub struct Mark(pub usize, pub bool);
+
+/// A drawing context provided to rendering functions.
+struct Draw {
+    /// Color theme that dictates colors and behaviors.
+    theme: ThemeRef,
+
+    /// Current cursor position.
+    cursor: Point,
+
+    /// Range in the buffer containing selected text, if applicable, otherwise this
+    /// span is assumed to be `0`..`0`.
+    select_span: Range<usize>,
+}
+
+/// A rendering context that captures state information for rendering functions.
+struct Render {
+    pos: usize,
+    row: u32,
+    col: u32,
+    line_nbr: usize,
+    line_wrapped: bool,
+}
 
 impl Line {
     /// Returns `true` if the row of this line points to the top of the buffer.
@@ -235,80 +236,6 @@ impl Default for Line {
     }
 }
 
-impl Pane {
-    fn new(window: WindowRef) -> Pane {
-        let theme = window.borrow().theme().clone();
-        let canvas = window.borrow().canvas().clone();
-        let banner = window.borrow().banner().clone();
-        let Size { rows, cols } = canvas.borrow().size();
-
-        Pane {
-            theme,
-            canvas,
-            banner,
-            rows,
-            cols,
-        }
-    }
-
-    fn clear(&mut self) {
-        self.canvas.borrow_mut().clear();
-    }
-
-    fn draw(&mut self, draw: &Draw, p: Point, pos: usize, c: char) -> Option<Point> {
-        let mut canvas = self.canvas.borrow_mut();
-        let (row, col) = if c == '\n' {
-            let color = draw.blank_color(p.row);
-            canvas.fill_row_from(p.row, p.col, Cell::new(' ', color));
-            (p.row + 1, 0)
-        } else {
-            let color = draw.cell_color(p, pos);
-            canvas.set_cell(p.row, p.col, Cell::new(c, color));
-            if p.col + 1 < self.cols {
-                (p.row, p.col + 1)
-            } else {
-                (p.row + 1, 0)
-            }
-        };
-        if row < self.rows {
-            Some(Point::new(row, col))
-        } else {
-            None
-        }
-    }
-
-    fn draw_rest(&mut self, draw: &Draw, p: Point) -> Option<Point> {
-        let mut canvas = self.canvas.borrow_mut();
-        let color = draw.blank_color(p.row);
-        canvas.fill_row_from(p.row, p.col, Cell::new(' ', color));
-        for r in (p.row + 1)..self.rows {
-            let color = draw.blank_color(r);
-            canvas.fill_row(r, Cell::new(' ', color));
-        }
-        None
-    }
-
-    fn draw_finish(&mut self, draw: &Draw) {
-        self.canvas.borrow_mut().draw();
-    }
-
-    fn draw_cursor(&mut self, cursor: Point) {
-        self.canvas.borrow_mut().set_cursor(cursor);
-    }
-
-    fn draw_banner(&mut self, title: String, loc: Point) {
-        self.banner
-            .borrow_mut()
-            .set_title(title)
-            .set_cursor(loc)
-            .draw();
-    }
-
-    fn draw_location(&mut self, loc: Point) {
-        self.banner.borrow_mut().set_cursor(loc).draw();
-    }
-}
-
 impl Draw {
     fn new(editor: &Editor) -> Draw {
         let select_span = editor
@@ -323,32 +250,87 @@ impl Draw {
             .unwrap_or(0..0);
 
         Draw {
-            theme: editor.pane.theme.clone(),
+            theme: editor.theme.clone(),
             cursor: editor.get_cursor(),
             select_span,
         }
     }
 
-    fn cell_color(&self, p: Point, pos: usize) -> Color {
-        if self.select_span.contains(&pos) {
+    fn as_line(&self, c: char) -> Cell {
+        Cell::new(c, self.theme.number_color)
+    }
+
+    fn as_blank(&self, c: char) -> Cell {
+        Cell::new(c, self.theme.text_color)
+    }
+
+    fn as_text(&self, c: char, render: &Render) -> Cell {
+        let color = if self.select_span.contains(&render.pos) {
             self.theme.select_color
-        } else if self.theme.highlight_row && p.row == self.cursor.row {
+        } else if self.theme.highlighting && render.row == self.cursor.row {
             self.theme.highlight_color
         } else {
             self.theme.text_color
+        };
+        Cell::new(c, color)
+    }
+}
+
+impl Render {
+    /// Creates an initial rendering context from `editor`.
+    fn new(editor: &Editor) -> Render {
+        Render {
+            pos: editor.top_line.row_pos,
+            row: 0,
+            col: 0,
+            line_nbr: editor.top_line.line_nbr + 1,
+            line_wrapped: false,
         }
     }
 
-    fn blank_color(&self, row: u32) -> Color {
-        if self.theme.highlight_row && row == self.cursor.row {
-            self.theme.highlight_color
-        } else {
-            self.theme.text_color
+    /// Returns a new rendering context representing a transition to the next column.
+    fn next_col(&self) -> Render {
+        Render {
+            pos: self.pos + 1,
+            col: self.col + 1,
+            ..*self
+        }
+    }
+
+    /// Returns a new rendering context representing a transition to the next row,
+    /// indicating that the current line wraps.
+    fn next_row(&self) -> Render {
+        Render {
+            pos: self.pos + 1,
+            row: self.row + 1,
+            col: 0,
+            line_wrapped: true,
+            ..*self
+        }
+    }
+
+    /// Returns a new rendering context representing a transition to the next line,
+    /// which is also the next row.
+    fn next_line(&self) -> Render {
+        Render {
+            pos: self.pos + 1,
+            row: self.row + 1,
+            col: 0,
+            line_nbr: self.line_nbr + 1,
+            line_wrapped: false,
         }
     }
 }
 
 impl Editor {
+    /// Number of columns allocated to the left margin for displaying line numbers
+    /// when enabled.
+    const LINE_NBR_COLS: u32 = 6;
+
+    /// Upper exclusive bound on line numbers that can be displayed in the left
+    /// margin.
+    const LINE_NBR_LIMIT: usize = 10_usize.pow(Self::LINE_NBR_COLS - 1);
+
     pub fn new() -> Editor {
         Self::with_path(None)
     }
@@ -359,7 +341,6 @@ impl Editor {
 
     pub fn with_buffer(path: Option<PathBuf>, buffer: BufferRef) -> Editor {
         let cur_pos = buffer.borrow().get_pos();
-
         Editor {
             path,
             buffer,
@@ -369,7 +350,12 @@ impl Editor {
             snap_col: None,
             cursor: Point::ORIGIN,
             mark: None,
-            pane: Pane::new(Window::zombie().to_ref()),
+            theme: Theme::default().to_ref(),
+            canvas: Canvas::zero().to_ref(),
+            banner: Banner::none().to_ref(),
+            rows: 0,
+            cols: 0,
+            margin_cols: 0,
         }
     }
 
@@ -380,16 +366,16 @@ impl Editor {
 
     #[inline(always)]
     pub fn rows(&self) -> u32 {
-        self.pane.rows
+        self.rows
     }
 
     #[inline(always)]
     pub fn cols(&self) -> u32 {
-        self.pane.cols
+        self.cols
     }
 
     pub fn get_size(&self) -> Size {
-        (self.rows(), self.cols()).into()
+        (self.rows, self.cols).into()
     }
 
     pub fn get_cursor(&self) -> Point {
@@ -404,13 +390,39 @@ impl Editor {
     }
 
     pub fn show_cursor(&mut self) {
-        self.pane.draw_cursor(self.cursor);
+        let cursor = if self.margin_cols > 0 {
+            self.cursor + Size::cols(self.margin_cols)
+        } else {
+            self.cursor
+        };
+        self.canvas.borrow_mut().set_cursor(cursor);
+    }
+
+    fn show_location(&mut self) {
+        self.banner
+            .borrow_mut()
+            .set_cursor(self.get_location())
+            .draw();
     }
 
     /// Attaches the `window` to this editor.
     pub fn attach(&mut self, window: WindowRef) {
         let is_zombie = window.borrow().is_zombie();
-        self.pane = Pane::new(window);
+        self.theme = window.borrow().theme().clone();
+        self.canvas = window.borrow().canvas().clone();
+        self.banner = window.borrow().banner().clone();
+
+        // Allocate leftmost columns of window to line numbers, but only if enabled and
+        // total width of window is large enough to reasonably accommodate.
+        let Size { rows, cols } = self.canvas.borrow().size();
+        self.margin_cols = if self.theme.numbering && cols >= Self::LINE_NBR_COLS * 2 {
+            Self::LINE_NBR_COLS
+        } else {
+            0
+        };
+        self.rows = rows;
+        self.cols = cols - self.margin_cols;
+
         if !is_zombie {
             self.align_cursor(Align::Auto);
         }
@@ -420,10 +432,10 @@ impl Editor {
         // Determine ideal row where cursor would like to be focused, though this should
         // be considered a hint.
         let try_row = match align {
-            Align::Auto => cmp::min(self.cursor.row, self.rows() - 1),
-            Align::Center => self.rows() / 2,
+            Align::Auto => cmp::min(self.cursor.row, self.rows - 1),
+            Align::Center => self.rows / 2,
             Align::Top => 0,
-            Align::Bottom => self.rows() - 1,
+            Align::Bottom => self.rows - 1,
         };
 
         // Tries to position cursor on target row, but no guarantee depending on proximity
@@ -444,9 +456,17 @@ impl Editor {
     }
 
     pub fn draw(&mut self) {
-        self.pane.clear();
-        self.pane.draw_banner(self.get_title(), self.get_location());
+        self.canvas.borrow_mut().clear();
+        self.draw_banner();
         self.render();
+    }
+
+    fn draw_banner(&mut self) {
+        self.banner
+            .borrow_mut()
+            .set_title(self.get_title())
+            .set_cursor(self.get_location())
+            .draw();
     }
 
     /// Tries to move the cursor *left* of the current buffer position by `len`
@@ -521,12 +541,12 @@ impl Editor {
                 self.down_top_line(rows);
                 self.cursor.row
             } else {
-                if self.cursor.row + rows < self.rows() {
+                if self.cursor.row + rows < self.rows {
                     // Cursor remains visible without changing top line.
                     self.cursor.row + rows
                 } else {
                     // Cursor would have moved beyond bottom of display.
-                    self.set_top_line(self.rows() - 1)
+                    self.set_top_line(self.rows - 1)
                 }
             };
             let try_col = self.snap_col.take().unwrap_or(self.cursor.col);
@@ -587,8 +607,8 @@ impl Editor {
             self.find_up_top_line(pos);
             let rows = match align {
                 Align::Top | Align::Auto => 0,
-                Align::Center => self.rows() / 2,
-                Align::Bottom => self.rows() - 1,
+                Align::Center => self.rows / 2,
+                Align::Bottom => self.rows - 1,
             };
             self.cur_line = self.top_line.clone();
             self.down_cur_line(rows)
@@ -597,8 +617,8 @@ impl Editor {
             let maybe_rows = match align {
                 Align::Auto => None,
                 Align::Top => Some(0),
-                Align::Center => Some(self.rows() / 2),
-                Align::Bottom => Some(self.rows() - 1),
+                Align::Center => Some(self.rows / 2),
+                Align::Bottom => Some(self.rows - 1),
             };
             if let Some(rows) = maybe_rows {
                 self.set_top_line(rows)
@@ -609,8 +629,8 @@ impl Editor {
             let maybe_rows = match align {
                 Align::Auto => None,
                 Align::Top => Some(0),
-                Align::Center => Some(self.rows() / 2),
-                Align::Bottom => Some(self.rows() - 1),
+                Align::Center => Some(self.rows / 2),
+                Align::Bottom => Some(self.rows - 1),
             };
             if let Some(rows) = maybe_rows {
                 self.set_top_line(rows)
@@ -620,10 +640,10 @@ impl Editor {
         } else {
             let rows = self.find_down_cur_line(pos);
             let row = match align {
-                Align::Auto => cmp::min(self.cursor.row + rows, self.rows() - 1),
+                Align::Auto => cmp::min(self.cursor.row + rows, self.rows - 1),
                 Align::Top => 0,
-                Align::Center => self.rows() / 2,
-                Align::Bottom => self.rows() - 1,
+                Align::Center => self.rows / 2,
+                Align::Bottom => self.rows - 1,
             };
             self.set_top_line(row)
         };
@@ -665,18 +685,18 @@ impl Editor {
         let rows = self.up_top_line(try_rows);
         if rows > 0 {
             let row = self.cursor.row + rows;
-            let (row, col) = if row < self.rows() {
+            let (row, col) = if row < self.rows {
                 // Cursor still visible on display.
                 (row, self.cursor.col)
             } else {
                 // Cursor would have moved beyond bottom of display, which means current
                 // buffer position changes accordingly.
-                self.up_cur_line(row - self.rows() + 1);
+                self.up_cur_line(row - self.rows + 1);
                 let try_col = self.snap_col.take().unwrap_or(self.cursor.col);
                 self.snap_col = Some(try_col);
                 let col = self.cur_line.snap_col(try_col);
                 self.cur_pos = self.cur_line.pos_of(col);
-                (self.rows() - 1 as u32, col)
+                (self.rows - 1 as u32, col)
             };
             self.cursor = Point::new(row, col);
             self.render();
@@ -713,11 +733,11 @@ impl Editor {
             self.cur_line = self.update_line(&self.cur_line);
             let rows = self.find_down_cur_line(cur_pos);
             let row = self.cursor.row + rows;
-            let row = if row < self.rows() {
+            let row = if row < self.rows {
                 self.top_line = self.update_line(&self.top_line);
                 row
             } else {
-                self.set_top_line(self.rows() - 1)
+                self.set_top_line(self.rows - 1)
             };
             self.cur_pos = cur_pos;
             let col = self.cur_line.col_of(self.cur_pos);
@@ -843,7 +863,7 @@ impl Editor {
     }
 
     fn set_dirty(&mut self) {
-        self.pane.banner.borrow_mut().set_dirty(true);
+        self.banner.borrow_mut().set_dirty(true);
     }
 
     /// Sets a *hard* mark at the current buffer position and returns the previous
@@ -917,27 +937,6 @@ impl Editor {
     /// This function will return an empty vector if `from_pos` is equal to `to_pos`.
     pub fn copy(&self, from_pos: usize, to_pos: usize) -> Vec<char> {
         self.buffer().copy(from_pos, to_pos)
-    }
-
-    /// Renders the content of the editor.
-    pub fn render(&mut self) {
-        // Sets up draw context.
-        let draw = Draw::new(&self);
-
-        // Renders contents of visible editor contents.
-        self.buffer
-            .borrow()
-            .forward(self.top_line.row_pos)
-            .index()
-            .try_fold(Point::ORIGIN, |p, (pos, c)| {
-                self.pane.draw(&draw, p, pos, c)
-            })
-            .and_then(|p| self.pane.draw_rest(&draw, p));
-
-        // Finalizes drawing and updates additional meta information.
-        self.pane.draw_finish(&draw);
-        self.pane.draw_location(self.get_location());
-        self.pane.draw_cursor(self.cursor);
     }
 
     fn set_top_line(&mut self, try_rows: u32) -> u32 {
@@ -1020,8 +1019,8 @@ impl Editor {
     fn find_line(&self, pos: usize) -> Line {
         let (line_pos, next_pos, terminated) = self.find_line_bounds(pos);
         let line_len = next_pos - line_pos;
-        let row_pos = pos - ((pos - line_pos) % self.cols() as usize);
-        let row_len = cmp::min(line_len - (row_pos - line_pos), self.cols() as usize);
+        let row_pos = pos - ((pos - line_pos) % self.cols as usize);
+        let row_len = cmp::min(line_len - (row_pos - line_pos), self.cols as usize);
         Line {
             row_pos,
             row_len,
@@ -1046,7 +1045,7 @@ impl Editor {
         let line_len = next_pos - line.line_pos;
         let row_len = cmp::min(
             line_len - (line.row_pos - line.line_pos),
-            self.cols() as usize,
+            self.cols as usize,
         );
         Line {
             row_len,
@@ -1063,8 +1062,8 @@ impl Editor {
             None
         } else if line.has_wrapped() {
             let l = Line {
-                row_pos: line.row_pos - self.cols() as usize,
-                row_len: self.cols() as usize,
+                row_pos: line.row_pos - self.cols as usize,
+                row_len: self.cols as usize,
                 ..*line
             };
             Some(l)
@@ -1072,8 +1071,8 @@ impl Editor {
             let pos = line.line_pos - 1;
             let (line_pos, next_pos, terminated) = self.find_line_bounds(pos);
             let line_len = next_pos - line_pos;
-            let row_pos = pos - ((pos - line_pos) % self.cols() as usize);
-            let row_len = cmp::min(line_len - (row_pos - line_pos), self.cols() as usize);
+            let row_pos = pos - ((pos - line_pos) % self.cols as usize);
+            let row_len = cmp::min(line_len - (row_pos - line_pos), self.cols as usize);
             let l = Line {
                 row_pos,
                 row_len,
@@ -1102,7 +1101,7 @@ impl Editor {
             let row_pos = line.row_pos + line.row_len;
             let row_len = cmp::min(
                 line.line_len - (row_pos - line.line_pos),
-                self.cols() as usize,
+                self.cols as usize,
             );
             let l = Line {
                 row_pos,
@@ -1114,7 +1113,7 @@ impl Editor {
             let line_pos = line.line_pos + line.line_len;
             let (next_pos, terminated) = self.buffer().find_next_line(line_pos);
             let line_len = next_pos - line_pos;
-            let row_len = cmp::min(line_len, self.cols() as usize);
+            let row_len = cmp::min(line_len, self.cols as usize);
             let l = Line {
                 row_pos: line_pos,
                 row_len,
@@ -1143,6 +1142,94 @@ impl Editor {
         let line_pos = buffer.find_start_line(pos);
         let (next_pos, terminated) = buffer.find_next_line(pos);
         (line_pos, next_pos, terminated)
+    }
+
+    /// Renders the content of the editor.
+    pub fn render(&mut self) {
+        // Renders visible buffer content.
+        let draw = Draw::new(&self);
+        let render = Render::new(&self);
+        let rest = self
+            .buffer
+            .borrow()
+            .forward(render.pos)
+            .try_fold(render, |render, c| self.render_cell(&draw, &render, c));
+        if let Some(render) = rest {
+            self.render_rest(&draw, &render);
+        }
+        self.canvas.borrow_mut().draw();
+
+        // Renders additional information.
+        self.show_location();
+        self.show_cursor();
+    }
+
+    /// Renders an individual cell for the character `c`, returning the next rendering
+    /// context or `None` if rendering has finished.
+    fn render_cell(&self, draw: &Draw, render: &Render, c: char) -> Option<Render> {
+        self.render_margin(draw, render);
+        let mut canvas = self.canvas.borrow_mut();
+        let (row, col) = (render.row, render.col + self.margin_cols);
+        let render = if c == '\n' {
+            canvas.fill_row_from(row, col, draw.as_text(' ', render));
+            render.next_line()
+        } else {
+            canvas.set_cell(row, col, draw.as_text(c, render));
+            if render.col + 1 < self.cols {
+                render.next_col()
+            } else {
+                render.next_row()
+            }
+        };
+        if render.row < self.rows {
+            Some(render)
+        } else {
+            None
+        }
+    }
+
+    /// Renders the remainder of the displayable area which is considered empty space.
+    ///
+    /// This function gets invoked when the end of buffer is reached before the entire
+    /// canvas is rendered.
+    fn render_rest(&self, draw: &Draw, render: &Render) {
+        self.render_margin(draw, render);
+        let mut canvas = self.canvas.borrow_mut();
+
+        // Blank out rest of existing row.
+        let (row, col) = (render.row, render.col + self.margin_cols);
+        canvas.fill_row_from(row, col, draw.as_text(' ', render));
+
+        // Blank out remaining rows.
+        for row in (render.row + 1)..self.rows {
+            if self.margin_cols > 0 {
+                canvas.fill_row_range(row, 0, self.margin_cols, draw.as_line(' '));
+            }
+            canvas.fill_row_from(row, self.margin_cols, draw.as_blank(' '));
+        }
+    }
+
+    /// Renders the margin if line numbering is enabled and the rendering context is
+    /// on the first column of any row.
+    fn render_margin(&self, draw: &Draw, render: &Render) {
+        if render.col == 0 && self.margin_cols > 0 {
+            let mut canvas = self.canvas.borrow_mut();
+            if render.line_wrapped {
+                canvas.fill_row_range(render.row, 0, self.margin_cols, draw.as_line(' '));
+            } else if render.line_nbr < Self::LINE_NBR_LIMIT {
+                let s = format!(
+                    "{:>cols$} ",
+                    render.line_nbr,
+                    cols = Self::LINE_NBR_COLS as usize - 1
+                );
+                for (col, c) in s.char_indices() {
+                    canvas.set_cell(render.row, col as u32, draw.as_line(c));
+                }
+            } else {
+                canvas.fill_row_range(render.row, 0, self.margin_cols - 1, draw.as_line('-'));
+                canvas.set_cell(render.row, self.margin_cols, draw.as_line(' '));
+            }
+        }
     }
 
     #[inline]
