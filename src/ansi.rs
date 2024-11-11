@@ -15,14 +15,6 @@ pub fn set_cursor(p: Point) -> String {
     format!("\x1b[{};{}H", p.row + 1, p.col + 1)
 }
 
-pub fn set_fg(fg: u8) -> String {
-    format!("\x1b[38;5;{fg}m")
-}
-
-pub fn set_bg(bg: u8) -> String {
-    format!("\x1b[48;5;{bg}m")
-}
-
 pub fn set_color(color: Color) -> String {
     format!("\x1b[38;5;{}m\x1b[48;5;{}m", color.fg, color.bg)
 }

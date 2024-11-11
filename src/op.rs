@@ -248,6 +248,28 @@ fn set_mark(env: &mut Environment) -> Result<Option<Action>> {
     Ok(None)
 }
 
+/// Operation: `goto-line`
+fn goto_line(_: &mut Environment) -> Result<Option<Action>> {
+    let answer_fn = move |env: &mut Environment, answer: Option<&str>| {
+        let action = if let Some(s) = answer {
+            if let Ok(line) = s.parse::<usize>() {
+                let line = if line > 0 { line - 1 } else { line };
+                env.active_editor().move_line(line, Align::Center);
+                None
+            } else {
+                Some(Action::Alert(format!("{s}: invalid line number")))
+            }
+        } else {
+            None
+        };
+        Ok(action)
+    };
+    Ok(Some(Action::Question(
+        "goto line:".to_string(),
+        Box::new(answer_fn),
+    )))
+}
+
 /// Operation: `insert-line`
 fn insert_line(env: &mut Environment) -> Result<Option<Action>> {
     let mut editor = env.active_editor();
@@ -398,7 +420,7 @@ fn next_window(env: &mut Environment) -> Result<Option<Action>> {
 }
 
 /// Predefined mapping of editing operations to editing functions.
-const OP_MAPPINGS: [(&'static str, OpFn); 41] = [
+const OP_MAPPINGS: [(&'static str, OpFn); 42] = [
     // --- exit and cancellation ---
     ("quit", quit),
     // --- navigation and selection ---
@@ -426,6 +448,7 @@ const OP_MAPPINGS: [(&'static str, OpFn); 41] = [
     ("scroll-down", scroll_down),
     ("scroll-center", scroll_center),
     ("set-mark", set_mark),
+    ("goto-line", goto_line),
     // --- insertion and removal ---
     ("insert-line", insert_line),
     ("remove-left", remove_left),

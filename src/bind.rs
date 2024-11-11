@@ -93,7 +93,7 @@ impl Bindings {
     }
 
     /// Default mapping of keys to editing operations.
-    const DEFAULT_BINDINGS: [(&'static str, &'static str); 52] = [
+    const DEFAULT_BINDINGS: [(&'static str, &'static str); 53] = [
         // --- exit and cancellation ---
         ("ctrl-q", "quit"),
         // --- navigation and selection ---
@@ -131,6 +131,7 @@ impl Bindings {
         ("shift-ctrl-down", "scroll-down"),
         ("ctrl-l", "scroll-center"),
         ("ctrl-@", "set-mark"),
+        ("ctrl-_", "goto-line"),
         // --- insertion and removal ---
         ("ctrl-m", "insert-line"),
         ("ctrl-d", "remove-right"),

@@ -5,6 +5,7 @@ use std::alloc::{self, Layout};
 use std::cell::RefCell;
 use std::cmp;
 use std::io::{BufRead, Write};
+use std::ops::ControlFlow;
 use std::ptr::NonNull;
 use std::rc::Rc;
 
@@ -176,6 +177,33 @@ impl Buffer {
     /// Returns the `0`-based line number corresponding to `pos`.
     pub fn line_of(&self, pos: usize) -> usize {
         self.forward(0).take(pos).filter(|c| *c == '\n').count()
+    }
+
+    /// Returns the position of the first character of the `0`-based `line` number.
+    ///
+    /// If `line` would extend beyond the end of the buffer, then the end of buffer
+    /// is returned.
+    pub fn find_line(&self, line: usize) -> usize {
+        if line > 0 {
+            let r = self.forward(0).index().try_fold(0, |l, (pos, c)| {
+                if c == '\n' {
+                    let l = l + 1;
+                    if l == line {
+                        ControlFlow::Break(pos + 1)
+                    } else {
+                        ControlFlow::Continue(l)
+                    }
+                } else {
+                    ControlFlow::Continue(l)
+                }
+            });
+            match r {
+                ControlFlow::Break(pos) => pos,
+                _ => self.size,
+            }
+        } else {
+            0
+        }
     }
 
     /// Returns the position of the first character of the line relative to `pos`.

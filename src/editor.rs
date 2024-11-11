@@ -7,6 +7,7 @@ use crate::theme::{Theme, ThemeRef};
 use crate::window::{Banner, BannerRef, WindowRef};
 use std::cell::{Ref, RefCell, RefMut};
 use std::cmp;
+use std::fmt::Alignment;
 use std::ops::Range;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -327,7 +328,7 @@ impl Editor {
     /// when enabled.
     const LINE_NBR_COLS: u32 = 6;
 
-    /// Upper exclusive bound on line numbers that can be displayed in the left
+    /// Exclusive Upper bound on line numbers that can be displayed in the left
     /// margin.
     const LINE_NBR_LIMIT: usize = 10_usize.pow(Self::LINE_NBR_COLS - 1);
 
@@ -590,6 +591,13 @@ impl Editor {
         self.move_to(pos, Align::Bottom);
     }
 
+    /// Moves the buffer position to the first character of `line` and places the
+    /// cursor on the display according to the `align` objective.
+    pub fn move_line(&mut self, line: usize, align: Align) {
+        let pos = self.buffer().find_line(line);
+        self.move_to(pos, align);
+    }
+
     /// Moves the current buffer position to `pos` and places the cursor on the
     /// display according to the `align` objective.
     ///
@@ -604,14 +612,13 @@ impl Editor {
     ///   row below the current line, though not to extend beyond the borrom row
     pub fn move_to(&mut self, pos: usize, align: Align) {
         let row = if pos < self.top_line.row_pos {
-            self.find_up_top_line(pos);
+            self.find_up_cur_line(pos);
             let rows = match align {
                 Align::Top | Align::Auto => 0,
                 Align::Center => self.rows / 2,
                 Align::Bottom => self.rows - 1,
             };
-            self.cur_line = self.top_line.clone();
-            self.down_cur_line(rows)
+            self.set_top_line(rows)
         } else if pos < self.cur_line.row_pos {
             let row = self.cursor.row - self.find_up_cur_line(pos);
             let maybe_rows = match align {
@@ -964,15 +971,6 @@ impl Editor {
             }
         }
         try_rows
-    }
-
-    fn find_up_top_line(&mut self, pos: usize) -> u32 {
-        let mut rows = 0;
-        while pos < self.top_line.row_pos {
-            self.top_line = self.prev_line_unchecked(&self.top_line);
-            rows += 1;
-        }
-        rows
     }
 
     fn find_up_cur_line(&mut self, pos: usize) -> u32 {
