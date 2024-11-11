@@ -175,15 +175,15 @@ impl Buffer {
     }
 
     /// Returns the `0`-based line number corresponding to `pos`.
-    pub fn line_of(&self, pos: usize) -> usize {
-        self.forward(0).take(pos).filter(|c| *c == '\n').count()
+    pub fn line_of(&self, pos: usize) -> u32 {
+        self.forward(0).take(pos).filter(|c| *c == '\n').count() as u32
     }
 
     /// Returns the position of the first character of the `0`-based `line` number.
     ///
     /// If `line` would extend beyond the end of the buffer, then the end of buffer
     /// is returned.
-    pub fn find_line(&self, line: usize) -> usize {
+    pub fn find_line(&self, line: u32) -> usize {
         if line > 0 {
             let r = self.forward(0).index().try_fold(0, |l, (pos, c)| {
                 if c == '\n' {

@@ -7,7 +7,6 @@ use crate::theme::{Theme, ThemeRef};
 use crate::window::{Banner, BannerRef, WindowRef};
 use std::cell::{Ref, RefCell, RefMut};
 use std::cmp;
-use std::fmt::Alignment;
 use std::ops::Range;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -54,7 +53,7 @@ pub struct Editor {
     /// Number of columns available for text.
     cols: u32,
 
-    /// Number of columns allocated to the left margin for displaying line numbers.
+    /// Number of columns allocated to the margin for displaying line numbers.
     margin_cols: u32,
 }
 
@@ -82,7 +81,7 @@ struct Line {
     line_len: usize,
 
     /// The `0`-based number of the buffer line.
-    line_nbr: usize,
+    line: u32,
 
     /// Indicates that the buffer line is the bottom-most line in the buffer.
     line_bottom: bool,
@@ -128,7 +127,7 @@ struct Render {
     pos: usize,
     row: u32,
     col: u32,
-    line_nbr: usize,
+    line: u32,
     line_wrapped: bool,
 }
 
@@ -193,7 +192,7 @@ impl Line {
 
     /// Returns the right-most column number of this row.
     ///
-    /// See [snap_col](Line::snap_col) for further details on calculating the
+    /// See [`snap_col`](Line::snap_col) for further details on calculating the
     /// right-most column.
     #[inline]
     fn end_col(&self) -> u32 {
@@ -231,7 +230,7 @@ impl Default for Line {
             row_len: 0,
             line_pos: 0,
             line_len: 0,
-            line_nbr: 0,
+            line: 0,
             line_bottom: false,
         }
     }
@@ -284,7 +283,7 @@ impl Render {
             pos: editor.top_line.row_pos,
             row: 0,
             col: 0,
-            line_nbr: editor.top_line.line_nbr + 1,
+            line: editor.top_line.line + 1,
             line_wrapped: false,
         }
     }
@@ -317,20 +316,18 @@ impl Render {
             pos: self.pos + 1,
             row: self.row + 1,
             col: 0,
-            line_nbr: self.line_nbr + 1,
+            line: self.line + 1,
             line_wrapped: false,
         }
     }
 }
 
 impl Editor {
-    /// Number of columns allocated to the left margin for displaying line numbers
-    /// when enabled.
-    const LINE_NBR_COLS: u32 = 6;
+    /// Number of columns allocated to the margin for displaying line numbers.
+    const MARGIN_COLS: u32 = 6;
 
-    /// Exclusive Upper bound on line numbers that can be displayed in the left
-    /// margin.
-    const LINE_NBR_LIMIT: usize = 10_usize.pow(Self::LINE_NBR_COLS - 1);
+    /// Exclusive upper bound on line numbers that can be displayed in the margin.
+    const LINE_LIMIT: u32 = 10_u32.pow(Self::MARGIN_COLS - 1);
 
     pub fn new() -> Editor {
         Self::with_path(None)
@@ -379,15 +376,22 @@ impl Editor {
         (self.rows, self.cols).into()
     }
 
+    /// Returns the cursor position on the display in terms of *row* and *column*.
+    ///
+    /// The *row* and *column* values are `0`-based and exclusively bounded by
+    /// [`rows`](Self::rows) and [`cols`](Self::cols), respectively.
     pub fn get_cursor(&self) -> Point {
         self.cursor
     }
 
+    /// Returns the location of the cursor position in the buffer in terms of *line*
+    /// and *column*.
+    ///
+    /// The *line* and *column* values are `0`-based. Note that neither of these values
+    /// are bounded by the size of the display, which is the case with
+    /// [`get_cursor`](Self::get_cursor).
     pub fn get_location(&self) -> Point {
-        Point::new(
-            self.cur_line.line_nbr as u32 + 1,
-            self.cur_line.line_col(self.cursor.col) + 1,
-        )
+        Point::new(self.cur_line.line, self.cur_line.line_col(self.cursor.col))
     }
 
     pub fn show_cursor(&mut self) {
@@ -402,7 +406,7 @@ impl Editor {
     fn show_location(&mut self) {
         self.banner
             .borrow_mut()
-            .set_cursor(self.get_location())
+            .set_location(self.get_location())
             .draw();
     }
 
@@ -416,8 +420,8 @@ impl Editor {
         // Allocate leftmost columns of window to line numbers, but only if enabled and
         // total width of window is large enough to reasonably accommodate.
         let Size { rows, cols } = self.canvas.borrow().size();
-        self.margin_cols = if self.theme.numbering && cols >= Self::LINE_NBR_COLS * 2 {
-            Self::LINE_NBR_COLS
+        self.margin_cols = if self.theme.numbering && cols >= Self::MARGIN_COLS * 2 {
+            Self::MARGIN_COLS
         } else {
             0
         };
@@ -466,7 +470,7 @@ impl Editor {
         self.banner
             .borrow_mut()
             .set_title(self.get_title())
-            .set_cursor(self.get_location())
+            .set_location(self.get_location())
             .draw();
     }
 
@@ -593,7 +597,7 @@ impl Editor {
 
     /// Moves the buffer position to the first character of `line` and places the
     /// cursor on the display according to the `align` objective.
-    pub fn move_line(&mut self, line: usize, align: Align) {
+    pub fn move_line(&mut self, line: u32, align: Align) {
         let pos = self.buffer().find_line(line);
         self.move_to(pos, align);
     }
@@ -1024,7 +1028,7 @@ impl Editor {
             row_len,
             line_pos,
             line_len,
-            line_nbr: self.buffer().line_of(line_pos),
+            line: self.buffer().line_of(line_pos),
             line_bottom: !terminated,
         }
     }
@@ -1032,8 +1036,8 @@ impl Editor {
     /// Returns an updated `line` based on the assumption of underlying changes to
     /// the buffer.
     ///
-    /// Note that none of `line_pos`, `row_pos`, and `line_nbr` are modified as part
-    /// of this update, as those are presumed to have not changed.
+    /// Note that none of `line_pos`, `row_pos`, and `line` are modified as part of
+    /// this update, as those are presumed to have not changed.
     ///
     /// The rationale for this function is that an insertion or deletion of text is
     /// always relative to the current line, and that such a change would never
@@ -1076,7 +1080,7 @@ impl Editor {
                 row_len,
                 line_pos,
                 line_len,
-                line_nbr: line.line_nbr - 1,
+                line: line.line - 1,
                 line_bottom: !terminated,
             };
             Some(l)
@@ -1117,7 +1121,7 @@ impl Editor {
                 row_len,
                 line_pos,
                 line_len,
-                line_nbr: line.line_nbr + 1,
+                line: line.line + 1,
                 line_bottom: !terminated,
             };
             Some(l)
@@ -1142,7 +1146,7 @@ impl Editor {
         (line_pos, next_pos, terminated)
     }
 
-    /// Renders the content of the editor.
+    /// Renders the contents of the editor.
     pub fn render(&mut self) {
         // Renders visible buffer content.
         let draw = Draw::new(&self);
@@ -1214,11 +1218,11 @@ impl Editor {
             let mut canvas = self.canvas.borrow_mut();
             if render.line_wrapped {
                 canvas.fill_row_range(render.row, 0, self.margin_cols, draw.as_line(' '));
-            } else if render.line_nbr < Self::LINE_NBR_LIMIT {
+            } else if render.line < Self::LINE_LIMIT {
                 let s = format!(
                     "{:>cols$} ",
-                    render.line_nbr,
-                    cols = Self::LINE_NBR_COLS as usize - 1
+                    render.line,
+                    cols = Self::MARGIN_COLS as usize - 1
                 );
                 for (col, c) in s.char_indices() {
                     canvas.set_cell(render.row, col as u32, draw.as_line(c));

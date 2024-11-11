@@ -252,7 +252,7 @@ fn set_mark(env: &mut Environment) -> Result<Option<Action>> {
 fn goto_line(_: &mut Environment) -> Result<Option<Action>> {
     let answer_fn = move |env: &mut Environment, answer: Option<&str>| {
         let action = if let Some(s) = answer {
-            if let Ok(line) = s.parse::<usize>() {
+            if let Ok(line) = s.parse::<u32>() {
                 let line = if line > 0 { line - 1 } else { line };
                 env.active_editor().move_line(line, Align::Center);
                 None

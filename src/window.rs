@@ -7,12 +7,11 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 pub struct Banner {
-    origin: Point,
     cols: u32,
     theme: ThemeRef,
     title: String,
     dirty: bool,
-    cursor: Point,
+    loc: Point,
     writer: Writer,
 }
 
@@ -24,33 +23,31 @@ impl Banner {
 
     /// Total number of columns used for whitespace under normal circumstances.
     /// - 2: left edge
-    /// - 2: gap between title and cursor
+    /// - 2: gap between title and location
     /// - 2: right edge
     const WS_SIZE: usize = 6;
 
-    /// Number of columns for whitespace between title and cursor.
+    /// Number of columns for whitespace between title and location.
     const GAP_SIZE: usize = 2;
 
     fn new(origin: Point, cols: u32, theme: ThemeRef) -> Banner {
         Banner {
-            origin,
             cols,
             theme,
             title: String::new(),
             dirty: false,
-            cursor: Point::ORIGIN,
+            loc: Point::ORIGIN,
             writer: Writer::new(origin),
         }
     }
 
     pub fn none() -> Banner {
         Banner {
-            origin: Point::ORIGIN,
             cols: 0,
             theme: Theme::default().to_ref(),
             title: String::new(),
             dirty: false,
-            cursor: Point::ORIGIN,
+            loc: Point::ORIGIN,
             writer: Writer::new(Point::ORIGIN),
         }
     }
@@ -67,17 +64,19 @@ impl Banner {
             self.writer
                 .write_str(" ".repeat(self.cols as usize).as_str());
         } else {
+            // Locations are always displayed to users as 1-based.
+            let loc = format!("{}:{}", self.loc.row + 1, self.loc.col + 1);
+
             // Calculates number of columns required to display full content of
             // banner.
-            let cursor = format!("{}", self.cursor);
-            let len = self.title.len() + cursor.len() + Self::WS_SIZE;
+            let len = self.title.len() + loc.len() + Self::WS_SIZE;
 
             // Clip banner contents if required number of columns exceeds width
             // of window.
-            let (title, cursor) = if len > self.cols as usize {
-                // Prioritize removal of cursor information, which also means that
-                // gap between title and cursor can be reclaimed as well.
-                let len = len - cursor.len() - Self::GAP_SIZE;
+            let (title, loc) = if len > self.cols as usize {
+                // Prioritize removal of location information, which also means that
+                // gap between title and location can be reclaimed as well.
+                let len = len - loc.len() - Self::GAP_SIZE;
 
                 // Truncate title if necessary.
                 let title = if len > self.cols as usize {
@@ -87,20 +86,20 @@ impl Banner {
                 };
                 (title, "".to_string())
             } else {
-                (self.title.as_str(), cursor)
+                (self.title.as_str(), loc)
             };
 
-            // Calculate number of columns needed for gap between title and cursor
+            // Calculate number of columns needed for gap between title and location
             // based on clipped content.
             let gap_len =
-                self.cols as usize - title.len() - cursor.len() - (Self::WS_SIZE - Self::GAP_SIZE);
+                self.cols as usize - title.len() - loc.len() - (Self::WS_SIZE - Self::GAP_SIZE);
 
             self.writer
                 .write(' ')
                 .write(if self.dirty { '*' } else { ' ' })
                 .write_str(title)
                 .write_str(" ".repeat(gap_len).as_str())
-                .write_str(cursor.as_str())
+                .write_str(loc.as_str())
                 .write_str("  ");
         }
         self.writer.send();
@@ -116,8 +115,8 @@ impl Banner {
         self
     }
 
-    pub fn set_cursor(&mut self, cursor: Point) -> &mut Banner {
-        self.cursor = cursor;
+    pub fn set_location(&mut self, loc: Point) -> &mut Banner {
+        self.loc = loc;
         self
     }
 }
