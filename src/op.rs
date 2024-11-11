@@ -10,9 +10,10 @@
 //!
 //! See [`Bindings`](crate::bind::Bindings) for further details on binding keys
 //! at runtime.
-use crate::editor::Align;
+use crate::editor::{Align, Editor};
 use crate::env::Environment;
 use crate::error::Result;
+use crate::io;
 use crate::size::{Point, Size};
 use crate::workspace::Placement;
 use std::collections::HashMap;
@@ -345,23 +346,21 @@ fn cut(env: &mut Environment) -> Result<Option<Action>> {
     Ok(None)
 }
 
+/// Operation: `open-file`
 fn open_file(_: &mut Environment) -> Result<Option<Action>> {
     let answer_fn = move |env: &mut Environment, answer: Option<&str>| {
-        // FIXME: for testing purposes
-        if let Some(file) = answer {
-            if let Some(id) = env.open_view(Placement::Bottom) {
-                if let Some(editor) = env.get_editor(id) {
-                    editor.borrow_mut().insert_str(file);
+        let action = if let Some(file) = answer {
+            match io::open_editor(&file) {
+                Ok(editor) => {
+                    let _ = env.open_editor(editor.to_ref());
+                    None
                 }
-                Ok(None)
-            } else {
-                Ok(Some(Action::Alert(format!(
-                    "{file}: not enough room for new window"
-                ))))
+                Err(e) => Some(Action::Alert(e.to_string())),
             }
         } else {
-            Ok(None)
-        }
+            None
+        };
+        Ok(action)
     };
     Ok(Some(Action::Question(
         "open file:".to_string(),
@@ -371,7 +370,7 @@ fn open_file(_: &mut Environment) -> Result<Option<Action>> {
 
 fn open_window_top(env: &mut Environment) -> Result<Option<Action>> {
     let action = env
-        .open_view(Placement::Top)
+        .open_view(Editor::new().to_ref(), Placement::Top)
         .map(|_| None)
         .unwrap_or_else(|| Some(Action::Alert("out of window space".to_string())));
     Ok(action)
@@ -379,7 +378,7 @@ fn open_window_top(env: &mut Environment) -> Result<Option<Action>> {
 
 fn open_window_bottom(env: &mut Environment) -> Result<Option<Action>> {
     let action = env
-        .open_view(Placement::Bottom)
+        .open_view(Editor::new().to_ref(), Placement::Bottom)
         .map(|_| None)
         .unwrap_or_else(|| Some(Action::Alert("out of window space".to_string())));
     Ok(action)
@@ -387,7 +386,7 @@ fn open_window_bottom(env: &mut Environment) -> Result<Option<Action>> {
 
 fn open_window_above(env: &mut Environment) -> Result<Option<Action>> {
     let action = env
-        .open_view(Placement::Above(env.active_id()))
+        .open_view(Editor::new().to_ref(), Placement::Above(env.active_id()))
         .map(|_| None)
         .unwrap_or_else(|| Some(Action::Alert("out of window space".to_string())));
     Ok(action)
@@ -395,7 +394,7 @@ fn open_window_above(env: &mut Environment) -> Result<Option<Action>> {
 
 fn open_window_below(env: &mut Environment) -> Result<Option<Action>> {
     let action = env
-        .open_view(Placement::Below(env.active_id()))
+        .open_view(Editor::new().to_ref(), Placement::Below(env.active_id()))
         .map(|_| None)
         .unwrap_or_else(|| Some(Action::Alert("out of window space".to_string())));
     Ok(action)
@@ -459,6 +458,8 @@ const OP_MAPPINGS: [(&'static str, OpFn); 42] = [
     ("copy", copy),
     ("paste", paste),
     ("cut", cut),
+    // --- file handling ---
+    ("open-file", open_file),
     // --- todo: temporary and added for testing ---
     ("open-window-top", open_window_top),
     ("open-window-bottom", open_window_bottom),
@@ -467,7 +468,6 @@ const OP_MAPPINGS: [(&'static str, OpFn); 42] = [
     ("close-window", close_window),
     ("prev-window", prev_window),
     ("next-window", next_window),
-    ("open-file", open_file),
 ];
 
 pub fn init_op_map() -> OpMap {

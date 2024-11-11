@@ -4,7 +4,7 @@ use crate::canvas::{Canvas, CanvasRef};
 use crate::grid::Cell;
 use crate::size::{Point, Size};
 use crate::theme::{Theme, ThemeRef};
-use crate::window::{Banner, BannerRef, WindowRef};
+use crate::window::{Banner, BannerRef, Window, WindowRef};
 use std::cell::{Ref, RefCell, RefMut};
 use std::cmp;
 use std::ops::Range;
@@ -431,6 +431,11 @@ impl Editor {
         if !is_zombie {
             self.align_cursor(Align::Auto);
         }
+    }
+
+    /// Detaches the existing window from this editor.
+    pub fn detach(&mut self) {
+        self.attach(Window::zombie().to_ref());
     }
 
     pub fn align_cursor(&mut self, align: Align) {

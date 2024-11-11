@@ -1,6 +1,6 @@
 //! Editing environment.
 use crate::editor::{Editor, EditorRef};
-use crate::window::Window;
+use crate::window::WindowRef;
 use crate::workspace::{Placement, Workspace, WorkspaceRef};
 use std::cell::{Ref, RefMut};
 use std::collections::HashMap;
@@ -43,15 +43,15 @@ impl Environment {
                 ws.open_view(Placement::Bottom).map(|id| ws.get_view(id))
             };
             if let Some(v) = view {
-                editor.borrow_mut().attach(v.window().clone());
-                editor_map.insert(v.id(), editor.clone());
+                editor.borrow_mut().attach(v.window.clone());
+                editor_map.insert(v.id, editor.clone());
             } else {
                 break;
             }
         }
 
         // Active view is always top of workspace.
-        let active_id = workspace.borrow().top_view().id();
+        let active_id = workspace.borrow().top_view().id;
         Environment {
             workspace,
             editors,
@@ -79,32 +79,43 @@ impl Environment {
         if let Some(ids) = ids {
             for id in ids {
                 if let Some(e) = self.editor_map.remove(&id) {
-                    e.borrow_mut().attach(Window::zombie().to_ref());
+                    e.borrow_mut().detach();
                 } else {
                     panic!("{id}: view not found");
                 }
             }
             for (id, e) in self.editor_map.iter() {
-                e.borrow_mut()
-                    .attach(self.workspace().get_view(*id).window().clone());
+                e.borrow_mut().attach(self.window_of(*id));
             }
             self.active_editor().show_cursor();
         }
     }
 
-    pub fn open_view(&mut self, place: Placement) -> Option<u32> {
+    pub fn open_editor(&mut self, editor: EditorRef) -> u32 {
+        // Detach active editor from existing window and reattach that window to
+        // new editor.
+        self.active_editor().detach();
+        editor.borrow_mut().attach(self.window_of(self.active_id));
+
+        // Make new editor active.
+        self.editors.push(editor.clone());
+        self.editor_map.insert(self.active_id, editor);
+        self.active_id
+    }
+
+    pub fn open_view(&mut self, editor: EditorRef, place: Placement) -> Option<u32> {
         let id = self.workspace_mut().open_view(place);
         id.map(|id| {
+            // Reattach all windows to editors.
             for (id, e) in self.editor_map.iter() {
-                e.borrow_mut()
-                    .attach(self.workspace().get_view(*id).window().clone());
+                e.borrow_mut().attach(self.window_of(*id));
             }
 
-            let mut editor = Editor::new();
-            editor.attach(self.workspace().get_view(id).window().clone());
-            let editor = editor.to_ref();
-            self.editors.push(editor.clone());
+            // Attach new window to new editor.
+            editor.borrow_mut().attach(self.window_of(id));
 
+            // Make new editor active.
+            self.editors.push(editor.clone());
             self.editor_map.insert(id, editor);
             self.active_id = id;
             self.active_editor().show_cursor();
@@ -116,13 +127,11 @@ impl Environment {
         let next_id = self.workspace_mut().close_view(id);
         next_id.map(|next_id| {
             match self.editor_map.remove(&id) {
-                Some(e) => e.borrow_mut().attach(Window::zombie().to_ref()),
+                Some(e) => e.borrow_mut().detach(),
                 None => panic!("{}: view not found", id),
             }
             for (id, e) in self.editor_map.iter() {
-                let ws = self.workspace();
-                let view = ws.get_view(*id);
-                e.borrow_mut().attach(view.window().clone());
+                e.borrow_mut().attach(self.window_of(*id));
             }
             self.active_id = next_id;
             self.active_editor().show_cursor();
@@ -131,21 +140,17 @@ impl Environment {
     }
 
     pub fn prev_view(&mut self) -> u32 {
-        let prev_id = self.workspace().above_view(self.active_id).id();
+        let prev_id = self.workspace().above_view(self.active_id).id;
         self.active_id = prev_id;
         self.active_editor().show_cursor();
         self.active_id
     }
 
     pub fn next_view(&mut self) -> u32 {
-        let next_id = self.workspace().below_view(self.active_id).id();
+        let next_id = self.workspace().below_view(self.active_id).id;
         self.active_id = next_id;
         self.active_editor().show_cursor();
         self.active_id
-    }
-
-    pub fn get_editor(&self, id: u32) -> Option<EditorRef> {
-        self.editor_map.get(&id).cloned()
     }
 
     pub fn set_clipboard(&mut self, text: Vec<char>) {
@@ -154,6 +159,10 @@ impl Environment {
 
     pub fn get_clipboard(&self) -> Option<&Vec<char>> {
         self.clipboard.as_ref()
+    }
+
+    fn window_of(&self, id: u32) -> WindowRef {
+        self.workspace().get_view(id).window.clone()
     }
 
     pub fn workspace(&self) -> Ref<'_, Workspace> {

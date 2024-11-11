@@ -1,12 +1,21 @@
 //! I/O operations with buffers.
 use crate::buffer::Buffer;
+use crate::editor::Editor;
 use crate::error::{Error, Result};
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-// Suggested capacity of internal buffers for readers and writers.
+/// Suggested capacity of internal buffers for readers and writers.
 const BUFFER_SIZE: usize = 65_536;
+
+pub fn open_editor(path: &str) -> Result<Editor> {
+    let mut buffer = Buffer::new();
+    let _ = read_file(path, &mut buffer)?;
+    buffer.set_pos(0);
+    let editor = Editor::with_buffer(Some(PathBuf::from(path)), buffer.to_ref());
+    Ok(editor)
+}
 
 pub fn read_file<P>(path: P, buf: &mut Buffer) -> Result<usize>
 where

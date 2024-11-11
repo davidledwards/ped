@@ -26,36 +26,13 @@ pub enum Placement {
 
 /// A view inside a [`Workspace`].
 pub struct View {
-    id: u32,
-    origin: Point,
-    size: Size,
-    window: WindowRef,
+    pub id: u32,
+    pub window: WindowRef,
 }
 
 impl View {
-    fn new(id: u32, origin: Point, size: Size, window: WindowRef) -> View {
-        View {
-            id,
-            origin,
-            size,
-            window,
-        }
-    }
-
-    pub fn id(&self) -> u32 {
-        self.id
-    }
-
-    pub fn origin(&self) -> Point {
-        self.origin
-    }
-
-    pub fn size(&self) -> Size {
-        self.size
-    }
-
-    pub fn window(&self) -> &WindowRef {
-        &self.window
+    fn new(id: u32, window: WindowRef) -> View {
+        View { id, window }
     }
 }
 
@@ -257,7 +234,7 @@ impl Workspace {
                     let indexes = self.views.iter().rev().enumerate().fold(
                         Vec::new(),
                         |mut indexes, (i, v)| {
-                            if indexes.len() < n && v.id() != keep_id {
+                            if indexes.len() < n && v.id != keep_id {
                                 // Index is flipped since views are being iterated back to
                                 // front.
                                 indexes.push(self.views.len() - i - 1);
@@ -265,7 +242,7 @@ impl Workspace {
                             indexes
                         },
                     );
-                    indexes.iter().map(|i| self.views.remove(*i).id()).collect()
+                    indexes.iter().map(|i| self.views.remove(*i).id).collect()
                 } else {
                     vec![]
                 };
@@ -389,12 +366,15 @@ impl Workspace {
     }
 
     fn create_view(&self, id: u32, origin: Point, rows: u32) -> View {
-        let size = Size::new(rows, self.views_size.cols);
-        let window = Window::new(origin, size, self.theme.clone());
-        View::new(id, origin, size, window.to_ref())
+        let window = Window::new(
+            origin,
+            Size::new(rows, self.views_size.cols),
+            self.theme.clone(),
+        );
+        View::new(id, window.to_ref())
     }
 
     fn create_zombie(&self, id: u32) -> View {
-        View::new(id, Point::ORIGIN, Size::ZERO, Window::zombie().to_ref())
+        View::new(id, Window::zombie().to_ref())
     }
 }

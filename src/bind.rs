@@ -143,6 +143,8 @@ impl Bindings {
         ("ctrl-c", "copy"),
         ("ctrl-v", "paste"),
         ("ctrl-x", "cut"),
+        // --- file handling ---
+        ("ctrl-o", "open-file"),
         // --- todo: following are temporary and for testing purposes ---
         ("ctrl-w:/", "open-window-top"),
         ("ctrl-w:\\", "open-window-bottom"),
@@ -151,6 +153,5 @@ impl Bindings {
         ("ctrl-w:k", "close-window"),
         ("ctrl-w:p", "prev-window"),
         ("ctrl-w:n", "next-window"),
-        ("ctrl-o", "open-file"),
     ];
 }
