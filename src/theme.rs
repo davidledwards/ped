@@ -10,11 +10,13 @@ pub struct Theme {
     pub echo_color: Color,
     pub prompt_color: Color,
     pub highlight_color: Color,
-    pub number_color: Color,
+    pub line_color: Color,
+    pub eol_color: Color,
 
     // Features
-    pub highlighting: bool,
-    pub numbering: bool,
+    pub highlight_row: bool,
+    pub show_lines: bool,
+    pub show_eol: bool,
 }
 
 pub type ThemeRef = Rc<Theme>;
@@ -38,8 +40,11 @@ impl Theme {
     const HIGHLIGHT_FG: u8 = 250;
     const HIGHLIGHT_BG: u8 = 235;
 
-    const NUMBER_FG: u8 = 34;
-    const NUMBER_BG: u8 = 235;
+    const LINE_FG: u8 = 34;
+    const LINE_BG: u8 = 235;
+
+    const EOL_FG: u8 = 34;
+    const EOL_BG: u8 = 233;
 
     pub fn new() -> Theme {
         Theme {
@@ -49,9 +54,11 @@ impl Theme {
             echo_color: Color::new(Self::ECHO_FG, Self::ECHO_BG),
             prompt_color: Color::new(Self::PROMPT_FG, Self::PROMPT_BG),
             highlight_color: Color::new(Self::HIGHLIGHT_FG, Self::HIGHLIGHT_BG),
-            number_color: Color::new(Self::NUMBER_FG, Self::NUMBER_BG),
-            highlighting: true,
-            numbering: true,
+            line_color: Color::new(Self::LINE_FG, Self::LINE_BG),
+            eol_color: Color::new(Self::EOL_FG, Self::EOL_BG),
+            highlight_row: true,
+            show_lines: true,
+            show_eol: true,
         }
     }
 

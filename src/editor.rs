@@ -237,6 +237,8 @@ impl Default for Line {
 }
 
 impl Draw {
+    const EOL_CHAR: char = '\u{23ce}';
+
     fn new(editor: &Editor) -> Draw {
         let select_span = editor
             .mark
@@ -256,23 +258,42 @@ impl Draw {
         }
     }
 
+    #[inline]
     fn as_line(&self, c: char) -> Cell {
-        Cell::new(c, self.theme.number_color)
+        Cell::new(c, self.theme.line_color)
     }
 
+    #[inline]
     fn as_blank(&self, c: char) -> Cell {
         Cell::new(c, self.theme.text_color)
+    }
+
+    #[inline]
+    fn convert_char(&self, c: char) -> char {
+        if c == '\n' {
+            if self.theme.show_eol {
+                Self::EOL_CHAR
+            } else {
+                ' '
+            }
+        } else {
+            c
+        }
     }
 
     fn as_text(&self, c: char, render: &Render) -> Cell {
         let color = if self.select_span.contains(&render.pos) {
             self.theme.select_color
-        } else if self.theme.highlighting && render.row == self.cursor.row {
+        } else if self.theme.highlight_row && render.row == self.cursor.row {
             self.theme.highlight_color
         } else {
-            self.theme.text_color
+            if c == '\n' && self.theme.show_eol {
+                self.theme.eol_color
+            } else {
+                self.theme.text_color
+            }
         };
-        Cell::new(c, color)
+        Cell::new(self.convert_char(c), color)
     }
 }
 
@@ -420,7 +441,7 @@ impl Editor {
         // Allocate leftmost columns of window to line numbers, but only if enabled and
         // total width of window is large enough to reasonably accommodate.
         let Size { rows, cols } = self.canvas.borrow().size();
-        self.margin_cols = if self.theme.numbering && cols >= Self::MARGIN_COLS * 2 {
+        self.margin_cols = if self.theme.show_lines && cols >= Self::MARGIN_COLS * 2 {
             Self::MARGIN_COLS
         } else {
             0
@@ -1178,7 +1199,8 @@ impl Editor {
         let mut canvas = self.canvas.borrow_mut();
         let (row, col) = (render.row, render.col + self.margin_cols);
         let render = if c == '\n' {
-            canvas.fill_row_from(row, col, draw.as_text(' ', render));
+            canvas.set_cell(row, col, draw.as_text(c, render));
+            canvas.fill_row_from(row, col + 1, draw.as_text(' ', render));
             render.next_line()
         } else {
             canvas.set_cell(row, col, draw.as_text(c, render));
