@@ -9,7 +9,7 @@ use std::cmp;
 use std::rc::Rc;
 
 /// Placement directive when adding new [`View`]s to a [`Workspace`].
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug)]
 pub enum Placement {
     /// Place at the top of the workspace.
     Top,

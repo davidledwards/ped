@@ -7,15 +7,16 @@ use crate::theme::{Theme, ThemeRef};
 use crate::window::{Banner, BannerRef, Window, WindowRef};
 use std::cell::{Ref, RefCell, RefMut};
 use std::cmp;
+use std::fmt;
 use std::ops::Range;
-use std::path::PathBuf;
 use std::rc::Rc;
+use std::time::SystemTime;
 
 /// An editing controller with an underlying [`Buffer`] and an attachable
 /// [`Window`](crate::window::Window).
 pub struct Editor {
-    /// An optional path if the buffer is associated with a file.
-    path: Option<PathBuf>,
+    /// Type of storage associated with this editor.
+    storage: Storage,
 
     /// Buffer containing the contents of this editor.
     buffer: BufferRef,
@@ -58,6 +59,19 @@ pub struct Editor {
 }
 
 pub type EditorRef = Rc<RefCell<Editor>>;
+
+/// The storage types associated with an [`Editor`].
+pub enum Storage {
+    /// A type of storage indicating that the buffer can be written to a persistent
+    /// medium.
+    Persistent {
+        path: String,
+        mod_time: Option<SystemTime>,
+    },
+
+    /// A type of storage indicating that the buffer can be discarded.
+    Transient { name: String },
+}
 
 /// Represents contextual information for a line on the display.
 ///
@@ -129,6 +143,36 @@ struct Render {
     col: u32,
     line: u32,
     line_wrapped: bool,
+}
+
+impl Storage {
+    pub fn as_persistent(path: &str, mod_time: Option<SystemTime>) -> Storage {
+        Storage::Persistent {
+            path: path.to_string(),
+            mod_time,
+        }
+    }
+
+    pub fn as_transient(name: &str) -> Storage {
+        Storage::Transient {
+            name: name.to_string(),
+        }
+    }
+}
+
+impl fmt::Display for Storage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Storage::Persistent { path, mod_time } => {
+                if let Some(_) = mod_time {
+                    write!(f, "{path}")
+                } else {
+                    write!(f, "{path} (new)")
+                }
+            }
+            Storage::Transient { name } => write!(f, "@{name}"),
+        }
+    }
 }
 
 impl Line {
@@ -350,18 +394,10 @@ impl Editor {
     /// Exclusive upper bound on line numbers that can be displayed in the margin.
     const LINE_LIMIT: u32 = 10_u32.pow(Self::MARGIN_COLS - 1);
 
-    pub fn new() -> Editor {
-        Self::with_path(None)
-    }
-
-    pub fn with_path(path: Option<PathBuf>) -> Editor {
-        Self::with_buffer(path, Buffer::new().to_ref())
-    }
-
-    pub fn with_buffer(path: Option<PathBuf>, buffer: BufferRef) -> Editor {
+    pub fn new(storage: Storage, buffer: BufferRef) -> Editor {
         let cur_pos = buffer.borrow().get_pos();
         Editor {
-            path,
+            storage,
             buffer,
             cur_pos,
             top_line: Line::default(),
@@ -480,10 +516,7 @@ impl Editor {
     }
 
     fn get_title(&self) -> String {
-        match self.path {
-            Some(ref path) => path.to_string_lossy().to_string(),
-            None => "new".to_string(),
-        }
+        self.storage.to_string()
     }
 
     pub fn draw(&mut self) {

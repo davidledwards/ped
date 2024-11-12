@@ -39,16 +39,13 @@ mod workspace;
 mod writer;
 
 use crate::bind::Bindings;
-use crate::buffer::Buffer;
 use crate::control::Controller;
-use crate::editor::Editor;
 use crate::error::Result;
 use crate::key::Keyboard;
 use crate::opt::Options;
 use crate::theme::Theme;
 use crate::workspace::Workspace;
 use std::ops::Drop;
-use std::path::PathBuf;
 use std::process::ExitCode;
 
 /// Usage documentation for display to terminal.
@@ -94,10 +91,7 @@ fn run() -> Result<()> {
 
 fn run_opts(opts: &Options) -> Result<()> {
     let editors = if let Some(file) = opts.files.iter().next() {
-        let mut buffer = Buffer::new();
-        let _ = io::read_file(file, &mut buffer)?;
-        buffer.set_pos(0);
-        vec![Editor::with_buffer(Some(PathBuf::from(file)), buffer.to_ref()).to_ref()]
+        vec![op::open_editor(file)?.to_ref()]
     } else {
         Vec::new()
     };

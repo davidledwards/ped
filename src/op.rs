@@ -10,13 +10,15 @@
 //!
 //! See [`Bindings`](crate::bind::Bindings) for further details on binding keys
 //! at runtime.
-use crate::editor::{Align, Editor};
+use crate::buffer::Buffer;
+use crate::editor::{Align, Editor, Storage};
 use crate::env::Environment;
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::io;
 use crate::size::{Point, Size};
 use crate::workspace::Placement;
 use std::collections::HashMap;
+use std::io::ErrorKind;
 
 /// A function type that implements an editing operation.
 pub type OpFn = fn(&mut Environment) -> Result<Option<Action>>;
@@ -347,12 +349,40 @@ fn cut(env: &mut Environment) -> Result<Option<Action>> {
 }
 
 /// Operation: `open-file`
-fn open_file(_: &mut Environment) -> Result<Option<Action>> {
+fn open_file(env: &mut Environment) -> Result<Option<Action>> {
+    open_file_internal(env, None)
+}
+
+/// Operation: `open-file-top`
+fn open_file_top(env: &mut Environment) -> Result<Option<Action>> {
+    open_file_internal(env, Some(Placement::Top))
+}
+
+/// Operation: `open-file-bottom`
+fn open_file_bottom(env: &mut Environment) -> Result<Option<Action>> {
+    open_file_internal(env, Some(Placement::Bottom))
+}
+
+/// Operation: `open-file-above`
+fn open_file_above(env: &mut Environment) -> Result<Option<Action>> {
+    open_file_internal(env, Some(Placement::Above(env.active_id())))
+}
+
+/// Operation: `open-file-below`
+fn open_file_below(env: &mut Environment) -> Result<Option<Action>> {
+    open_file_internal(env, Some(Placement::Below(env.active_id())))
+}
+
+fn open_file_internal(_: &mut Environment, place: Option<Placement>) -> Result<Option<Action>> {
     let answer_fn = move |env: &mut Environment, answer: Option<&str>| {
         let action = if let Some(file) = answer {
-            match io::open_editor(&file) {
+            match open_editor(&file) {
                 Ok(editor) => {
-                    let _ = env.open_editor(editor.to_ref());
+                    if let Some(place) = place {
+                        env.open_view(editor.to_ref(), place);
+                    } else {
+                        env.set_view(editor.to_ref());
+                    }
                     None
                 }
                 Err(e) => Some(Action::Alert(e.to_string())),
@@ -368,38 +398,33 @@ fn open_file(_: &mut Environment) -> Result<Option<Action>> {
     )))
 }
 
-fn open_window_top(env: &mut Environment) -> Result<Option<Action>> {
-    let action = env
-        .open_view(Editor::new().to_ref(), Placement::Top)
-        .map(|_| None)
-        .unwrap_or_else(|| Some(Action::Alert("out of window space".to_string())));
-    Ok(action)
+pub fn open_editor(path: &str) -> Result<Editor> {
+    // Try reading file contents into buffer.
+    let mut buffer = Buffer::new();
+    let mod_time = match io::read_file(path, &mut buffer) {
+        Ok(_) => {
+            // Contents read successfully, so fetch time of last modification for use
+            // in checking before subsequent write operation.
+            io::get_mod_time(path.as_ref()).ok()
+        }
+        Err(Error::IO { device: _, cause }) if cause.kind() == ErrorKind::NotFound => {
+            // File was not found, but still treat this error condition as successful,
+            // though note that last modification time is absent to indicate new file.
+            None
+        }
+        Err(e) => {
+            // Propagate all other errors.
+            return Err(e);
+        }
+    };
+
+    // Create persistent buffer with position set at top.
+    buffer.set_pos(0);
+    let editor = Editor::new(Storage::as_persistent(path, mod_time), buffer.to_ref());
+    Ok(editor)
 }
 
-fn open_window_bottom(env: &mut Environment) -> Result<Option<Action>> {
-    let action = env
-        .open_view(Editor::new().to_ref(), Placement::Bottom)
-        .map(|_| None)
-        .unwrap_or_else(|| Some(Action::Alert("out of window space".to_string())));
-    Ok(action)
-}
-
-fn open_window_above(env: &mut Environment) -> Result<Option<Action>> {
-    let action = env
-        .open_view(Editor::new().to_ref(), Placement::Above(env.active_id()))
-        .map(|_| None)
-        .unwrap_or_else(|| Some(Action::Alert("out of window space".to_string())));
-    Ok(action)
-}
-
-fn open_window_below(env: &mut Environment) -> Result<Option<Action>> {
-    let action = env
-        .open_view(Editor::new().to_ref(), Placement::Below(env.active_id()))
-        .map(|_| None)
-        .unwrap_or_else(|| Some(Action::Alert("out of window space".to_string())));
-    Ok(action)
-}
-
+/// Operation: `close-window`
 fn close_window(env: &mut Environment) -> Result<Option<Action>> {
     let action = env
         .close_view(env.active_id())
@@ -408,18 +433,32 @@ fn close_window(env: &mut Environment) -> Result<Option<Action>> {
     Ok(action)
 }
 
+/// Operation: `top-window`
+fn top_window(env: &mut Environment) -> Result<Option<Action>> {
+    env.top_view();
+    Ok(None)
+}
+
+/// Operation: `bottom-window`
+fn bottom_window(env: &mut Environment) -> Result<Option<Action>> {
+    env.bottom_view();
+    Ok(None)
+}
+
+/// Operation: `prev-window`
 fn prev_window(env: &mut Environment) -> Result<Option<Action>> {
     env.prev_view();
     Ok(None)
 }
 
+/// Operation: `next-window`
 fn next_window(env: &mut Environment) -> Result<Option<Action>> {
     env.next_view();
     Ok(None)
 }
 
 /// Predefined mapping of editing operations to editing functions.
-const OP_MAPPINGS: [(&'static str, OpFn); 42] = [
+const OP_MAPPINGS: [(&'static str, OpFn); 44] = [
     // --- exit and cancellation ---
     ("quit", quit),
     // --- navigation and selection ---
@@ -460,12 +499,14 @@ const OP_MAPPINGS: [(&'static str, OpFn); 42] = [
     ("cut", cut),
     // --- file handling ---
     ("open-file", open_file),
-    // --- todo: temporary and added for testing ---
-    ("open-window-top", open_window_top),
-    ("open-window-bottom", open_window_bottom),
-    ("open-window-above", open_window_above),
-    ("open-window-below", open_window_below),
+    ("open-file-top", open_file_top),
+    ("open-file-bottom", open_file_bottom),
+    ("open-file-above", open_file_above),
+    ("open-file-below", open_file_below),
+    // --- window handling ---
     ("close-window", close_window),
+    ("top-window", top_window),
+    ("bottom-window", bottom_window),
     ("prev-window", prev_window),
     ("next-window", next_window),
 ];

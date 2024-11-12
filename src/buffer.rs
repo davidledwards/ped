@@ -1,5 +1,4 @@
 //! Gap buffer.
-use crate::error::{Error, Result};
 use core::slice;
 use std::alloc::{self, Layout};
 use std::cell::RefCell;
@@ -19,6 +18,8 @@ pub struct Buffer {
 }
 
 pub type BufferRef = Rc<RefCell<Buffer>>;
+
+pub type Result<T> = std::result::Result<T, std::io::Error>;
 
 impl Buffer {
     const INIT_CAPACITY: usize = 65_536;
@@ -249,9 +250,7 @@ impl Buffer {
         let mut count = 0;
 
         loop {
-            let n = reader
-                .read_line(&mut chunk)
-                .map_err(|e| Error::io(None, e))?;
+            let n = reader.read_line(&mut chunk)?;
             if (n > 0 && chunk.len() >= READ_CHUNK_SIZE) || n == 0 {
                 // Inserts chunk into buffer when either condition occurs:
                 // - enough characters have been read to reach trigger, or
@@ -287,9 +286,7 @@ impl Buffer {
                 // Sends chunk of encoded characters to writer when either condition occurs:
                 // - enough bytes have been encoded to reach trigger, or
                 // - end of buffer
-                let _ = writer
-                    .write_all(chunk.as_slice())
-                    .map_err(|e| Error::io(None, e))?;
+                let _ = writer.write_all(chunk.as_slice())?;
                 count += chunk.len();
                 chunk.clear();
             }

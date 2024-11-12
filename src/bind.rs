@@ -93,7 +93,7 @@ impl Bindings {
     }
 
     /// Default mapping of keys to editing operations.
-    const DEFAULT_BINDINGS: [(&'static str, &'static str); 53] = [
+    const DEFAULT_BINDINGS: [(&'static str, &'static str); 55] = [
         // --- exit and cancellation ---
         ("ctrl-q", "quit"),
         // --- navigation and selection ---
@@ -145,13 +145,15 @@ impl Bindings {
         ("ctrl-x", "cut"),
         // --- file handling ---
         ("ctrl-o", "open-file"),
-        // --- todo: following are temporary and for testing purposes ---
-        ("ctrl-w:/", "open-window-top"),
-        ("ctrl-w:\\", "open-window-bottom"),
-        ("ctrl-w:[", "open-window-above"),
-        ("ctrl-w:]", "open-window-below"),
-        ("ctrl-w:k", "close-window"),
-        ("ctrl-w:p", "prev-window"),
-        ("ctrl-w:n", "next-window"),
+        ("ctrl-[:o:t", "open-file-top"),
+        ("ctrl-[:o:b", "open-file-bottom"),
+        ("ctrl-[:o:p", "open-file-above"),
+        ("ctrl-[:o:n", "open-file-below"),
+        // --- window handling ---
+        ("ctrl-w", "close-window"),
+        ("ctrl-[:w:t", "top-window"),
+        ("ctrl-[:w:b", "bottom-window"),
+        ("ctrl-[:w:p", "prev-window"),
+        ("ctrl-[:w:n", "next-window"),
     ];
 }

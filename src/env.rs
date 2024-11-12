@@ -1,5 +1,6 @@
 //! Editing environment.
-use crate::editor::{Editor, EditorRef};
+use crate::buffer::Buffer;
+use crate::editor::{Editor, EditorRef, Storage};
 use crate::window::WindowRef;
 use crate::workspace::{Placement, Workspace, WorkspaceRef};
 use std::cell::{Ref, RefMut};
@@ -26,7 +27,7 @@ impl Environment {
     pub fn new(workspace: WorkspaceRef, editors: Vec<EditorRef>) -> Environment {
         // Need at least one editor.
         let editors = if editors.len() == 0 {
-            vec![Editor::new().to_ref()]
+            vec![Editor::new(Storage::as_transient("scratch"), Buffer::new().to_ref()).to_ref()]
         } else {
             editors
         };
@@ -91,7 +92,7 @@ impl Environment {
         }
     }
 
-    pub fn open_editor(&mut self, editor: EditorRef) -> u32 {
+    pub fn set_view(&mut self, editor: EditorRef) -> u32 {
         // Detach active editor from existing window and reattach that window to
         // new editor.
         self.active_editor().detach();
@@ -137,6 +138,20 @@ impl Environment {
             self.active_editor().show_cursor();
             self.active_id
         })
+    }
+
+    pub fn top_view(&mut self) -> u32 {
+        let top_id = self.workspace().top_view().id;
+        self.active_id = top_id;
+        self.active_editor().show_cursor();
+        self.active_id
+    }
+
+    pub fn bottom_view(&mut self) -> u32 {
+        let bottom_id = self.workspace().bottom_view().id;
+        self.active_id = bottom_id;
+        self.active_editor().show_cursor();
+        self.active_id
     }
 
     pub fn prev_view(&mut self) -> u32 {
