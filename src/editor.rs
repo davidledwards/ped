@@ -13,7 +13,7 @@ use std::rc::Rc;
 use std::time::SystemTime;
 
 /// An editing controller with an underlying [`Buffer`] and an attachable
-/// [`Window`](crate::window::Window).
+/// [`Window`].
 pub struct Editor {
     /// Type of storage associated with this editor.
     storage: Storage,
@@ -468,7 +468,7 @@ impl Editor {
     ///
     /// The *line* and *column* values are `0`-based. Note that neither of these values
     /// are bounded by the size of the display, which is the case with
-    /// [`cursor`](Self::get_cursor).
+    /// [`cursor`](Self::cursor).
     pub fn location(&self) -> Point {
         Point::new(self.cur_line.line, self.cur_line.line_col(self.cursor.col))
     }

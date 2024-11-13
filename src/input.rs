@@ -1,28 +1,29 @@
 //! Input editor.
 use crate::canvas::Canvas;
 use crate::grid::Cell;
-use crate::key::{
-    Key, CTRL_A, CTRL_B, CTRL_D, CTRL_E, CTRL_F, CTRL_G, CTRL_H, CTRL_J, CTRL_K, CTRL_M, DELETE,
-    END, HOME, LEFT, RIGHT,
-};
+use crate::key::*;
 use crate::size::{Point, Size};
 use crate::workspace::WorkspaceRef;
 use crate::writer::Writer;
 use std::cmp;
 
 pub struct InputEditor {
+    /// Associated workspace.
     workspace: WorkspaceRef,
 
     /// Contains a prompt when the input editor is enabled, otherwise `None`.
     prompt: Option<String>,
 
-    /// Represents the number of columns reserved for the prompt area when enabled, otherwise `0`.
+    /// Represents the number of columns reserved for the prompt area when enabled,
+    /// otherwise `0`.
     prompt_cols: u32,
 
-    /// Represents the number of columns reserved for the input area when enabled, otherwise `0`.
+    /// Represents the number of columns reserved for the input area when enabled,
+    /// otherwise `0`.
     input_cols: u32,
 
-    /// The canvas representing the input buffer when enabled, otherwise [zero](Canvas::zero).
+    /// The canvas representing the input buffer when enabled, otherwise
+    /// [`zero`](Canvas::zero).
     canvas: Canvas,
 
     /// The input buffer.
