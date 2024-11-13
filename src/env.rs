@@ -77,6 +77,7 @@ impl Environment {
 
     pub fn resize(&mut self) {
         let ids = self.workspace_mut().resize(self.active_id);
+        self.workspace_mut().clear_shared();
         if let Some(ids) = ids {
             for id in ids {
                 if let Some(e) = self.editor_map.remove(&id) {
