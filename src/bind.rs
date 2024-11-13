@@ -93,7 +93,7 @@ impl Bindings {
     }
 
     /// Default mapping of keys to editing operations.
-    const DEFAULT_BINDINGS: [(&'static str, &'static str); 57] = [
+    const DEFAULT_BINDINGS: [(&'static str, &'static str); 59] = [
         // --- exit and cancellation ---
         ("ctrl-q", "quit"),
         // --- navigation and selection ---
@@ -156,6 +156,8 @@ impl Bindings {
         ("ctrl-[:w:t", "top-window"),
         ("ctrl-[:w:b", "bottom-window"),
         ("ctrl-[:w:p", "prev-window"),
+        ("ctrl-[:,", "prev-window"),
         ("ctrl-[:w:n", "next-window"),
+        ("ctrl-[:.", "next-window"),
     ];
 }
