@@ -57,7 +57,7 @@ impl Grid {
     /// Fills all cells in `row` in the range [`start_col`, `end_col`) to `cell`.
     pub fn fill_range(&mut self, row: u32, start_col: u32, end_col: u32, cell: Cell) {
         debug_assert!(row < self.size.rows);
-        debug_assert!(start_col < end_col);
+        debug_assert!(start_col <= end_col);
         debug_assert!(end_col <= self.size.cols);
 
         let row_index = row * self.size.cols;

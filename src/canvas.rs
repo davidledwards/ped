@@ -57,7 +57,7 @@ impl Canvas {
     /// for the given `row`.
     pub fn fill_row_range(&mut self, row: u32, start_col: u32, end_col: u32, cell: Cell) {
         debug_assert!(row < self.size.rows);
-        debug_assert!(start_col < end_col);
+        debug_assert!(start_col <= end_col);
         debug_assert!(end_col <= self.size.cols);
 
         self.back.fill_range(row, start_col, end_col, cell);
