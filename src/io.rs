@@ -31,10 +31,10 @@ pub fn create_file(path: &str) -> Result<File> {
     File::create(path).map_err(|e| to_error(e, path))
 }
 
-pub fn get_mod_time(path: &str) -> Result<SystemTime> {
+pub fn get_time(path: &str) -> Result<SystemTime> {
     fs::metadata(path)
         .map_err(|e| to_error(e, path))
-        .and_then(|meta| meta.created().map_err(|e| to_error(e, path)))
+        .and_then(|info| info.modified().map_err(|e| to_error(e, path)))
 }
 
 fn to_error(e: io::Error, path: &str) -> Error {

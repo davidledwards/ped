@@ -93,7 +93,7 @@ impl Bindings {
     }
 
     /// Default mapping of keys to editing operations.
-    const DEFAULT_BINDINGS: [(&'static str, &'static str); 55] = [
+    const DEFAULT_BINDINGS: [(&'static str, &'static str); 57] = [
         // --- exit and cancellation ---
         ("ctrl-q", "quit"),
         // --- navigation and selection ---
@@ -149,6 +149,8 @@ impl Bindings {
         ("ctrl-[:o:b", "open-file-bottom"),
         ("ctrl-[:o:p", "open-file-above"),
         ("ctrl-[:o:n", "open-file-below"),
+        ("ctrl-s", "save-file"),
+        ("ctrl-[:s", "save-file-as"),
         // --- window handling ---
         ("ctrl-w", "close-window"),
         ("ctrl-[:w:t", "top-window"),

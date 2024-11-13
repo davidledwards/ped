@@ -21,6 +21,9 @@ pub struct Editor {
     /// Buffer containing the contents of this editor.
     buffer: BufferRef,
 
+    /// An indication that unsaved changes have been made to the buffer.
+    dirty: bool,
+
     /// Buffer position corresponding to the cursor.
     cur_pos: usize,
 
@@ -61,12 +64,13 @@ pub struct Editor {
 pub type EditorRef = Rc<RefCell<Editor>>;
 
 /// The storage types associated with an [`Editor`].
+#[derive(Clone)]
 pub enum Storage {
-    /// A type of storage indicating that the buffer can be written to a persistent
-    /// medium.
+    /// A type of storage indicating that the buffer is stored and may be written to
+    /// a persistent medium.
     Persistent {
         path: String,
-        mod_time: Option<SystemTime>,
+        time: Option<SystemTime>,
     },
 
     /// A type of storage indicating that the buffer can be discarded.
@@ -146,10 +150,10 @@ struct Render {
 }
 
 impl Storage {
-    pub fn as_persistent(path: &str, mod_time: Option<SystemTime>) -> Storage {
+    pub fn as_persistent(path: &str, time: Option<SystemTime>) -> Storage {
         Storage::Persistent {
             path: path.to_string(),
-            mod_time,
+            time,
         }
     }
 
@@ -158,13 +162,20 @@ impl Storage {
             name: name.to_string(),
         }
     }
+
+    pub fn path(&self) -> Option<String> {
+        match self {
+            Storage::Persistent { ref path, time: _ } => Some(path.clone()),
+            _ => None,
+        }
+    }
 }
 
 impl fmt::Display for Storage {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Storage::Persistent { path, mod_time } => {
-                if let Some(_) = mod_time {
+            Storage::Persistent { path, time } => {
+                if let Some(_) = time {
                     write!(f, "{path}")
                 } else {
                     write!(f, "{path} (new)")
@@ -297,7 +308,7 @@ impl Draw {
 
         Draw {
             theme: editor.theme.clone(),
-            cursor: editor.get_cursor(),
+            cursor: editor.cursor(),
             select_span,
         }
     }
@@ -399,6 +410,7 @@ impl Editor {
         Editor {
             storage,
             buffer,
+            dirty: false,
             cur_pos,
             top_line: Line::default(),
             cur_line: Line::default(),
@@ -419,6 +431,48 @@ impl Editor {
         Rc::new(RefCell::new(self))
     }
 
+    pub fn storage(&self) -> &Storage {
+        &self.storage
+    }
+
+    #[inline]
+    pub fn buffer(&self) -> Ref<'_, Buffer> {
+        self.buffer.borrow()
+    }
+
+    #[inline]
+    fn buffer_mut(&self) -> RefMut<'_, Buffer> {
+        self.buffer.borrow_mut()
+    }
+
+    pub fn dirty(&self) -> bool {
+        self.dirty
+    }
+
+    pub fn clear_dirty(&mut self, storage: Storage) {
+        self.storage = storage;
+        self.dirty = false;
+        self.show_banner();
+    }
+
+    /// Returns the cursor position on the display in terms of *row* and *column*.
+    ///
+    /// The *row* and *column* values are `0`-based and exclusively bounded by
+    /// [`rows`](Self::rows) and [`cols`](Self::cols), respectively.
+    pub fn cursor(&self) -> Point {
+        self.cursor
+    }
+
+    /// Returns the location of the cursor position in the buffer in terms of *line*
+    /// and *column*.
+    ///
+    /// The *line* and *column* values are `0`-based. Note that neither of these values
+    /// are bounded by the size of the display, which is the case with
+    /// [`cursor`](Self::get_cursor).
+    pub fn location(&self) -> Point {
+        Point::new(self.cur_line.line, self.cur_line.line_col(self.cursor.col))
+    }
+
     #[inline(always)]
     pub fn rows(&self) -> u32 {
         self.rows
@@ -429,42 +483,8 @@ impl Editor {
         self.cols
     }
 
-    pub fn get_size(&self) -> Size {
+    pub fn size(&self) -> Size {
         (self.rows, self.cols).into()
-    }
-
-    /// Returns the cursor position on the display in terms of *row* and *column*.
-    ///
-    /// The *row* and *column* values are `0`-based and exclusively bounded by
-    /// [`rows`](Self::rows) and [`cols`](Self::cols), respectively.
-    pub fn get_cursor(&self) -> Point {
-        self.cursor
-    }
-
-    /// Returns the location of the cursor position in the buffer in terms of *line*
-    /// and *column*.
-    ///
-    /// The *line* and *column* values are `0`-based. Note that neither of these values
-    /// are bounded by the size of the display, which is the case with
-    /// [`get_cursor`](Self::get_cursor).
-    pub fn get_location(&self) -> Point {
-        Point::new(self.cur_line.line, self.cur_line.line_col(self.cursor.col))
-    }
-
-    pub fn show_cursor(&mut self) {
-        let cursor = if self.margin_cols > 0 {
-            self.cursor + Size::cols(self.margin_cols)
-        } else {
-            self.cursor
-        };
-        self.canvas.borrow_mut().set_cursor(cursor);
-    }
-
-    fn show_location(&mut self) {
-        self.banner
-            .borrow_mut()
-            .set_location(self.get_location())
-            .draw();
     }
 
     /// Attaches the `window` to this editor.
@@ -515,21 +535,27 @@ impl Editor {
         self.draw();
     }
 
-    fn get_title(&self) -> String {
-        self.storage.to_string()
-    }
-
     pub fn draw(&mut self) {
         self.canvas.borrow_mut().clear();
-        self.draw_banner();
+        self.show_banner();
         self.render();
     }
 
-    fn draw_banner(&mut self) {
+    pub fn show_cursor(&mut self) {
+        let cursor = if self.margin_cols > 0 {
+            self.cursor + Size::cols(self.margin_cols)
+        } else {
+            self.cursor
+        };
+        self.canvas.borrow_mut().set_cursor(cursor);
+    }
+
+    fn show_banner(&mut self) {
         self.banner
             .borrow_mut()
-            .set_title(self.get_title())
-            .set_location(self.get_location())
+            .set_dirty(self.dirty)
+            .set_title(self.storage.to_string())
+            .set_location(self.location())
             .draw();
     }
 
@@ -813,7 +839,7 @@ impl Editor {
             let col = self.cur_line.col_of(self.cur_pos);
             self.snap_col = None;
             self.cursor = Point::new(row, col);
-            self.set_dirty();
+            self.dirty = true;
             self.render();
         }
     }
@@ -926,14 +952,10 @@ impl Editor {
             let col = self.cur_line.col_of(self.cur_pos);
             self.snap_col = None;
             self.cursor = Point::new(row, col);
-            self.set_dirty();
+            self.dirty = true;
             self.render();
             text
         }
-    }
-
-    fn set_dirty(&mut self) {
-        self.banner.borrow_mut().set_dirty(true);
     }
 
     /// Sets a *hard* mark at the current buffer position and returns the previous
@@ -1221,7 +1243,11 @@ impl Editor {
         self.canvas.borrow_mut().draw();
 
         // Renders additional information.
-        self.show_location();
+        self.banner
+            .borrow_mut()
+            .set_dirty(self.dirty)
+            .set_location(self.location())
+            .draw();
         self.show_cursor();
     }
 
@@ -1292,15 +1318,5 @@ impl Editor {
                 canvas.set_cell(render.row, self.margin_cols, draw.as_line(' '));
             }
         }
-    }
-
-    #[inline]
-    fn buffer(&self) -> Ref<'_, Buffer> {
-        self.buffer.borrow()
-    }
-
-    #[inline]
-    fn buffer_mut(&self) -> RefMut<'_, Buffer> {
-        self.buffer.borrow_mut()
     }
 }

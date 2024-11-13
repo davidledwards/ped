@@ -19,6 +19,7 @@ use crate::size::{Point, Size};
 use crate::workspace::Placement;
 use std::collections::HashMap;
 use std::io::ErrorKind;
+use std::time::SystemTime;
 
 /// A function type that implements an editing operation.
 pub type OpFn = fn(&mut Environment) -> Result<Option<Action>>;
@@ -32,15 +33,40 @@ pub enum Action {
 }
 
 /// A callback function that handles answers to [`Action::Question`] actions.
-pub type AnswerFn = dyn FnMut(&mut Environment, Option<&str>) -> Result<Option<Action>>;
+pub type AnswerFn =
+    dyn for<'a> FnMut(&'a mut Environment, Option<&'a str>) -> Result<Option<Action>>;
 
 /// Map of editing operations to editing functions.
 pub type OpMap = HashMap<&'static str, OpFn>;
 
+impl Action {
+    fn as_quit() -> Option<Action> {
+        Some(Action::Quit)
+    }
+
+    fn as_alert(text: &str) -> Option<Action> {
+        let action = Action::Alert(text.to_string());
+        Some(action)
+    }
+
+    fn as_alert_error(e: &Error) -> Option<Action> {
+        let action = Action::Alert(e.to_string());
+        Some(action)
+    }
+
+    fn as_question<F>(prompt: &str, answer_fn: F) -> Option<Action>
+    where
+        F: for<'a> FnMut(&'a mut Environment, Option<&'a str>) -> Result<Option<Action>> + 'static,
+    {
+        let action = Action::Question(prompt.to_string(), Box::new(answer_fn));
+        Some(action)
+    }
+}
+
 /// Operation: `quit`
 fn quit(_: &mut Environment) -> Result<Option<Action>> {
     // todo: ask to save dirty buffers
-    Ok(Some(Action::Quit))
+    Ok(Action::as_quit())
 }
 
 /// Operation: `move-left`
@@ -227,8 +253,8 @@ fn scroll_center(env: &mut Environment) -> Result<Option<Action>> {
     // If position is not precisely on one of these rows, then start at center. This
     // behavior allows user to quickly align cursor with successive key presses.
     let mut editor = env.active_editor();
-    let Size { rows, .. } = editor.get_size();
-    let Point { row, .. } = editor.get_cursor();
+    let Size { rows, .. } = editor.size();
+    let Point { row, .. } = editor.cursor();
     let align = if row == 0 {
         Align::Center
     } else if row == rows / 2 {
@@ -260,17 +286,14 @@ fn goto_line(_: &mut Environment) -> Result<Option<Action>> {
                 env.active_editor().move_line(line, Align::Center);
                 None
             } else {
-                Some(Action::Alert(format!("{s}: invalid line number")))
+                Action::as_alert(&format!("{s}: invalid line number"))
             }
         } else {
             None
         };
         Ok(action)
     };
-    Ok(Some(Action::Question(
-        "goto line:".to_string(),
-        Box::new(answer_fn),
-    )))
+    Ok(Action::as_question("goto line:", answer_fn))
 }
 
 /// Operation: `insert-line`
@@ -385,27 +408,24 @@ fn open_file_internal(_: &mut Environment, place: Option<Placement>) -> Result<O
                     }
                     None
                 }
-                Err(e) => Some(Action::Alert(e.to_string())),
+                Err(e) => Action::as_alert_error(&e),
             }
         } else {
             None
         };
         Ok(action)
     };
-    Ok(Some(Action::Question(
-        "open file:".to_string(),
-        Box::new(answer_fn),
-    )))
+    Ok(Action::as_question("open file:", answer_fn))
 }
 
 pub fn open_editor(path: &str) -> Result<Editor> {
     // Try reading file contents into buffer.
     let mut buffer = Buffer::new();
-    let mod_time = match io::read_file(path, &mut buffer) {
+    let time = match io::read_file(path, &mut buffer) {
         Ok(_) => {
             // Contents read successfully, so fetch time of last modification for use
             // in checking before subsequent write operation.
-            io::get_mod_time(path.as_ref()).ok()
+            io::get_time(path.as_ref()).ok()
         }
         Err(Error::IO { device: _, cause }) if cause.kind() == ErrorKind::NotFound => {
             // File was not found, but still treat this error condition as successful,
@@ -420,8 +440,87 @@ pub fn open_editor(path: &str) -> Result<Editor> {
 
     // Create persistent buffer with position set at top.
     buffer.set_pos(0);
-    let editor = Editor::new(Storage::as_persistent(path, mod_time), buffer.to_ref());
+    let editor = Editor::new(Storage::as_persistent(path, time), buffer.to_ref());
     Ok(editor)
+}
+
+/// Operation: `save-file`
+fn save_file(env: &mut Environment) -> Result<Option<Action>> {
+    let mut editor = env.active_editor();
+    let action = match editor.storage().clone() {
+        Storage::Persistent { path, time } => {
+            match time {
+                Some(time) if io::get_time(&path)? > time => {
+                    // An existing file where modification time in storage is
+                    // newer than time read when file was opened, so ask user
+                    // to make decision before saving buffer.
+                    Action::as_question(
+                        "file in storage is newer, save anyway (y/n)?",
+                        save_override_callback,
+                    )
+                }
+                _ => {
+                    // Either a new file or an existing file where modification
+                    // time has changed, so just save buffer.
+                    save_editor(&mut editor, &path)
+                }
+            }
+        }
+        Storage::Transient { name: _ } => {
+            // User must provide path in order to save buffer since storage is
+            // transient.
+            Action::as_question("save as:", save_as_callback)
+        }
+    };
+    Ok(action)
+}
+
+/// Operation: `save-file-as`
+fn save_file_as(_: &mut Environment) -> Result<Option<Action>> {
+    Ok(Action::as_question("save as:", save_as_callback))
+}
+
+fn save_as_callback(env: &mut Environment, answer: Option<&str>) -> Result<Option<Action>> {
+    let action = if let Some(path) = answer {
+        let mut editor = env.active_editor();
+        save_editor(&mut editor, path)
+    } else {
+        None
+    };
+    Ok(action)
+}
+
+fn save_override_callback(env: &mut Environment, answer: Option<&str>) -> Result<Option<Action>> {
+    let action = match answer {
+        Some(yes_no) if yes_no.to_lowercase() == "y" => {
+            let mut editor = env.active_editor();
+            let path = editor
+                .storage()
+                .path()
+                .unwrap_or_else(|| panic!("path expected for editor"));
+            save_editor(&mut editor, &path)
+        }
+        _ => None,
+    };
+    Ok(action)
+}
+
+fn save_editor(editor: &mut Editor, path: &str) -> Option<Action> {
+    let time = save_buffer(&editor.buffer(), path);
+    match time {
+        Ok(time) => {
+            let storage = Storage::as_persistent(path, Some(time));
+            editor.clear_dirty(storage);
+            Action::as_alert(&format!("{path}: saved"))
+        }
+        Err(e) => Action::as_alert_error(&e),
+    }
+}
+
+fn save_buffer(buffer: &Buffer, path: &str) -> Result<SystemTime> {
+    let _ = io::write_file(path, buffer)?;
+    let time = io::get_time(path)?;
+    Ok(time)
 }
 
 /// Operation: `close-window`
@@ -429,7 +528,7 @@ fn close_window(env: &mut Environment) -> Result<Option<Action>> {
     let action = env
         .close_view(env.active_id())
         .map(|_| None)
-        .unwrap_or_else(|| Some(Action::Alert("cannot close only window".to_string())));
+        .unwrap_or_else(|| Action::as_alert("cannot close only window"));
     Ok(action)
 }
 
@@ -458,7 +557,7 @@ fn next_window(env: &mut Environment) -> Result<Option<Action>> {
 }
 
 /// Predefined mapping of editing operations to editing functions.
-const OP_MAPPINGS: [(&'static str, OpFn); 44] = [
+const OP_MAPPINGS: [(&'static str, OpFn); 46] = [
     // --- exit and cancellation ---
     ("quit", quit),
     // --- navigation and selection ---
@@ -503,6 +602,8 @@ const OP_MAPPINGS: [(&'static str, OpFn); 44] = [
     ("open-file-bottom", open_file_bottom),
     ("open-file-above", open_file_above),
     ("open-file-below", open_file_below),
+    ("save-file", save_file),
+    ("save-file-as", save_file_as),
     // --- window handling ---
     ("close-window", close_window),
     ("top-window", top_window),
