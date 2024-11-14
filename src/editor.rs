@@ -1320,3 +1320,13 @@ impl Editor {
         }
     }
 }
+
+pub fn persistent(path: &str, time: Option<SystemTime>, buffer: Option<Buffer>) -> EditorRef {
+    let buffer = buffer.unwrap_or_else(|| Buffer::new()).to_ref();
+    Editor::new(Storage::as_persistent(path, time), buffer).to_ref()
+}
+
+pub fn transient(name: &str, buffer: Option<Buffer>) -> EditorRef {
+    let buffer = buffer.unwrap_or_else(|| Buffer::new()).to_ref();
+    Editor::new(Storage::as_transient(name), buffer).to_ref()
+}

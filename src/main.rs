@@ -90,11 +90,7 @@ fn run() -> Result<()> {
 }
 
 fn run_opts(opts: &Options) -> Result<()> {
-    let editors = if let Some(file) = opts.files.iter().next() {
-        vec![op::open_editor(file)?.to_ref()]
-    } else {
-        Vec::new()
-    };
+    // todo: load files from command line after creating the controller
 
     let bindings = Bindings::new();
 
@@ -104,7 +100,7 @@ fn run_opts(opts: &Options) -> Result<()> {
     let keyboard = Keyboard::new();
     let theme = Theme::new();
     let workspace = Workspace::new(theme);
-    let mut controller = Controller::new(keyboard, bindings, workspace, editors);
+    let mut controller = Controller::new(keyboard, bindings, workspace);
     controller.run()?;
     Ok(())
 }

@@ -11,7 +11,7 @@
 //! See [`Bindings`](crate::bind::Bindings) for further details on binding keys
 //! at runtime.
 use crate::buffer::Buffer;
-use crate::editor::{Align, Editor, Storage};
+use crate::editor::{self, Align, Editor, EditorRef, Storage};
 use crate::env::Environment;
 use crate::error::{Error, Result};
 use crate::io;
@@ -65,7 +65,10 @@ impl Action {
 
 /// Operation: `quit`
 fn quit(_: &mut Environment) -> Result<Option<Action>> {
-    // todo: ask to save dirty buffers
+    // circle through list of editors and determine which are dirty
+    // start cycle of asking user to save individual buffers
+    // if answer is "all", then save all buffers
+    // skip any buffers that are transient
     Ok(Action::as_quit())
 }
 
@@ -388,12 +391,12 @@ fn open_file_bottom(env: &mut Environment) -> Result<Option<Action>> {
 
 /// Operation: `open-file-above`
 fn open_file_above(env: &mut Environment) -> Result<Option<Action>> {
-    open_file_internal(env, Some(Placement::Above(env.active_id())))
+    open_file_internal(env, Some(Placement::Above(env.active_view())))
 }
 
 /// Operation: `open-file-below`
 fn open_file_below(env: &mut Environment) -> Result<Option<Action>> {
-    open_file_internal(env, Some(Placement::Below(env.active_id())))
+    open_file_internal(env, Some(Placement::Below(env.active_view())))
 }
 
 fn open_file_internal(_: &mut Environment, place: Option<Placement>) -> Result<Option<Action>> {
@@ -402,9 +405,9 @@ fn open_file_internal(_: &mut Environment, place: Option<Placement>) -> Result<O
             match open_editor(&file) {
                 Ok(editor) => {
                     if let Some(place) = place {
-                        env.open_view(editor.to_ref(), place);
+                        env.open_view(editor, place);
                     } else {
-                        env.set_view(editor.to_ref());
+                        env.set_view(editor);
                     }
                     None
                 }
@@ -418,7 +421,7 @@ fn open_file_internal(_: &mut Environment, place: Option<Placement>) -> Result<O
     Ok(Action::as_question("open file:", answer_fn))
 }
 
-pub fn open_editor(path: &str) -> Result<Editor> {
+pub fn open_editor(path: &str) -> Result<EditorRef> {
     // Try reading file contents into buffer.
     let mut buffer = Buffer::new();
     let time = match io::read_file(path, &mut buffer) {
@@ -440,7 +443,7 @@ pub fn open_editor(path: &str) -> Result<Editor> {
 
     // Create persistent buffer with position set at top.
     buffer.set_pos(0);
-    let editor = Editor::new(Storage::as_persistent(path, time), buffer.to_ref());
+    let editor = editor::persistent(path, time, Some(buffer));
     Ok(editor)
 }
 
@@ -456,7 +459,7 @@ fn save_file(env: &mut Environment) -> Result<Option<Action>> {
                     // to make decision before saving buffer.
                     Action::as_question(
                         "file in storage is newer, save anyway (y/n)?",
-                        save_override_callback,
+                        save_override_answer,
                     )
                 }
                 _ => {
@@ -469,7 +472,7 @@ fn save_file(env: &mut Environment) -> Result<Option<Action>> {
         Storage::Transient { name: _ } => {
             // User must provide path in order to save buffer since storage is
             // transient.
-            Action::as_question("save as:", save_as_callback)
+            Action::as_question("save as:", save_as_answer)
         }
     };
     Ok(action)
@@ -477,10 +480,10 @@ fn save_file(env: &mut Environment) -> Result<Option<Action>> {
 
 /// Operation: `save-file-as`
 fn save_file_as(_: &mut Environment) -> Result<Option<Action>> {
-    Ok(Action::as_question("save as:", save_as_callback))
+    Ok(Action::as_question("save as:", save_as_answer))
 }
 
-fn save_as_callback(env: &mut Environment, answer: Option<&str>) -> Result<Option<Action>> {
+fn save_as_answer(env: &mut Environment, answer: Option<&str>) -> Result<Option<Action>> {
     let action = if let Some(path) = answer {
         let mut editor = env.active_editor();
         save_editor(&mut editor, path)
@@ -490,14 +493,11 @@ fn save_as_callback(env: &mut Environment, answer: Option<&str>) -> Result<Optio
     Ok(action)
 }
 
-fn save_override_callback(env: &mut Environment, answer: Option<&str>) -> Result<Option<Action>> {
+fn save_override_answer(env: &mut Environment, answer: Option<&str>) -> Result<Option<Action>> {
     let action = match answer {
         Some(yes_no) if yes_no.to_lowercase() == "y" => {
             let mut editor = env.active_editor();
-            let path = editor
-                .storage()
-                .path()
-                .unwrap_or_else(|| panic!("path expected for editor"));
+            let path = path_of(&editor);
             save_editor(&mut editor, &path)
         }
         _ => None,
@@ -526,9 +526,36 @@ fn save_buffer(buffer: &Buffer, path: &str) -> Result<SystemTime> {
 /// Operation: `close-window`
 fn close_window(env: &mut Environment) -> Result<Option<Action>> {
     let action = env
-        .close_view(env.active_id())
+        .close_view(env.active_view())
         .map(|_| None)
         .unwrap_or_else(|| Action::as_alert("cannot close only window"));
+    Ok(action)
+}
+
+/// Operation: `close-editor`
+fn close_editor(env: &mut Environment) -> Result<Option<Action>> {
+    let editor = env.active_editor();
+    let action = if editor.dirty() {
+        Action::as_question("save file before closing (y/n)?", close_editor_answer)
+    } else {
+        // close editor and window
+        None
+    };
+    Ok(action)
+}
+
+fn close_editor_answer(env: &mut Environment, answer: Option<&str>) -> Result<Option<Action>> {
+    let action = match answer {
+        Some(yes_no) if yes_no.to_lowercase() == "y" => {
+            let mut editor = env.active_editor();
+            let path = path_of(&editor);
+            save_editor(&mut editor, &path)
+            // save file
+            // close view
+            // remove editor
+        }
+        _ => None,
+    };
     Ok(action)
 }
 
@@ -556,8 +583,17 @@ fn next_window(env: &mut Environment) -> Result<Option<Action>> {
     Ok(None)
 }
 
+/// Returns the path associated with `editor` under the assumption that the storage
+/// type is [`Persistent`](Storage::Persistent), otherwise it panics.
+fn path_of(editor: &Editor) -> String {
+    editor
+        .storage()
+        .path()
+        .unwrap_or_else(|| panic!("path expected for editor"))
+}
+
 /// Predefined mapping of editing operations to editing functions.
-const OP_MAPPINGS: [(&'static str, OpFn); 46] = [
+const OP_MAPPINGS: [(&'static str, OpFn); 47] = [
     // --- exit and cancellation ---
     ("quit", quit),
     // --- navigation and selection ---
@@ -606,6 +642,7 @@ const OP_MAPPINGS: [(&'static str, OpFn); 46] = [
     ("save-file-as", save_file_as),
     // --- window handling ---
     ("close-window", close_window),
+    ("close-editor", close_editor),
     ("top-window", top_window),
     ("bottom-window", bottom_window),
     ("prev-window", prev_window),

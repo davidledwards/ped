@@ -1,7 +1,6 @@
 //! Main controller.
 use crate::bind::Bindings;
 use crate::echo::Echo;
-use crate::editor::EditorRef;
 use crate::env::Environment;
 use crate::error::Result;
 use crate::input::{Directive, InputEditor};
@@ -67,14 +66,9 @@ impl Controller {
     /// change.
     const TERM_CHANGE_DELAY: u128 = 100;
 
-    pub fn new(
-        keyboard: Keyboard,
-        bindings: Bindings,
-        workspace: Workspace,
-        editors: Vec<EditorRef>,
-    ) -> Controller {
+    pub fn new(keyboard: Keyboard, bindings: Bindings, workspace: Workspace) -> Controller {
         let workspace = workspace.to_ref();
-        let env = Environment::new(workspace.clone(), editors);
+        let env = Environment::new(workspace.clone());
         let echo = Echo::new(workspace.clone());
         let input = InputEditor::new(workspace.clone());
 
