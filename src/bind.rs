@@ -152,8 +152,8 @@ impl Bindings {
         ("ctrl-s", "save-file"),
         ("ctrl-[:s", "save-file-as"),
         // --- window handling ---
-        ("ctrl-w", "close-window"),
-        ("ctrl-[:w:k", "close-editor"),
+        ("ctrl-w", "kill-window"),
+        ("ctrl-[:w:w", "close-window"),
         ("ctrl-[:w:t", "top-window"),
         ("ctrl-[:w:b", "bottom-window"),
         ("ctrl-[:w:p", "prev-window"),

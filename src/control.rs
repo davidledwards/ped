@@ -118,13 +118,13 @@ impl Controller {
             // short circuits detection and bypasses normal indirection of key
             // binding.
             self.clear_echo();
-            let mut editor = self.env.active_editor();
+            let mut editor = self.env.get_editor().borrow_mut();
             editor.clear_mark();
             editor.insert_char(c);
         } else if key == CTRL_G {
             self.clear_echo();
             if !self.clear_keys() {
-                let mut editor = self.env.active_editor();
+                let mut editor = self.env.get_editor().borrow_mut();
                 if let Some(_) = editor.clear_mark() {
                     editor.render();
                 }
@@ -261,20 +261,20 @@ impl Controller {
     fn set_echo(&mut self, text: &str) {
         self.echo.set(text);
         self.last_echo = Some(Instant::now());
-        self.env.active_editor().show_cursor();
+        self.env.get_editor().borrow_mut().show_cursor();
     }
 
     fn clear_echo(&mut self) {
         if let Some(_) = self.last_echo.take() {
             self.echo.clear();
-            self.env.active_editor().show_cursor();
+            self.env.get_editor().borrow_mut().show_cursor();
         }
     }
 
     fn resize_echo(&mut self) {
         if let Some(_) = self.last_echo {
             self.echo.resize();
-            self.env.active_editor().show_cursor();
+            self.env.get_editor().borrow_mut().show_cursor();
         }
     }
 
@@ -286,7 +286,7 @@ impl Controller {
     fn clear_question(&mut self) {
         if let Some(_) = self.question.take() {
             self.input.disable();
-            self.env.active_editor().show_cursor();
+            self.env.get_editor().borrow_mut().show_cursor();
         }
     }
 
