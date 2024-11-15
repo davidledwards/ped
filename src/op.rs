@@ -11,7 +11,7 @@
 //! See [`Bindings`](crate::bind::Bindings) for further details on binding keys
 //! at runtime.
 use crate::buffer::Buffer;
-use crate::editor::{self, Align, Editor, EditorRef, Storage};
+use crate::editor::{self, Align, EditorRef, Storage};
 use crate::env::{Environment, Focus};
 use crate::error::{Error, Result};
 use crate::io;
@@ -399,10 +399,12 @@ fn open_file_below(env: &mut Environment) -> Result<Option<Action>> {
     open_file_internal(env, Some(Placement::Below(env.get_active())))
 }
 
+/// Various `open-file-*` operations delegate to this functions, but provide `place`
+/// to determine the placement of the new window.
 fn open_file_internal(_: &mut Environment, place: Option<Placement>) -> Result<Option<Action>> {
     let answer_fn = move |env: &mut Environment, answer: Option<&str>| {
-        let action = if let Some(file) = answer {
-            match open_editor(&file) {
+        let action = if let Some(path) = answer {
+            match open_editor(&path) {
                 Ok(editor) => {
                     if let Some(place) = place {
                         env.open_editor(editor, place, Align::Auto);
@@ -421,105 +423,44 @@ fn open_file_internal(_: &mut Environment, place: Option<Placement>) -> Result<O
     Ok(Action::as_question(PROMPT_OPEN_FILE, answer_fn))
 }
 
-fn open_editor(path: &str) -> Result<EditorRef> {
-    // Try reading file contents into buffer.
-    let mut buffer = Buffer::new();
-    let time = match io::read_file(path, &mut buffer) {
-        Ok(_) => {
-            // Contents read successfully, so fetch time of last modification for use
-            // in checking before subsequent write operation.
-            io::get_time(path.as_ref()).ok()
-        }
-        Err(Error::IO { device: _, cause }) if cause.kind() == ErrorKind::NotFound => {
-            // File was not found, but still treat this error condition as successful,
-            // though note that last modification time is absent to indicate new file.
-            None
-        }
-        Err(e) => {
-            // Propagate all other errors.
-            return Err(e);
-        }
-    };
-
-    // Create persistent buffer with position set at top.
-    buffer.set_pos(0);
-    let editor = editor::persistent(path, time, Some(buffer));
-    Ok(editor)
-}
-
 /// Operation: `save-file`
 fn save_file(env: &mut Environment) -> Result<Option<Action>> {
-    let mut editor = env.get_editor().borrow_mut();
-    let action = match editor.storage().clone() {
+    let editor = env.get_editor();
+    let storage = editor.borrow().storage().clone();
+    let action = match storage {
         Storage::Persistent { path, time } => {
             match time {
                 Some(time) if io::get_time(&path)? > time => {
-                    // An existing file where modification time in storage is
-                    // newer than time read when file was opened, so ask user
-                    // to make decision before saving buffer.
+                    // An existing file where modification time in storage is newer than
+                    // time read when file was opened, so ask user to make decision
+                    // before saving buffer.
                     Action::as_question(&prompt_save_anyway(&path), save_override_answer)
                 }
                 _ => {
-                    // Either a new file or an existing file where modification
-                    // time has changed, so just save buffer.
-                    save_editor(&mut editor, &path)
+                    // Indicates that file is new or that modificatioin time of an
+                    // existing file has not changed since last read or write, so just
+                    // save buffer.
+                    save_file_finish(editor, &path)
                 }
             }
         }
         Storage::Transient { name: _ } => {
-            // User must provide path in order to save buffer since storage is
-            // transient.
+            // User must provide path in order to save buffer since storage is transient.
             Action::as_question(PROMPT_SAVE_AS, save_transient_answer)
         }
     };
     Ok(action)
 }
 
-fn save_transient_answer(env: &mut Environment, answer: Option<&str>) -> Result<Option<Action>> {
-    let action = if let Some(path) = answer {
-        let editor = env.get_editor();
-        let time = write_editor(&mut editor.borrow_mut(), path);
-        match time {
-            Ok(time) => {
-                let mut buffer = editor.borrow().buffer().clone();
-                let cur_pos = editor.borrow().cursor_pos();
-                buffer.set_pos(cur_pos);
-                let Point { row, col: _ } = editor.borrow().cursor();
-                let dup_editor = editor::persistent(path, Some(time), Some(buffer));
-                env.set_editor(dup_editor, Align::Row(row));
-                Action::as_alert(&alert_saved(path))
-            }
-            Err(e) => Action::as_alert_error(&e),
-        }
-    } else {
-        // todo
-        None
-    };
-    Ok(action)
-}
-
-/// Operation: `save-file-as`
-fn save_file_as(_: &mut Environment) -> Result<Option<Action>> {
-    Ok(Action::as_question(PROMPT_SAVE_AS, save_as_answer))
-}
-
-fn save_as_answer(env: &mut Environment, answer: Option<&str>) -> Result<Option<Action>> {
-    let action = if let Some(path) = answer {
-        let editor = env.get_editor();
-        save_editor(&mut editor.borrow_mut(), path)
-    } else {
-        None
-    };
-    Ok(action)
-}
-
+/// Question callback when requesting override to save an editor whose file in storage
+/// has a more recent modification time.
 fn save_override_answer(env: &mut Environment, answer: Option<&str>) -> Result<Option<Action>> {
     let action = match answer {
         Some(yes_no) => {
             if yes_no == "y" {
                 let editor = env.get_editor();
                 let path = path_of(editor);
-                save_editor(&mut editor.borrow_mut(), &path)
+                save_file_finish(editor, &path)
             } else if yes_no == "n" {
                 None
             } else {
@@ -532,30 +473,58 @@ fn save_override_answer(env: &mut Environment, answer: Option<&str>) -> Result<O
     Ok(action)
 }
 
-fn save_editor(editor: &mut Editor, path: &str) -> Option<Action> {
-    let time = save_buffer(editor, path);
+/// Question callback when saving transient editors.
+fn save_transient_answer(env: &mut Environment, answer: Option<&str>) -> Result<Option<Action>> {
+    let action = if let Some(path) = answer {
+        let editor = env.get_editor();
+        let time = write_editor(editor, path);
+        match time {
+            Ok(time) => {
+                // Clone transient editor into persistent editor, ensuring that cursor
+                // position in buffer and cursor location are preserved.
+                let mut buffer = editor.borrow().buffer().clone();
+                let cur_pos = editor.borrow().cursor_pos();
+                buffer.set_pos(cur_pos);
+                let Point { row, col: _ } = editor.borrow().cursor();
+                let dup_editor = editor::persistent(path, Some(time), Some(buffer));
+
+                // Replace transient editor in current window with new editor.
+                env.set_editor(dup_editor, Align::Row(row));
+                Action::as_alert(&alert_saved(path))
+            }
+            Err(e) => Action::as_alert_error(&e),
+        }
+    } else {
+        None
+    };
+    Ok(action)
+}
+
+/// Operation: `save-file-as`
+fn save_file_as(_: &mut Environment) -> Result<Option<Action>> {
+    let answer_fn = move |env: &mut Environment, answer: Option<&str>| {
+        let action = if let Some(path) = answer {
+            let editor = env.get_editor();
+            save_file_finish(&editor, path)
+        } else {
+            None
+        };
+        Ok(action)
+    };
+    Ok(Action::as_question(PROMPT_SAVE_AS, answer_fn))
+}
+
+/// Writes the buffer of `editor` to `path` and sets the storage type of `editor` to
+/// persistent with the last modification time.
+fn save_file_finish(editor: &EditorRef, path: &str) -> Option<Action> {
+    let time = write_editor(editor, path);
     match time {
-        Ok(_) => Action::as_alert(&alert_saved(path)),
+        Ok(time) => {
+            update_editor(editor, path, time);
+            Action::as_alert(&alert_saved(path))
+        }
         Err(e) => Action::as_alert_error(&e),
     }
-}
-
-fn write_editor(editor: &mut Editor, path: &str) -> Result<SystemTime> {
-    let _ = io::write_file(path, &editor.buffer())?;
-    io::get_time(path)
-}
-
-fn touch_editor(editor: &mut Editor, path: &str, time: SystemTime) {
-    let storage = Storage::as_persistent(path, Some(time));
-    editor.clear_dirty(storage);
-}
-
-fn save_buffer(editor: &mut Editor, path: &str) -> Result<SystemTime> {
-    let _ = io::write_file(path, &editor.buffer())?;
-    let time = io::get_time(path)?;
-    let storage = Storage::as_persistent(path, Some(time));
-    editor.clear_dirty(storage);
-    Ok(time)
 }
 
 /// Operation: `kill-window`
@@ -579,25 +548,23 @@ fn kill_window(env: &mut Environment) -> Result<Option<Action>> {
     Ok(action)
 }
 
+/// Question callback when killing a window with a dirty buffer.
 fn kill_window_answer(env: &mut Environment, answer: Option<&str>) -> Result<Option<Action>> {
     let action = match answer {
         Some(yes_no) => {
             if yes_no == "y" {
                 // Try saving editor before closing window, as failure implies that
                 // window should not be closed, otherwise changes will be lost.
-                let path = path_of(env.get_editor());
-                let result = save_buffer(&mut env.get_editor().borrow_mut(), &path);
-                match result {
-                    Ok(_) => {
-                        // Kill must succeed since there was more than one view as a
-                        // condition of reaching this point, hence ignoring return value.
+                let editor = env.get_editor();
+                let path = path_of(editor);
+                let time = write_editor(editor, &path);
+                match time {
+                    Ok(time) => {
+                        update_editor(editor, &path, time);
                         env.kill_window();
                         Action::as_alert(&alert_saved(&path))
                     }
-                    Err(e) => {
-                        // Do not kill window since changes were not saved.
-                        Action::as_alert_error(&e)
-                    }
+                    Err(e) => Action::as_alert_error(&e),
                 }
             } else if yes_no == "n" {
                 if let Some(_) = env.kill_window() {
@@ -661,6 +628,48 @@ fn list_editors(env: &mut Environment) -> Result<Option<Action>> {
     env.set_active(Focus::To(active_id));
     env.get_editor().borrow_mut().show_cursor();
     Ok(None)
+}
+
+/// Reads the file at `path` and returns a new editor with the persistent storage type.
+fn open_editor(path: &str) -> Result<EditorRef> {
+    // Try reading file contents into buffer.
+    let mut buffer = Buffer::new();
+    let time = match io::read_file(path, &mut buffer) {
+        Ok(_) => {
+            // Contents read successfully, so fetch time of last modification for use
+            // in checking before subsequent write operation.
+            io::get_time(path.as_ref()).ok()
+        }
+        Err(Error::IO { device: _, cause }) if cause.kind() == ErrorKind::NotFound => {
+            // File was not found, but still treat this error condition as successful,
+            // though note that last modification time is absent to indicate new file.
+            None
+        }
+        Err(e) => {
+            // Propagate all other errors.
+            return Err(e);
+        }
+    };
+
+    // Create persistent buffer with position set at top.
+    buffer.set_pos(0);
+    let editor = editor::persistent(path, time, Some(buffer));
+    Ok(editor)
+}
+
+/// Writes the buffer of `editor` to `path` and returns the resulting file modification
+/// time.
+fn write_editor(editor: &EditorRef, path: &str) -> Result<SystemTime> {
+    let _ = io::write_file(path, &editor.borrow().buffer())?;
+    io::get_time(path)
+}
+
+/// Clears the dirty flag on `editor` and sets its storage type to persistent using
+/// `path` and the modification `time`.
+fn update_editor(editor: &EditorRef, path: &str, time: SystemTime) {
+    editor
+        .borrow_mut()
+        .clear_dirty(Storage::as_persistent(path, Some(time)));
 }
 
 /// Returns `true` if `editor` is persistent.
