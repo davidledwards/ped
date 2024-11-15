@@ -405,9 +405,9 @@ fn open_file_internal(_: &mut Environment, place: Option<Placement>) -> Result<O
             match open_editor(&file) {
                 Ok(editor) => {
                     if let Some(place) = place {
-                        env.open_editor(editor, place);
+                        env.open_editor(editor, place, Align::Auto);
                     } else {
-                        env.set_editor(editor);
+                        env.set_editor(editor, Align::Auto);
                     }
                     None
                 }
@@ -481,14 +481,12 @@ fn save_transient_answer(env: &mut Environment, answer: Option<&str>) -> Result<
         let time = write_editor(&mut editor.borrow_mut(), path);
         match time {
             Ok(time) => {
-                let buffer = editor.borrow().buffer().clone();
+                let mut buffer = editor.borrow().buffer().clone();
                 let cur_pos = editor.borrow().cursor_pos();
+                buffer.set_pos(cur_pos);
                 let Point { row, col: _ } = editor.borrow().cursor();
                 let dup_editor = editor::persistent(path, Some(time), Some(buffer));
-                env.set_editor(dup_editor);
-                env.get_editor()
-                    .borrow_mut()
-                    .move_to(cur_pos, Align::Row(row));
+                env.set_editor(dup_editor, Align::Row(row));
                 Action::as_alert(&alert_saved(path))
             }
             Err(e) => Action::as_alert_error(&e),
@@ -659,7 +657,7 @@ fn list_editors(env: &mut Environment) -> Result<Option<Action>> {
     }
     buffer.set_pos(0);
     let editor = editor::transient("editors", Some(buffer));
-    env.open_editor(editor, Placement::Bottom);
+    env.open_editor(editor, Placement::Bottom, Align::Auto);
     env.set_active(Focus::To(active_id));
     env.get_editor().borrow_mut().show_cursor();
     Ok(None)

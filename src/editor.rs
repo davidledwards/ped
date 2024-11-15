@@ -498,7 +498,7 @@ impl Editor {
     }
 
     /// Attaches the `window` to this editor.
-    pub fn attach(&mut self, window: WindowRef) {
+    pub fn attach(&mut self, window: WindowRef, align: Align) {
         let is_zombie = window.borrow().is_zombie();
         self.theme = window.borrow().theme().clone();
         self.canvas = window.borrow().canvas().clone();
@@ -516,13 +516,13 @@ impl Editor {
         self.cols = cols - self.margin_cols;
 
         if !is_zombie {
-            self.align_cursor(Align::Auto);
+            self.align_cursor(align);
         }
     }
 
     /// Detaches the existing window from this editor.
     pub fn detach(&mut self) {
-        self.attach(Window::zombie().to_ref());
+        self.attach(Window::zombie().to_ref(), Align::Auto);
     }
 
     pub fn align_cursor(&mut self, align: Align) {

@@ -1,5 +1,5 @@
 //! Editing environment.
-use crate::editor::{self, EditorRef};
+use crate::editor::{self, Align, EditorRef};
 use crate::window::WindowRef;
 use crate::workspace::{Placement, Workspace, WorkspaceRef};
 use std::cell::{Ref, RefMut};
@@ -52,7 +52,7 @@ impl Environment {
             .get(&editor_id)
             .unwrap_or_else(|| panic!("expecting builtin editor id {editor_id}"))
             .borrow_mut()
-            .attach(workspace.borrow().top_view().window.clone());
+            .attach(workspace.borrow().top_view().window.clone(), Align::Auto);
         let mut view_map = ViewMap::new();
         view_map.insert(active_view_id, editor_id);
 
@@ -103,12 +103,17 @@ impl Environment {
     ///
     /// This function returns `None` if the workspace is unable to create the new
     /// view.
-    pub fn open_editor(&mut self, editor: EditorRef, place: Placement) -> Option<u32> {
+    pub fn open_editor(
+        &mut self,
+        editor: EditorRef,
+        place: Placement,
+        align: Align,
+    ) -> Option<u32> {
         let view_id = self.workspace_mut().open_view(place);
         view_id.map(|view_id| {
             let editor_id = self.add_editor(editor);
             self.reattach_views();
-            self.attach_to_editor(view_id, editor_id);
+            self.attach_to_editor(view_id, editor_id, align);
             self.active_view_id = view_id;
             self.active_view_id
         })
@@ -119,15 +124,15 @@ impl Environment {
     ///
     /// A side effect of this function is that the current editor, if any, associated
     /// with `view_id` is detached before attaching to the new editor.
-    pub fn set_editor_for(&mut self, view_id: u32, editor: EditorRef) -> u32 {
+    pub fn set_editor_for(&mut self, view_id: u32, editor: EditorRef, align: Align) -> u32 {
         let editor_id = self.add_editor(editor);
-        self.attach_to_editor(view_id, editor_id);
+        self.attach_to_editor(view_id, editor_id, align);
         self.active_view_id = view_id;
         self.active_view_id
     }
 
-    pub fn set_editor(&mut self, editor: EditorRef) -> u32 {
-        self.set_editor_for(self.active_view_id, editor)
+    pub fn set_editor(&mut self, editor: EditorRef, align: Align) -> u32 {
+        self.set_editor_for(self.active_view_id, editor, align)
     }
 
     /// Closes the window of `view_id`, detaches the associated editor, and returns
@@ -204,13 +209,13 @@ impl Environment {
 
     /// Attaches the window of `view_id` to the editor referenced by `editor_id`, and
     /// also detaches the window from its current editor if an association exists.
-    fn attach_to_editor(&mut self, view_id: u32, editor_id: u32) {
+    fn attach_to_editor(&mut self, view_id: u32, editor_id: u32, align: Align) {
         if let Some(id) = self.view_map.get(&view_id) {
             self.get_editor_unchecked(*id).borrow_mut().detach();
         }
         self.get_editor_unchecked(editor_id)
             .borrow_mut()
-            .attach(self.window_of(view_id));
+            .attach(self.window_of(view_id), align);
         self.view_map.insert(view_id, editor_id);
     }
 
@@ -220,7 +225,7 @@ impl Environment {
         for (view_id, editor_id) in self.view_map.iter() {
             self.get_editor_unchecked(*editor_id)
                 .borrow_mut()
-                .attach(self.window_of(*view_id));
+                .attach(self.window_of(*view_id), Align::Auto);
         }
     }
 
