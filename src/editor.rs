@@ -118,6 +118,9 @@ pub enum Align {
 
     /// Try aligning the cursor at the bottom of the window.
     Bottom,
+
+    /// Try aligning the cursot at the specified row.
+    Row(u32),
 }
 
 /// Marks the starting point of a selection in the buffer.
@@ -463,6 +466,13 @@ impl Editor {
         self.cursor
     }
 
+    /// Returns the cursor position in the buffer, which is not necessarily the same
+    /// as [`Buffer::get_pos`] since changes to the buffer position are deferred until
+    /// mutations are applied.
+    pub fn cursor_pos(&self) -> usize {
+        self.cur_pos
+    }
+
     /// Returns the location of the cursor position in the buffer in terms of *line*
     /// and *column*.
     ///
@@ -523,6 +533,7 @@ impl Editor {
             Align::Center => self.rows / 2,
             Align::Top => 0,
             Align::Bottom => self.rows - 1,
+            Align::Row(row) => cmp::min(row, self.rows - 1),
         };
 
         // Tries to position cursor on target row, but no guarantee depending on proximity
@@ -706,6 +717,7 @@ impl Editor {
                 Align::Top | Align::Auto => 0,
                 Align::Center => self.rows / 2,
                 Align::Bottom => self.rows - 1,
+                Align::Row(row) => cmp::min(row, self.rows - 1),
             };
             self.set_top_line(rows)
         } else if pos < self.cur_line.row_pos {
@@ -715,6 +727,7 @@ impl Editor {
                 Align::Top => Some(0),
                 Align::Center => Some(self.rows / 2),
                 Align::Bottom => Some(self.rows - 1),
+                Align::Row(row) => Some(cmp::min(row, self.rows - 1)),
             };
             if let Some(rows) = maybe_rows {
                 self.set_top_line(rows)
@@ -727,6 +740,7 @@ impl Editor {
                 Align::Top => Some(0),
                 Align::Center => Some(self.rows / 2),
                 Align::Bottom => Some(self.rows - 1),
+                Align::Row(row) => Some(cmp::min(row, self.rows - 1)),
             };
             if let Some(rows) = maybe_rows {
                 self.set_top_line(rows)
@@ -740,6 +754,7 @@ impl Editor {
                 Align::Top => 0,
                 Align::Center => self.rows / 2,
                 Align::Bottom => self.rows - 1,
+                Align::Row(row) => cmp::min(row, self.rows - 1),
             };
             self.set_top_line(row)
         };

@@ -6,10 +6,10 @@ use std::cell::{Ref, RefMut};
 use std::collections::{BTreeMap, HashMap};
 
 /// Map of view ids to editor ids.
-type ViewMap = HashMap<u32, u32>;
+pub type ViewMap = HashMap<u32, u32>;
 
 /// Map of editor ids to editors.
-type EditorMap = BTreeMap<u32, EditorRef>;
+pub type EditorMap = BTreeMap<u32, EditorRef>;
 
 pub struct Environment {
     workspace: WorkspaceRef,
@@ -25,6 +25,7 @@ pub enum Focus {
     Bottom,
     Above,
     Below,
+    To(u32),
 }
 
 impl Environment {
@@ -77,6 +78,13 @@ impl Environment {
             Focus::Bottom => self.workspace().bottom_view().id,
             Focus::Above => self.workspace().above_view(self.active_view_id).id,
             Focus::Below => self.workspace().below_view(self.active_view_id).id,
+            Focus::To(view_id) => {
+                if self.view_map.contains_key(&view_id) {
+                    view_id
+                } else {
+                    panic!("expecting view id {view_id}")
+                }
+            }
         };
         self.active_view_id
     }
@@ -184,6 +192,14 @@ impl Environment {
             self.reattach_views();
             self.get_editor().borrow_mut().show_cursor();
         }
+    }
+
+    pub fn editor_map(&self) -> &EditorMap {
+        &self.editor_map
+    }
+
+    pub fn view_map(&self) -> &ViewMap {
+        &self.view_map
     }
 
     /// Attaches the window of `view_id` to the editor referenced by `editor_id`, and

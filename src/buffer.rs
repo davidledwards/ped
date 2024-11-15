@@ -106,6 +106,13 @@ impl Buffer {
         self.gap
     }
 
+    pub fn insert_str(&mut self, cs: &str) -> usize {
+        for c in cs.chars() {
+            self.insert_char(c);
+        }
+        self.gap
+    }
+
     pub fn insert(&mut self, cs: &[char]) -> usize {
         let n = cs.len();
         self.ensure(n);
@@ -395,6 +402,16 @@ impl Drop for Buffer {
     }
 }
 
+impl Clone for Buffer {
+    fn clone(&self) -> Buffer {
+        let buf = Buffer::alloc(self.capacity);
+        unsafe {
+            NonNull::copy_to_nonoverlapping(self.ptr_at(0), buf, self.capacity);
+        }
+        Buffer { buf, ..*self }
+    }
+}
+
 pub struct Forward<'a> {
     buffer: &'a Buffer,
     pos: usize,
@@ -493,6 +510,28 @@ mod tests {
         assert_eq!(buf.size, 0);
         assert_eq!(buf.gap, 0);
         assert_eq!(buf.gap_len, CAP);
+    }
+
+    #[test]
+    fn clone_buffer() {
+        const TEXT: &str = "abcdefghij";
+
+        // Insert arbitrary text before cloning since need to compare bitwise values
+        // from original buffer.
+        let mut buf = Buffer::new();
+        buf.insert_str(TEXT);
+        let cloned_buf = buf.clone();
+
+        assert_eq!(buf.capacity, cloned_buf.capacity);
+        assert_eq!(buf.size, cloned_buf.size);
+        assert_eq!(buf.gap, cloned_buf.gap);
+        assert_eq!(buf.gap_len, cloned_buf.gap_len);
+
+        unsafe {
+            let a = slice::from_raw_parts(buf.buf.as_ptr(), buf.capacity);
+            let b = slice::from_raw_parts(cloned_buf.buf.as_ptr(), cloned_buf.capacity);
+            assert_eq!(a, b);
+        }
     }
 
     #[test]
