@@ -1263,7 +1263,6 @@ impl Editor {
             .set_dirty(self.dirty)
             .set_location(self.location())
             .draw();
-        self.show_cursor();
     }
 
     /// Renders an individual cell for the character `c`, returning the next rendering

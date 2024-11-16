@@ -626,7 +626,6 @@ fn list_editors(env: &mut Environment) -> Result<Option<Action>> {
     let editor = editor::transient("editors", Some(buffer));
     env.open_editor(editor, Placement::Bottom, Align::Auto);
     env.set_active(Focus::To(active_id));
-    env.get_editor().borrow_mut().show_cursor();
     Ok(None)
 }
 

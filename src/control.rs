@@ -91,6 +91,7 @@ impl Controller {
     /// [keys](Key) and calling their corresponding editing functions until instructed to
     /// quit.
     pub fn run(&mut self) -> Result<()> {
+        self.show_cursor();
         loop {
             let key = self.keyboard.read()?;
             if key == Key::None {
@@ -98,10 +99,18 @@ impl Controller {
             } else {
                 if let Step::Quit = self.process_key(key)? {
                     break;
+                } else {
+                    self.show_cursor();
                 }
             }
         }
         Ok(())
+    }
+
+    fn show_cursor(&mut self) {
+        if let None = self.question {
+            self.env.get_editor().borrow_mut().show_cursor();
+        }
     }
 
     fn process_key(&mut self, key: Key) -> Result<Step> {
@@ -261,20 +270,17 @@ impl Controller {
     fn set_echo(&mut self, text: &str) {
         self.echo.set(text);
         self.last_echo = Some(Instant::now());
-        self.env.get_editor().borrow_mut().show_cursor();
     }
 
     fn clear_echo(&mut self) {
         if let Some(_) = self.last_echo.take() {
             self.echo.clear();
-            self.env.get_editor().borrow_mut().show_cursor();
         }
     }
 
     fn resize_echo(&mut self) {
         if let Some(_) = self.last_echo {
             self.echo.resize();
-            self.env.get_editor().borrow_mut().show_cursor();
         }
     }
 
@@ -286,7 +292,6 @@ impl Controller {
     fn clear_question(&mut self) {
         if let Some(_) = self.question.take() {
             self.input.disable();
-            self.env.get_editor().borrow_mut().show_cursor();
         }
     }
 

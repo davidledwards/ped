@@ -195,7 +195,6 @@ impl Environment {
                 self.remove_view(view_id);
             }
             self.reattach_views();
-            self.get_editor().borrow_mut().show_cursor();
         }
     }
 
