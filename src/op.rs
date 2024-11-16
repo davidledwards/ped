@@ -64,12 +64,151 @@ impl Action {
 }
 
 /// Operation: `quit`
-fn quit(_: &mut Environment) -> Result<Option<Action>> {
-    // circle through list of editors and determine which are dirty
-    // start cycle of asking user to save individual buffers
-    // if answer is "all", then save all buffers
-    // skip any buffers that are transient
-    Ok(Action::as_quit())
+fn quit(env: &mut Environment) -> Result<Option<Action>> {
+    let action = quit_continue(env, dirty_editors(env));
+    Ok(action)
+}
+
+/// Returns an ordered collection of ids for those editors that are *dirty*.
+fn dirty_editors(env: &Environment) -> Vec<u32> {
+    env.editor_map()
+        .iter()
+        .filter(|(_, e)| is_persistent(e) && e.borrow().dirty())
+        .map(|(id, _)| *id)
+        .collect()
+}
+
+/// Continues the process of saving editors before quitting until `dirty` is empty,
+/// an error occurs during saving, or the process is cancelled.
+fn quit_continue(env: &mut Environment, dirty: Vec<u32>) -> Option<Action> {
+    if let Some(editor_id) = dirty.first().cloned() {
+        let answer_fn = move |env: &mut Environment, answer: Option<&str>| {
+            quit_answer(env, answer, dirty.clone())
+        };
+        let path = path_of(&get_editor(env, editor_id));
+        Action::as_question(&prompt_save_all(&path), answer_fn)
+    } else {
+        Action::as_quit()
+    }
+}
+
+fn stale_editor(editor: &EditorRef) -> Result<bool> {
+    match editor.borrow().storage() {
+        Storage::Persistent {
+            path,
+            time: Some(time),
+        } => Ok(io::get_time(&path)? > *time),
+        _ => Ok(false),
+    }
+}
+
+fn quit_override_answer(
+    env: &mut Environment,
+    answer: Option<&str>,
+    dirty: Vec<u32>,
+) -> Result<Option<Action>> {
+    let action = match answer {
+        Some(yes_no) => {
+            if yes_no == "y" {
+                let editor = get_editor(env, dirty[0]);
+                if let Err(e) = save_editor(editor) {
+                    Action::as_alert_error(&e)
+                } else {
+                    let dirty = dirty.iter().cloned().skip(1).collect();
+                    quit_continue(env, dirty)
+                }
+            } else if yes_no == "n" {
+                let dirty = dirty.iter().cloned().skip(1).collect();
+                quit_continue(env, dirty)
+            } else {
+                let path = path_of(&get_editor(env, dirty[0]));
+                let answer_fn = move |env: &mut Environment, answer: Option<&str>| {
+                    quit_override_answer(env, answer, dirty.clone())
+                };
+                Action::as_question(&prompt_save_anyway(&path), answer_fn)
+            }
+        }
+        _ => None,
+    };
+    Ok(action)
+}
+
+fn quit_all(env: &mut Environment, dirty: Vec<u32>) -> Option<Action> {
+    let mut dirty_iter = dirty.iter().cloned();
+    while let Some(editor_id) = dirty_iter.next() {
+        let editor = get_editor(env, editor_id);
+        match stale_editor(editor) {
+            Ok(true) => {
+                let mut dirty = vec![editor_id];
+                dirty.extend(dirty_iter);
+                let answer_fn = move |env: &mut Environment, answer: Option<&str>| {
+                    quit_override_answer(env, answer, dirty.clone())
+                };
+                let path = path_of(editor);
+                return Action::as_question(&prompt_save_anyway(&path), answer_fn);
+            }
+            Ok(false) => {
+                if let Err(e) = save_editor(editor) {
+                    return Action::as_alert_error(&e);
+                }
+            }
+            Err(e) => {
+                return Action::as_alert_error(&e);
+            }
+        }
+    }
+    Action::as_quit()
+}
+
+fn quit_first(env: &mut Environment, dirty: Vec<u32>) -> Option<Action> {
+    let editor_id = dirty[0];
+    let editor = get_editor(env, editor_id);
+    match stale_editor(editor) {
+        Ok(true) => {
+            let answer_fn = move |env: &mut Environment, answer: Option<&str>| {
+                quit_override_answer(env, answer, dirty.clone())
+            };
+            let path = path_of(editor);
+            Action::as_question(&prompt_save_anyway(&path), answer_fn)
+        }
+        Ok(false) => {
+            if let Err(e) = save_editor(editor) {
+                Action::as_alert_error(&e)
+            } else {
+                let dirty = dirty.iter().cloned().skip(1).collect();
+                quit_continue(env, dirty)
+            }
+        }
+        Err(e) => Action::as_alert_error(&e),
+    }
+}
+
+/// Question callback when saving dirty editors during the quit process.
+fn quit_answer(
+    env: &mut Environment,
+    answer: Option<&str>,
+    dirty: Vec<u32>,
+) -> Result<Option<Action>> {
+    let action = match answer {
+        Some(yes_no) => {
+            if yes_no == "y" {
+                quit_first(env, dirty)
+            } else if yes_no == "a" {
+                quit_all(env, dirty)
+            } else if yes_no == "n" {
+                let dirty = dirty.iter().cloned().skip(1).collect();
+                quit_continue(env, dirty)
+            } else {
+                let path = path_of(&get_editor(env, dirty[0]));
+                let answer_fn = move |env: &mut Environment, answer: Option<&str>| {
+                    quit_answer(env, answer, dirty.clone())
+                };
+                Action::as_question(&prompt_save_all(&path), answer_fn)
+            }
+        }
+        _ => None,
+    };
+    Ok(action)
 }
 
 /// Operation: `move-left`
@@ -428,24 +567,13 @@ fn save_file(env: &mut Environment) -> Result<Option<Action>> {
     let editor = env.get_editor();
     let storage = editor.borrow().storage().clone();
     let action = match storage {
-        Storage::Persistent { path, time } => {
-            match time {
-                Some(time) if io::get_time(&path)? > time => {
-                    // An existing file where modification time in storage is newer than
-                    // time read when file was opened, so ask user to make decision
-                    // before saving buffer.
-                    Action::as_question(&prompt_save_anyway(&path), save_override_answer)
-                }
-                _ => {
-                    // Indicates that file is new or that modificatioin time of an
-                    // existing file has not changed since last read or write, so just
-                    // save buffer.
-                    save_file_finish(editor, &path)
-                }
+        Storage::Persistent { path, time } => match time {
+            Some(time) if io::get_time(&path)? > time => {
+                Action::as_question(&prompt_save_anyway(&path), save_override_answer)
             }
-        }
+            _ => save_file_finish(editor, &path),
+        },
         Storage::Transient { name: _ } => {
-            // User must provide path in order to save buffer since storage is transient.
             Action::as_question(PROMPT_SAVE_AS, save_transient_answer)
         }
     };
@@ -656,6 +784,12 @@ fn open_editor(path: &str) -> Result<EditorRef> {
     Ok(editor)
 }
 
+/// Combines [`write_editor`] and [`update_editor`] into a single operation.
+fn save_editor(editor: &EditorRef) -> Result<()> {
+    let path = path_of(editor);
+    write_editor(editor, &path).map(|time| update_editor(editor, &path, time))
+}
+
 /// Writes the buffer of `editor` to `path` and returns the resulting file modification
 /// time.
 fn write_editor(editor: &EditorRef, path: &str) -> Result<SystemTime> {
@@ -679,6 +813,12 @@ fn is_persistent(editor: &EditorRef) -> bool {
     }
 }
 
+fn get_editor(env: &Environment, editor_id: u32) -> &EditorRef {
+    env.editor_map()
+        .get(&editor_id)
+        .unwrap_or_else(|| panic!("expecting editor id {editor_id}"))
+}
+
 /// Returns the path associated with `editor` under the assumption that the storage
 /// type is [`Persistent`](Storage::Persistent), otherwise it panics.
 fn path_of(editor: &EditorRef) -> String {
@@ -696,6 +836,10 @@ const PROMPT_SAVE_AS: &str = "save as:";
 
 fn prompt_save(path: &str) -> String {
     format!("{path}: save (y/n)?")
+}
+
+fn prompt_save_all(path: &str) -> String {
+    format!("{path}: save (y/n/a)?")
 }
 
 fn prompt_save_anyway(path: &str) -> String {
