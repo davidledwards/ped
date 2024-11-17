@@ -497,7 +497,7 @@ fn cut(env: &mut Environment) -> Result<Option<Action>> {
 
 /// Operation: `open-file`
 fn open_file(env: &mut Environment) -> Result<Option<Action>> {
-    open_file_internal(env, None)
+    open_file_at(env, None)
 }
 
 /// Operation: `open-file-top`
@@ -547,17 +547,24 @@ fn open_file_at(_: &mut Environment, place: Option<Placement>) -> Result<Option<
 /// Operation: `save-file`
 fn save_file(env: &mut Environment) -> Result<Option<Action>> {
     let editor = env.get_editor();
-    let storage = editor.borrow().storage().clone();
-    let action = match storage {
-        Storage::Persistent { path, time } => match time {
-            Some(time) if io::get_time(&path)? > time => {
+    let action = if is_persistent(editor) {
+        match stale_editor(editor) {
+            Ok(true) => {
+                let path = path_of(editor);
                 Action::as_question(&prompt_save_anyway(&path), save_override_answer)
             }
-            _ => save_file_finish(editor, &path),
-        },
-        Storage::Transient { name: _ } => {
-            Action::as_question(PROMPT_SAVE_AS, save_transient_answer)
+            Ok(false) => {
+                if let Err(e) = save_editor(editor) {
+                    Action::as_alert_error(&e)
+                } else {
+                    let path = path_of(editor);
+                    Action::as_alert(&alert_saved(&path))
+                }
+            }
+            Err(e) => Action::as_alert_error(&e),
         }
+    } else {
+        Action::as_question(PROMPT_SAVE_AS, save_transient_answer)
     };
     Ok(action)
 }
@@ -567,8 +574,12 @@ fn save_override_answer(env: &mut Environment, answer: Option<&str>) -> Result<O
     let action = match answer {
         Some(yes_no) if yes_no == "y" => {
             let editor = env.get_editor();
-            let path = path_of(editor);
-            save_file_finish(editor, &path)
+            if let Err(e) = save_editor(editor) {
+                Action::as_alert_error(&e)
+            } else {
+                let path = path_of(editor);
+                Action::as_alert(&alert_saved(&path))
+            }
         }
         Some(yes_no) if yes_no == "n" => None,
         Some(_) => {
@@ -609,28 +620,22 @@ fn save_transient_answer(env: &mut Environment, answer: Option<&str>) -> Result<
 
 /// Operation: `save-file-as`
 fn save_file_as(_: &mut Environment) -> Result<Option<Action>> {
-    let answer_fn = move |env: &mut Environment, answer: Option<&str>| {
-        let action = if let Some(path) = answer {
-            save_file_finish(&env.get_editor(), path)
-        } else {
-            None
-        };
-        Ok(action)
-    };
-    Ok(Action::as_question(PROMPT_SAVE_AS, answer_fn))
+    Ok(Action::as_question(PROMPT_SAVE_AS, save_file_as_answer))
 }
 
-/// Writes the buffer of `editor` to `path` and sets the storage type of `editor` to
-/// persistent with the last modification time.
-fn save_file_finish(editor: &EditorRef, path: &str) -> Option<Action> {
-    let time = write_editor(editor, path);
-    match time {
-        Ok(time) => {
-            update_editor(editor, path, time);
-            Action::as_alert(&alert_saved(path))
+/// Question callback when saving editor using alternative path.
+fn save_file_as_answer(env: &mut Environment, answer: Option<&str>) -> Result<Option<Action>> {
+    let action = if let Some(path) = answer {
+        let editor = env.get_editor();
+        if let Err(e) = save_editor_as(editor, Some(path)) {
+            Action::as_alert_error(&e)
+        } else {
+            Action::as_alert(&alert_saved(&path))
         }
-        Err(e) => Action::as_alert_error(&e),
-    }
+    } else {
+        None
+    };
+    Ok(action)
 }
 
 /// Operation: `kill-window`
@@ -639,7 +644,7 @@ fn kill_window(env: &mut Environment) -> Result<Option<Action>> {
         let editor = env.get_editor();
         if is_persistent(editor) && editor.borrow().dirty() {
             let path = path_of(editor);
-            Action::as_question(&prompt_save(&path), kill_window_answer)
+            Action::as_question(&prompt_save(&path), kill_save_answer)
         } else {
             env.kill_window();
             None
@@ -650,20 +655,48 @@ fn kill_window(env: &mut Environment) -> Result<Option<Action>> {
     Ok(action)
 }
 
-/// Question callback when killing a window with a dirty buffer.
-fn kill_window_answer(env: &mut Environment, answer: Option<&str>) -> Result<Option<Action>> {
+fn kill_save_override_answer(
+    env: &mut Environment,
+    answer: Option<&str>,
+) -> Result<Option<Action>> {
     let action = match answer {
         Some(yes_no) if yes_no == "y" => {
-            // Try saving editor before closing window, as failure implies that
-            // window should not be closed, otherwise changes will be lost.
             let editor = env.get_editor();
-            let path = path_of(editor);
-            let time = write_editor(editor, &path);
-            match time {
-                Ok(time) => {
-                    update_editor(editor, &path, time);
-                    env.kill_window();
-                    Action::as_alert(&alert_saved(&path))
+            if let Err(e) = save_editor(editor) {
+                Action::as_alert_error(&e)
+            } else {
+                let path = path_of(editor);
+                Action::as_alert(&alert_saved(&path))
+            }
+        }
+        Some(yes_no) if yes_no == "n" => None,
+        Some(_) => {
+            let path = path_of(env.get_editor());
+            Action::as_question(&prompt_save_anyway(&path), kill_save_override_answer)
+        }
+        None => None,
+    };
+    Ok(action)
+}
+
+/// Question callback when killing a window with a dirty buffer.
+fn kill_save_answer(env: &mut Environment, answer: Option<&str>) -> Result<Option<Action>> {
+    let action = match answer {
+        Some(yes_no) if yes_no == "y" => {
+            let editor = env.get_editor();
+            match stale_editor(editor) {
+                Ok(true) => {
+                    let path = path_of(editor);
+                    Action::as_question(&prompt_save_anyway(&path), kill_save_override_answer)
+                }
+                Ok(false) => {
+                    if let Err(e) = save_editor(editor) {
+                        Action::as_alert_error(&e)
+                    } else {
+                        let path = path_of(editor);
+                        env.kill_window();
+                        Action::as_alert(&alert_saved(&path))
+                    }
                 }
                 Err(e) => Action::as_alert_error(&e),
             }
@@ -677,7 +710,7 @@ fn kill_window_answer(env: &mut Environment, answer: Option<&str>) -> Result<Opt
         }
         Some(_) => {
             let path = path_of(env.get_editor());
-            Action::as_question(&prompt_save(&path), kill_window_answer)
+            Action::as_question(&prompt_save(&path), kill_save_answer)
         }
         None => None,
     };
@@ -760,7 +793,15 @@ fn open_editor(path: &str) -> Result<EditorRef> {
 
 /// Combines [`write_editor`] and [`update_editor`] into a single operation.
 fn save_editor(editor: &EditorRef) -> Result<()> {
-    let path = path_of(editor);
+    save_editor_as(editor, None)
+}
+
+/// Combines [`write_editor`] and [`update_editor`] into a single operation, saving
+/// the editor using the optional `path`, otherwise it derives the path from `editor`.
+fn save_editor_as(editor: &EditorRef, path: Option<&str>) -> Result<()> {
+    let path = path
+        .map(|path| path.to_string())
+        .unwrap_or_else(|| path_of(editor));
     write_editor(editor, &path).map(|time| update_editor(editor, &path, time))
 }
 
@@ -808,6 +849,7 @@ fn is_persistent(editor: &EditorRef) -> bool {
     }
 }
 
+/// Returns the editor for `editor_id`.
 fn get_editor(env: &Environment, editor_id: u32) -> &EditorRef {
     env.editor_map()
         .get(&editor_id)
