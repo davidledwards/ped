@@ -69,21 +69,12 @@ fn quit(env: &mut Environment) -> Result<Option<Action>> {
     Ok(action)
 }
 
-/// Returns an ordered collection of ids for those editors that are *dirty*.
-fn dirty_editors(env: &Environment) -> Vec<u32> {
-    env.editor_map()
-        .iter()
-        .filter(|(_, e)| is_persistent(e) && e.borrow().dirty())
-        .map(|(id, _)| *id)
-        .collect()
-}
-
 /// Continues the process of saving editors before quitting until `dirty` is empty,
 /// an error occurs during saving, or the process is cancelled.
 fn quit_continue(env: &mut Environment, dirty: Vec<u32>) -> Option<Action> {
     if let Some(editor_id) = dirty.first().cloned() {
         let answer_fn = move |env: &mut Environment, answer: Option<&str>| {
-            quit_answer(env, answer, dirty.clone())
+            quit_save_answer(env, answer, dirty.clone())
         };
         let path = path_of(&get_editor(env, editor_id));
         Action::as_question(&prompt_save_all(&path), answer_fn)
@@ -92,48 +83,57 @@ fn quit_continue(env: &mut Environment, dirty: Vec<u32>) -> Option<Action> {
     }
 }
 
-fn stale_editor(editor: &EditorRef) -> Result<bool> {
-    match editor.borrow().storage() {
-        Storage::Persistent {
-            path,
-            time: Some(time),
-        } => Ok(io::get_time(&path)? > *time),
-        _ => Ok(false),
-    }
-}
-
-fn quit_override_answer(
+/// Question callback when saving dirty editors during the quit process.
+fn quit_save_answer(
     env: &mut Environment,
     answer: Option<&str>,
     dirty: Vec<u32>,
 ) -> Result<Option<Action>> {
     let action = match answer {
-        Some(yes_no) => {
-            if yes_no == "y" {
-                let editor = get_editor(env, dirty[0]);
-                if let Err(e) = save_editor(editor) {
-                    Action::as_alert_error(&e)
-                } else {
-                    let dirty = dirty.iter().cloned().skip(1).collect();
-                    quit_continue(env, dirty)
-                }
-            } else if yes_no == "n" {
-                let dirty = dirty.iter().cloned().skip(1).collect();
-                quit_continue(env, dirty)
-            } else {
-                let path = path_of(&get_editor(env, dirty[0]));
-                let answer_fn = move |env: &mut Environment, answer: Option<&str>| {
-                    quit_override_answer(env, answer, dirty.clone())
-                };
-                Action::as_question(&prompt_save_anyway(&path), answer_fn)
-            }
+        Some(yes_no) if yes_no == "y" => quit_save_first(env, dirty),
+        Some(yes_no) if yes_no == "a" => quit_save_all(env, dirty),
+        Some(yes_no) if yes_no == "n" => {
+            let dirty = dirty.iter().cloned().skip(1).collect();
+            quit_continue(env, dirty)
         }
-        _ => None,
+        Some(_) => {
+            let path = path_of(&get_editor(env, dirty[0]));
+            let answer_fn = move |env: &mut Environment, answer: Option<&str>| {
+                quit_save_answer(env, answer, dirty.clone())
+            };
+            Action::as_question(&prompt_save_all(&path), answer_fn)
+        }
+        None => None,
     };
     Ok(action)
 }
 
-fn quit_all(env: &mut Environment, dirty: Vec<u32>) -> Option<Action> {
+/// Saves the first editor in `dirty` and then continues to the next editor.
+fn quit_save_first(env: &mut Environment, dirty: Vec<u32>) -> Option<Action> {
+    let editor_id = *dirty.get(0).expect("expecting at least one dirty editor");
+    let editor = get_editor(env, editor_id);
+    match stale_editor(editor) {
+        Ok(true) => {
+            let answer_fn = move |env: &mut Environment, answer: Option<&str>| {
+                quit_save_override_answer(env, answer, dirty.clone())
+            };
+            let path = path_of(editor);
+            Action::as_question(&prompt_save_anyway(&path), answer_fn)
+        }
+        Ok(false) => {
+            if let Err(e) = save_editor(editor) {
+                Action::as_alert_error(&e)
+            } else {
+                let dirty = dirty.iter().cloned().skip(1).collect();
+                quit_continue(env, dirty)
+            }
+        }
+        Err(e) => Action::as_alert_error(&e),
+    }
+}
+
+/// Saves all editors in `dirty`.
+fn quit_save_all(env: &mut Environment, dirty: Vec<u32>) -> Option<Action> {
     let mut dirty_iter = dirty.iter().cloned();
     while let Some(editor_id) = dirty_iter.next() {
         let editor = get_editor(env, editor_id);
@@ -142,7 +142,7 @@ fn quit_all(env: &mut Environment, dirty: Vec<u32>) -> Option<Action> {
                 let mut dirty = vec![editor_id];
                 dirty.extend(dirty_iter);
                 let answer_fn = move |env: &mut Environment, answer: Option<&str>| {
-                    quit_override_answer(env, answer, dirty.clone())
+                    quit_save_override_answer(env, answer, dirty.clone())
                 };
                 let path = path_of(editor);
                 return Action::as_question(&prompt_save_anyway(&path), answer_fn);
@@ -160,18 +160,16 @@ fn quit_all(env: &mut Environment, dirty: Vec<u32>) -> Option<Action> {
     Action::as_quit()
 }
 
-fn quit_first(env: &mut Environment, dirty: Vec<u32>) -> Option<Action> {
-    let editor_id = dirty[0];
-    let editor = get_editor(env, editor_id);
-    match stale_editor(editor) {
-        Ok(true) => {
-            let answer_fn = move |env: &mut Environment, answer: Option<&str>| {
-                quit_override_answer(env, answer, dirty.clone())
-            };
-            let path = path_of(editor);
-            Action::as_question(&prompt_save_anyway(&path), answer_fn)
-        }
-        Ok(false) => {
+/// Question callback when requesting override to save an editor during the quit
+/// process.
+fn quit_save_override_answer(
+    env: &mut Environment,
+    answer: Option<&str>,
+    dirty: Vec<u32>,
+) -> Result<Option<Action>> {
+    let action = match answer {
+        Some(yes_no) if yes_no == "y" => {
+            let editor = get_editor(env, dirty[0]);
             if let Err(e) = save_editor(editor) {
                 Action::as_alert_error(&e)
             } else {
@@ -179,34 +177,18 @@ fn quit_first(env: &mut Environment, dirty: Vec<u32>) -> Option<Action> {
                 quit_continue(env, dirty)
             }
         }
-        Err(e) => Action::as_alert_error(&e),
-    }
-}
-
-/// Question callback when saving dirty editors during the quit process.
-fn quit_answer(
-    env: &mut Environment,
-    answer: Option<&str>,
-    dirty: Vec<u32>,
-) -> Result<Option<Action>> {
-    let action = match answer {
-        Some(yes_no) => {
-            if yes_no == "y" {
-                quit_first(env, dirty)
-            } else if yes_no == "a" {
-                quit_all(env, dirty)
-            } else if yes_no == "n" {
-                let dirty = dirty.iter().cloned().skip(1).collect();
-                quit_continue(env, dirty)
-            } else {
-                let path = path_of(&get_editor(env, dirty[0]));
-                let answer_fn = move |env: &mut Environment, answer: Option<&str>| {
-                    quit_answer(env, answer, dirty.clone())
-                };
-                Action::as_question(&prompt_save_all(&path), answer_fn)
-            }
+        Some(yes_no) if yes_no == "n" => {
+            let dirty = dirty.iter().cloned().skip(1).collect();
+            quit_continue(env, dirty)
         }
-        _ => None,
+        Some(_) => {
+            let path = path_of(&get_editor(env, dirty[0]));
+            let answer_fn = move |env: &mut Environment, answer: Option<&str>| {
+                quit_save_override_answer(env, answer, dirty.clone())
+            };
+            Action::as_question(&prompt_save_anyway(&path), answer_fn)
+        }
+        None => None,
     };
     Ok(action)
 }
@@ -520,27 +502,27 @@ fn open_file(env: &mut Environment) -> Result<Option<Action>> {
 
 /// Operation: `open-file-top`
 fn open_file_top(env: &mut Environment) -> Result<Option<Action>> {
-    open_file_internal(env, Some(Placement::Top))
+    open_file_at(env, Some(Placement::Top))
 }
 
 /// Operation: `open-file-bottom`
 fn open_file_bottom(env: &mut Environment) -> Result<Option<Action>> {
-    open_file_internal(env, Some(Placement::Bottom))
+    open_file_at(env, Some(Placement::Bottom))
 }
 
 /// Operation: `open-file-above`
 fn open_file_above(env: &mut Environment) -> Result<Option<Action>> {
-    open_file_internal(env, Some(Placement::Above(env.get_active())))
+    open_file_at(env, Some(Placement::Above(env.get_active())))
 }
 
 /// Operation: `open-file-below`
 fn open_file_below(env: &mut Environment) -> Result<Option<Action>> {
-    open_file_internal(env, Some(Placement::Below(env.get_active())))
+    open_file_at(env, Some(Placement::Below(env.get_active())))
 }
 
 /// Various `open-file-*` operations delegate to this functions, but provide `place`
 /// to determine the placement of the new window.
-fn open_file_internal(_: &mut Environment, place: Option<Placement>) -> Result<Option<Action>> {
+fn open_file_at(_: &mut Environment, place: Option<Placement>) -> Result<Option<Action>> {
     let answer_fn = move |env: &mut Environment, answer: Option<&str>| {
         let action = if let Some(path) = answer {
             match open_editor(&path) {
@@ -580,23 +562,20 @@ fn save_file(env: &mut Environment) -> Result<Option<Action>> {
     Ok(action)
 }
 
-/// Question callback when requesting override to save an editor whose file in storage
-/// has a more recent modification time.
+/// Question callback when requesting override to save an editor.
 fn save_override_answer(env: &mut Environment, answer: Option<&str>) -> Result<Option<Action>> {
     let action = match answer {
-        Some(yes_no) => {
-            if yes_no == "y" {
-                let editor = env.get_editor();
-                let path = path_of(editor);
-                save_file_finish(editor, &path)
-            } else if yes_no == "n" {
-                None
-            } else {
-                let path = path_of(env.get_editor());
-                Action::as_question(&prompt_save_anyway(&path), save_override_answer)
-            }
+        Some(yes_no) if yes_no == "y" => {
+            let editor = env.get_editor();
+            let path = path_of(editor);
+            save_file_finish(editor, &path)
         }
-        _ => None,
+        Some(yes_no) if yes_no == "n" => None,
+        Some(_) => {
+            let path = path_of(env.get_editor());
+            Action::as_question(&prompt_save_anyway(&path), save_override_answer)
+        }
+        None => None,
     };
     Ok(action)
 }
@@ -632,8 +611,7 @@ fn save_transient_answer(env: &mut Environment, answer: Option<&str>) -> Result<
 fn save_file_as(_: &mut Environment) -> Result<Option<Action>> {
     let answer_fn = move |env: &mut Environment, answer: Option<&str>| {
         let action = if let Some(path) = answer {
-            let editor = env.get_editor();
-            save_file_finish(&editor, path)
+            save_file_finish(&env.get_editor(), path)
         } else {
             None
         };
@@ -660,13 +638,9 @@ fn kill_window(env: &mut Environment) -> Result<Option<Action>> {
     let action = if env.view_map().len() > 1 {
         let editor = env.get_editor();
         if is_persistent(editor) && editor.borrow().dirty() {
-            // Ignore transient editors that are dirty since these stick around
-            // regardless of killing window.
             let path = path_of(editor);
             Action::as_question(&prompt_save(&path), kill_window_answer)
         } else {
-            // Kill must succeed since there is more than one view, hence ignoring
-            // return value.
             env.kill_window();
             None
         }
@@ -679,33 +653,33 @@ fn kill_window(env: &mut Environment) -> Result<Option<Action>> {
 /// Question callback when killing a window with a dirty buffer.
 fn kill_window_answer(env: &mut Environment, answer: Option<&str>) -> Result<Option<Action>> {
     let action = match answer {
-        Some(yes_no) => {
-            if yes_no == "y" {
-                // Try saving editor before closing window, as failure implies that
-                // window should not be closed, otherwise changes will be lost.
-                let editor = env.get_editor();
-                let path = path_of(editor);
-                let time = write_editor(editor, &path);
-                match time {
-                    Ok(time) => {
-                        update_editor(editor, &path, time);
-                        env.kill_window();
-                        Action::as_alert(&alert_saved(&path))
-                    }
-                    Err(e) => Action::as_alert_error(&e),
+        Some(yes_no) if yes_no == "y" => {
+            // Try saving editor before closing window, as failure implies that
+            // window should not be closed, otherwise changes will be lost.
+            let editor = env.get_editor();
+            let path = path_of(editor);
+            let time = write_editor(editor, &path);
+            match time {
+                Ok(time) => {
+                    update_editor(editor, &path, time);
+                    env.kill_window();
+                    Action::as_alert(&alert_saved(&path))
                 }
-            } else if yes_no == "n" {
-                if let Some(_) = env.kill_window() {
-                    None
-                } else {
-                    Action::as_alert(ALERT_CLOSE_WINDOW_REFUSED)
-                }
-            } else {
-                let path = path_of(env.get_editor());
-                Action::as_question(&prompt_save(&path), kill_window_answer)
+                Err(e) => Action::as_alert_error(&e),
             }
         }
-        _ => None,
+        Some(yes_no) if yes_no == "n" => {
+            if let Some(_) = env.kill_window() {
+                None
+            } else {
+                Action::as_alert(ALERT_CLOSE_WINDOW_REFUSED)
+            }
+        }
+        Some(_) => {
+            let path = path_of(env.get_editor());
+            Action::as_question(&prompt_save(&path), kill_window_answer)
+        }
+        None => None,
     };
     Ok(action)
 }
@@ -803,6 +777,27 @@ fn update_editor(editor: &EditorRef, path: &str, time: SystemTime) {
     editor
         .borrow_mut()
         .clear_dirty(Storage::as_persistent(path, Some(time)));
+}
+
+/// Returns `true` if `editor` has a modification time older than the modification time
+/// of the file in storage.
+fn stale_editor(editor: &EditorRef) -> Result<bool> {
+    match editor.borrow().storage() {
+        Storage::Persistent {
+            path,
+            time: Some(time),
+        } => Ok(io::get_time(&path)? > *time),
+        _ => Ok(false),
+    }
+}
+
+/// Returns an ordered collection of ids for those editors that are *dirty*.
+fn dirty_editors(env: &Environment) -> Vec<u32> {
+    env.editor_map()
+        .iter()
+        .filter(|(_, e)| is_persistent(e) && e.borrow().dirty())
+        .map(|(id, _)| *id)
+        .collect()
 }
 
 /// Returns `true` if `editor` is persistent.
