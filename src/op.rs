@@ -435,6 +435,16 @@ fn insert_line(env: &mut Environment) -> Result<Option<Action>> {
     Ok(None)
 }
 
+/// Operation: `insert-tab`
+fn insert_tab(env: &mut Environment) -> Result<Option<Action>> {
+    let tab_size = env.workspace().config().settings.tab_size;
+    let mut editor = env.get_editor().borrow_mut();
+    editor.clear_mark();
+    let n = tab_size - (editor.cursor().col as usize % tab_size);
+    editor.insert_str(&" ".repeat(n));
+    Ok(None)
+}
+
 /// Operation: `remove-left`
 fn remove_left(env: &mut Environment) -> Result<Option<Action>> {
     let maybe_mark = env.get_editor().borrow_mut().clear_mark();
@@ -944,7 +954,7 @@ fn alert_saved(path: &str) -> String {
 }
 
 /// Predefined mapping of editing operations to editing functions.
-const OP_MAPPINGS: [(&'static str, OpFn); 51] = [
+const OP_MAPPINGS: [(&'static str, OpFn); 52] = [
     // --- exit and cancellation ---
     ("quit", quit),
     // --- help ---
@@ -977,6 +987,7 @@ const OP_MAPPINGS: [(&'static str, OpFn); 51] = [
     ("goto-line", goto_line),
     // --- insertion and removal ---
     ("insert-line", insert_line),
+    ("insert-tab", insert_tab),
     ("remove-left", remove_left),
     ("remove-right", remove_right),
     ("remove-start", remove_start),

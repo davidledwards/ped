@@ -31,6 +31,7 @@ pub struct Settings {
     pub show_spotlight: bool,
     pub show_lines: bool,
     pub show_eol: bool,
+    pub tab_size: usize,
 }
 
 pub struct Colors {
@@ -63,6 +64,9 @@ struct ExternalSettings {
 
     #[serde(rename = "show-eol")]
     show_eol: Option<bool>,
+
+    #[serde(rename = "tab-size")]
+    tab_size: Option<usize>,
 }
 
 #[derive(Deserialize)]
@@ -85,6 +89,7 @@ impl Settings {
             self.show_spotlight = ext.show_spotlight.unwrap_or(self.show_spotlight);
             self.show_lines = ext.show_lines.unwrap_or(self.show_lines);
             self.show_eol = ext.show_eol.unwrap_or(self.show_eol);
+            self.tab_size = ext.tab_size.unwrap_or(self.tab_size);
         }
     }
 
@@ -93,6 +98,7 @@ impl Settings {
         self.show_spotlight = opts.show_spotlight.unwrap_or(self.show_spotlight);
         self.show_lines = opts.show_lines.unwrap_or(self.show_lines);
         self.show_eol = opts.show_eol.unwrap_or(self.show_eol);
+        self.tab_size = opts.tab_size.unwrap_or(self.tab_size);
     }
 }
 
@@ -102,6 +108,7 @@ impl Default for Settings {
             show_spotlight: false,
             show_lines: false,
             show_eol: false,
+            tab_size: 3,
         }
     }
 }
@@ -238,7 +245,7 @@ impl Configuration {
         bindings
     }
 
-    const DEFAULT_BINDINGS: [(&'static str, &'static str); 63] = [
+    const DEFAULT_BINDINGS: [(&'static str, &'static str); 64] = [
         // --- exit and cancellation ---
         ("C-q", "quit"),
         // --- help ---
@@ -281,6 +288,7 @@ impl Configuration {
         ("C-_", "goto-line"),
         // --- insertion and removal ---
         ("ret", "insert-line"),
+        ("tab", "insert-tab"),
         ("C-d", "remove-right"),
         ("del", "remove-left"),
         ("C-j", "remove-start"),

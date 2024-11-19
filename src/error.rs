@@ -28,6 +28,10 @@ pub enum Error {
     ExpectedValue {
         arg: String,
     },
+    InvalidValue {
+        arg: String,
+        value: String,
+    },
     InvalidKey {
         key: String,
     },
@@ -81,6 +85,13 @@ impl Error {
         }
     }
 
+    pub fn invalid_value(arg: &str, value: &str) -> Error {
+        Error::InvalidValue {
+            arg: arg.to_string(),
+            value: value.to_string(),
+        }
+    }
+
     pub fn invalid_key(key: &str) -> Error {
         Error::InvalidKey {
             key: key.to_string(),
@@ -110,6 +121,9 @@ impl Display for Error {
             Error::UTF8 { bytes, cause } => write!(f, "{bytes:?}: {cause}"),
             Error::UnexpectedArg { arg } => write!(f, "{arg}: unexpected argument"),
             Error::ExpectedValue { arg } => write!(f, "{arg}: expecting value to follow"),
+            Error::InvalidValue { arg, value } => {
+                write!(f, "{value}: invalid value following {arg}")
+            }
             Error::InvalidKey { key } => write!(f, "{key}: invalid key"),
             Error::BindOp { op } => write!(f, "{op}: bind operation not found"),
             Error::Configuration { path, cause } => {

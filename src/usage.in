@@ -5,14 +5,8 @@ usage: ped OPTIONS [file...]
   The pedestrian text editor.
 
   OPTIONS
-    --show-spotlight
-        Highlights the cursor row.
-
-    --show-lines
-        Show line numbers in the left margin.
-
-    --show-eol
-        Show the end-of-line as a special character.
-
-    --config FILE
-        Load configuration from FILE instead of searching in default locations.
+    --show-spotlight  : highlight cursor row
+    --show-lines      : show line numbers in left margin
+    --show-eol        : make \n obvious with special character
+    --tab-size N      : use N spaces for tab (default: 3)
+    --config FILE     : load configuration from FILE
