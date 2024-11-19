@@ -99,14 +99,15 @@ fn run_opts(opts: &Options) -> Result<()> {
 }
 
 fn run_config(config: Configuration) -> Result<()> {
+    let keyboard = Keyboard::new();
     let bindings = Bindings::new(&config.bindings);
+    let workspace = Workspace::new(config);
+    let controller = Controller::new(keyboard, bindings, workspace);
+    run_editor(controller)
+}
 
+fn run_editor(mut controller: Controller) -> Result<()> {
     term::init()?;
     let _restore = RestoreTerminal;
-
-    let keyboard = Keyboard::new();
-    let workspace = Workspace::new(config);
-    let mut controller = Controller::new(keyboard, bindings, workspace);
-    controller.run()?;
-    Ok(())
+    controller.run()
 }
