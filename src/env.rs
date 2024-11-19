@@ -98,8 +98,12 @@ impl Environment {
         self.get_editor_for(self.active_view_id)
     }
 
+    pub fn get_editor_id(&self) -> u32 {
+        self.editor_id_of(self.active_view_id)
+    }
+
     /// Opens a new window whose placement is specified by `place`, attaches `editor`
-    /// to that window, and returns the id of the new *active* view.
+    /// to that window, and returns a tuple containing the new view id and editor id.
     ///
     /// This function returns `None` if the workspace is unable to create the new
     /// view.
@@ -108,31 +112,59 @@ impl Environment {
         editor: EditorRef,
         place: Placement,
         align: Align,
-    ) -> Option<u32> {
+    ) -> Option<(u32, u32)> {
         let view_id = self.workspace_mut().open_view(place);
         view_id.map(|view_id| {
             let editor_id = self.add_editor(editor);
             self.reattach_views();
             self.attach_to_editor(view_id, editor_id, align);
-            self.active_view_id = view_id;
-            self.active_view_id
+            (view_id, editor_id)
         })
     }
 
-    /// Attaches the window of `view_id` to `editor` and returns `view_id` as the
-    /// new *active* view.
+    /// Attaches the window of `view_id` to `editor` and returns the new editor id.
     ///
     /// A side effect of this function is that the current editor, if any, associated
     /// with `view_id` is detached before attaching to the new editor.
     pub fn set_editor_for(&mut self, view_id: u32, editor: EditorRef, align: Align) -> u32 {
         let editor_id = self.add_editor(editor);
         self.attach_to_editor(view_id, editor_id, align);
-        self.active_view_id = view_id;
-        self.active_view_id
+        editor_id
     }
 
     pub fn set_editor(&mut self, editor: EditorRef, align: Align) -> u32 {
         self.set_editor_for(self.active_view_id, editor, align)
+    }
+
+    /// Attaches the window of `view_id` to the editor of `editor_id`, but only if
+    /// `editor_id` is not already attached to another window.
+    ///
+    /// If the `editor_id` is already attached to another window, then the editor id
+    /// attached to `view_id` is returned, otherwise `editor_id` is returned. In essence,
+    /// a return value that differs from `editor_id` indicates that the intended switch
+    /// did not happen.
+    ///
+    /// A side effect of this function is that the current editor, if any, associated
+    /// with `view_id` is detached before attaching to the new editor.
+    pub fn switch_editor_for(&mut self, view_id: u32, editor_id: u32, align: Align) -> u32 {
+        let view_editor_id = self.editor_id_of(view_id);
+        if editor_id == view_editor_id {
+            editor_id
+        } else {
+            self.view_map
+                .values()
+                .cloned()
+                .find(|e_id| *e_id == editor_id)
+                .map(|_| view_editor_id)
+                .unwrap_or_else(|| {
+                    self.attach_to_editor(view_id, editor_id, align);
+                    editor_id
+                })
+        }
+    }
+
+    pub fn switch_editor(&mut self, editor_id: u32, align: Align) -> u32 {
+        self.switch_editor_for(self.active_view_id, editor_id, align)
     }
 
     /// Closes the window of `view_id`, detaches the associated editor, and returns
@@ -209,6 +241,8 @@ impl Environment {
     /// Attaches the window of `view_id` to the editor referenced by `editor_id`, and
     /// also detaches the window from its current editor if an association exists.
     fn attach_to_editor(&mut self, view_id: u32, editor_id: u32, align: Align) {
+        // todo: this test should always succeed because a view cannot exist without
+        // an editor being attached. why is this needed?
         if let Some(id) = self.view_map.get(&view_id) {
             self.get_editor_unchecked(*id).borrow_mut().detach();
         }

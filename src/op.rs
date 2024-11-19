@@ -531,11 +531,16 @@ fn open_file_at(_: &mut Environment, place: Option<Placement>) -> Result<Option<
             match open_editor(&path) {
                 Ok(editor) => {
                     if let Some(place) = place {
-                        env.open_editor(editor, place, Align::Auto);
+                        if let Some((view_id, _)) = env.open_editor(editor, place, Align::Auto) {
+                            env.set_active(Focus::To(view_id));
+                            None
+                        } else {
+                            Action::as_alert(ALERT_CREATE_WINDOW_REFUSED)
+                        }
                     } else {
                         env.set_editor(editor, Align::Auto);
+                        None
                     }
-                    None
                 }
                 Err(e) => Action::as_alert_error(&e),
             }
@@ -754,6 +759,28 @@ fn next_window(env: &mut Environment) -> Result<Option<Action>> {
     Ok(None)
 }
 
+/// Operation: `prev-editor`
+fn prev_editor(env: &mut Environment) -> Result<Option<Action>> {
+    let ids = unattached_editors(env);
+    if ids.len() > 0 {
+        let editor_id = env.get_editor_id();
+        let i = ids.iter().rev().position(|id| *id < editor_id).unwrap_or(0);
+        env.switch_editor(ids[ids.len() - i - 1], Align::Auto);
+    }
+    Ok(None)
+}
+
+/// Operation: `next-editor`
+fn next_editor(env: &mut Environment) -> Result<Option<Action>> {
+    let ids = unattached_editors(env);
+    if ids.len() > 0 {
+        let editor_id = env.get_editor_id();
+        let i = ids.iter().position(|id| *id > editor_id).unwrap_or(0);
+        env.switch_editor(ids[i], Align::Auto);
+    }
+    Ok(None)
+}
+
 fn list_editors(env: &mut Environment) -> Result<Option<Action>> {
     let active_id = env.get_active();
     let mut buffer = Buffer::new();
@@ -844,6 +871,17 @@ fn dirty_editors(env: &Environment) -> Vec<u32> {
         .collect()
 }
 
+/// Returns an ordered collection of ids for those editors that are not attached
+/// to a window.
+fn unattached_editors(env: &Environment) -> Vec<u32> {
+    let attached = env.view_map().values().cloned().collect::<Vec<_>>();
+    env.editor_map()
+        .keys()
+        .cloned()
+        .filter(|id| !attached.contains(id))
+        .collect()
+}
+
 /// Returns `true` if `editor` is persistent.
 fn is_persistent(editor: &EditorRef) -> bool {
     match editor.borrow().storage() {
@@ -888,6 +926,7 @@ fn prompt_save_anyway(path: &str) -> String {
 
 // This section contains string constants and formatting functions for alerts.
 const ALERT_CLOSE_WINDOW_REFUSED: &str = "cannot close only window";
+const ALERT_CREATE_WINDOW_REFUSED: &str = "unable to create new window";
 
 fn alert_invalid_line(s: &str) -> String {
     format!("{s}: invalid line")
@@ -898,7 +937,7 @@ fn alert_saved(path: &str) -> String {
 }
 
 /// Predefined mapping of editing operations to editing functions.
-const OP_MAPPINGS: [(&'static str, OpFn); 48] = [
+const OP_MAPPINGS: [(&'static str, OpFn); 50] = [
     // --- exit and cancellation ---
     ("quit", quit),
     // --- navigation and selection ---
@@ -952,6 +991,8 @@ const OP_MAPPINGS: [(&'static str, OpFn); 48] = [
     ("bottom-window", bottom_window),
     ("prev-window", prev_window),
     ("next-window", next_window),
+    ("prev-editor", prev_editor),
+    ("next-editor", next_editor),
     // --- TEMPORARY ---
     ("list-editors", list_editors),
 ];

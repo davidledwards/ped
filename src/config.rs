@@ -238,7 +238,7 @@ impl Configuration {
         bindings
     }
 
-    const DEFAULT_BINDINGS: [(&'static str, &'static str); 60] = [
+    const DEFAULT_BINDINGS: [(&'static str, &'static str); 62] = [
         // --- exit and cancellation ---
         ("C-q", "quit"),
         // --- navigation and selection ---
@@ -304,6 +304,8 @@ impl Configuration {
         ("ESC:,", "prev-window"),
         ("ESC:w:n", "next-window"),
         ("ESC:.", "next-window"),
+        ("ESC:<", "prev-editor"),
+        ("ESC:>", "next-editor"),
         // --- TEMPORARY ---
         ("C-t", "list-editors"),
     ];
