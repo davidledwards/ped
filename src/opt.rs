@@ -7,7 +7,7 @@ pub struct Options {
     pub show_spotlight: Option<bool>,
     pub show_lines: Option<bool>,
     pub show_eol: Option<bool>,
-    pub rc_path: Option<String>,
+    pub config_path: Option<String>,
     pub files: Vec<String>,
 }
 
@@ -19,7 +19,7 @@ impl Default for Options {
             show_spotlight: None,
             show_lines: None,
             show_eol: None,
-            rc_path: None,
+            config_path: None,
             files: vec![],
         }
     }
@@ -39,7 +39,7 @@ impl Options {
                 "--show-spotlight" => opts.show_spotlight = Some(true),
                 "--show-lines" => opts.show_lines = Some(true),
                 "--show-eol" => opts.show_eol = Some(true),
-                "--rc" => opts.rc_path = Some(expect_value(&arg, it.next())?),
+                "--config" => opts.config_path = Some(expect_value(&arg, it.next())?),
                 arg if arg.starts_with("--") => return Err(Error::unexpected_arg(arg)),
                 _ => opts.files.push(arg),
             }

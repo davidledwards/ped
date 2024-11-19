@@ -193,6 +193,13 @@ fn quit_save_override_answer(
     Ok(action)
 }
 
+/// Operation: `help`
+fn help(_: &mut Environment) -> Result<Option<Action>> {
+    // open @help editor at bottom
+    // write help text to editpr
+    Ok(Action::as_alert("help not yet implemented"))
+}
+
 /// Operation: `move-left`
 fn move_left(env: &mut Environment) -> Result<Option<Action>> {
     let mut editor = env.get_editor().borrow_mut();
@@ -937,9 +944,11 @@ fn alert_saved(path: &str) -> String {
 }
 
 /// Predefined mapping of editing operations to editing functions.
-const OP_MAPPINGS: [(&'static str, OpFn); 50] = [
+const OP_MAPPINGS: [(&'static str, OpFn); 51] = [
     // --- exit and cancellation ---
     ("quit", quit),
+    // --- help ---
+    ("help", help),
     // --- navigation and selection ---
     ("move-left", move_left),
     ("move-left-select", move_left_select),

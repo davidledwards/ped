@@ -9,6 +9,7 @@ use crate::key::{Key, Keyboard, CTRL_G};
 use crate::op::{self, Action, AnswerFn};
 use crate::term;
 use crate::workspace::{Placement, Workspace};
+use crate::{PACKAGE_NAME, PACKAGE_VERSION};
 use std::fmt;
 use std::time::Instant;
 
@@ -108,6 +109,9 @@ impl Controller {
     /// [keys](Key) and calling their corresponding editing functions until instructed to
     /// quit.
     pub fn run(&mut self) -> Result<()> {
+        self.set_echo(&format!(
+            "{PACKAGE_NAME} {PACKAGE_VERSION} | type C-h for help"
+        ));
         self.show_cursor();
         loop {
             let key = self.keyboard.read()?;

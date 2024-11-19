@@ -14,5 +14,5 @@ usage: ped OPTIONS [file...]
     --show-eol
         Show the end-of-line as a special character.
 
-    --rc FILE
-        Load settings from FILE instead of searching in standard locations.
+    --config FILE
+        Load configuration from FILE instead of searching in default locations.
