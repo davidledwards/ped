@@ -90,11 +90,12 @@ fn run() -> Result<()> {
 }
 
 fn run_opts(opts: &Options) -> Result<()> {
-    let config = if let Some(ref rc_path) = opts.rc_path {
+    let mut config = if let Some(ref rc_path) = opts.rc_path {
         Configuration::load_file(rc_path)?
     } else {
         Configuration::load()?
     };
+    config.apply_opts(opts);
     run_config(opts, config)
 }
 

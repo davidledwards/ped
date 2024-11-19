@@ -1,6 +1,7 @@
 //! Configuration of editor settings.
 use crate::color::Color;
 use crate::error::{Error, Result};
+use crate::opt::Options;
 use serde::de::{self, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 use std::collections::HashMap;
@@ -85,6 +86,13 @@ impl Settings {
             self.show_lines = ext.show_lines.unwrap_or(self.show_lines);
             self.show_eol = ext.show_eol.unwrap_or(self.show_eol);
         }
+    }
+
+    /// Applies the relevant settings from `opts` on top of `self`.
+    pub fn apply_opts(&mut self, opts: &Options) {
+        self.show_spotlight = opts.show_spotlight.unwrap_or(self.show_spotlight);
+        self.show_lines = opts.show_lines.unwrap_or(self.show_lines);
+        self.show_eol = opts.show_eol.unwrap_or(self.show_eol);
     }
 }
 
@@ -192,6 +200,11 @@ impl Configuration {
     /// Turns the configuration into a [`ConfigurationRef`].
     pub fn to_ref(self) -> ConfigurationRef {
         Rc::new(self)
+    }
+
+    /// Applies the relevant settings from `opts` on top of `self`.
+    pub fn apply_opts(&mut self, opts: &Options) {
+        self.settings.apply_opts(opts);
     }
 
     /// Applies the external configuration `ext` on top of `self`.

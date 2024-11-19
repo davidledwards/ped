@@ -4,9 +4,9 @@ use crate::error::{Error, Result};
 pub struct Options {
     pub help: bool,
     pub version: bool,
-    pub show_spotlight: bool,
-    pub show_lines: bool,
-    pub show_eol: bool,
+    pub show_spotlight: Option<bool>,
+    pub show_lines: Option<bool>,
+    pub show_eol: Option<bool>,
     pub rc_path: Option<String>,
     pub files: Vec<String>,
 }
@@ -16,9 +16,9 @@ impl Default for Options {
         Options {
             help: false,
             version: false,
-            show_spotlight: false,
-            show_lines: false,
-            show_eol: false,
+            show_spotlight: None,
+            show_lines: None,
+            show_eol: None,
             rc_path: None,
             files: vec![],
         }
@@ -36,9 +36,9 @@ impl Options {
             match arg.as_str() {
                 "--help" => opts.help = true,
                 "--version" => opts.version = true,
-                "--show-spotlight" => opts.show_spotlight = true,
-                "--show-lines" => opts.show_lines = true,
-                "--show-eol" => opts.show_eol = true,
+                "--show-spotlight" => opts.show_spotlight = Some(true),
+                "--show-lines" => opts.show_lines = Some(true),
+                "--show-eol" => opts.show_eol = Some(true),
                 "--rc" => opts.rc_path = Some(expect_value(&arg, it.next())?),
                 arg if arg.starts_with("--") => return Err(Error::unexpected_arg(arg)),
                 _ => opts.files.push(arg),
