@@ -430,9 +430,13 @@ fn insert_line(env: &mut Environment) -> Result<Option<Action>> {
 
 /// Operation: `remove-left`
 fn remove_left(env: &mut Environment) -> Result<Option<Action>> {
-    let mut editor = env.get_editor().borrow_mut();
-    editor.clear_mark();
-    let _ = editor.remove_left();
+    let maybe_mark = env.get_editor().borrow_mut().clear_mark();
+    if let Some(mark) = maybe_mark {
+        let text = env.get_editor().borrow_mut().remove_mark(mark);
+        env.set_clipboard(text);
+    } else {
+        let _ = env.get_editor().borrow_mut().remove_left();
+    }
     Ok(None)
 }
 
@@ -491,7 +495,6 @@ fn cut(env: &mut Environment) -> Result<Option<Action>> {
         env.get_editor().borrow_mut().remove_line()
     };
     env.set_clipboard(text);
-    env.get_editor().borrow_mut().render();
     Ok(None)
 }
 

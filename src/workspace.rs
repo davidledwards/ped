@@ -1,7 +1,7 @@
 //! Workspace management.
+use crate::config::{Configuration, ConfigurationRef};
 use crate::size::{Point, Size};
 use crate::term;
-use crate::theme::{Theme, ThemeRef};
 use crate::window::{Window, WindowRef};
 use crate::writer::Writer;
 use std::cell::RefCell;
@@ -74,8 +74,8 @@ impl<'a> Iterator for Views<'a> {
 /// A workspace always provides at least `1` view, which implies that the last
 /// remaining view can never be removed.
 pub struct Workspace {
+    config: ConfigurationRef,
     size: Size,
-    theme: ThemeRef,
     views_origin: Point,
     views_size: Size,
     shared_origin: Point,
@@ -97,12 +97,12 @@ impl Workspace {
     /// Minimum number of rows assigned to a view.
     const MIN_VIEW_ROWS: u32 = 2;
 
-    /// Creates a workspace with the given `theme` and consuming the entire terminal.
-    pub fn new(theme: Theme) -> Workspace {
+    /// Creates a workspace with the given `config` and consuming the entire terminal.
+    pub fn new(config: Configuration) -> Workspace {
         let size = Self::query_size();
         let mut this = Workspace {
+            config: config.to_ref(),
             size,
-            theme: theme.to_ref(),
             views_origin: Point::ORIGIN,
             views_size: size - Self::VIEWS_SIZE_ADJUST,
             shared_origin: Point::ORIGIN + Size::rows(size.rows - 1),
@@ -123,8 +123,8 @@ impl Workspace {
         (self.shared_origin, self.shared_size)
     }
 
-    pub fn theme(&self) -> &ThemeRef {
-        &self.theme
+    pub fn config(&self) -> &ConfigurationRef {
+        &self.config
     }
 
     /// Opens a new view in the workspace whose placement is based on `place`, returning
@@ -342,7 +342,7 @@ impl Workspace {
 
     pub fn clear_shared(&mut self) {
         Writer::new_at(self.shared_origin)
-            .set_color(self.theme.echo_color)
+            .set_color(self.config.colors.echo)
             .write_str(" ".repeat(self.size.cols as usize).as_str())
             .send();
     }
@@ -369,7 +369,7 @@ impl Workspace {
         let window = Window::new(
             origin,
             Size::new(rows, self.views_size.cols),
-            self.theme.clone(),
+            self.config.clone(),
         );
         View::new(id, window.to_ref())
     }

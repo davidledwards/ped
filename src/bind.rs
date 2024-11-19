@@ -20,7 +20,7 @@ pub struct Bindings {
 
 impl Bindings {
     /// Creates the default key bindings.
-    pub fn new() -> Bindings {
+    pub fn new(bindings: &HashMap<String, String>) -> Bindings {
         let mut this = Bindings {
             key_map: key::init_key_map(),
             op_map: op::init_op_map(),
@@ -28,7 +28,7 @@ impl Bindings {
             bind_prefixes: Prefixes::new(),
         };
 
-        for (key_seq, op) in Self::DEFAULT_BINDINGS {
+        for (key_seq, op) in bindings {
             this.bind(key_seq, op).unwrap_or_else(|e| panic!("{e}"));
         }
         this
@@ -91,76 +91,4 @@ impl Bindings {
     pub fn is_prefix(&self, keys: &Vec<Key>) -> bool {
         self.bind_prefixes.contains(keys)
     }
-
-    /// Default mapping of keys to editing operations.
-    const DEFAULT_BINDINGS: [(&'static str, &'static str); 61] = [
-        // --- exit and cancellation ---
-        ("ctrl-q", "quit"),
-        // --- navigation and selection ---
-        ("ctrl-b", "move-left"),
-        ("left", "move-left"),
-        ("shift-left", "move-left-select"),
-        ("ctrl-f", "move-right"),
-        ("right", "move-right"),
-        ("shift-right", "move-right-select"),
-        ("ctrl-p", "move-up"),
-        ("up", "move-up"),
-        ("shift-up", "move-up-select"),
-        ("ctrl-n", "move-down"),
-        ("down", "move-down"),
-        ("shift-down", "move-down-select"),
-        ("ctrl-[:p", "move-up-page"),
-        ("page-up", "move-up-page"),
-        ("shift-page-up", "move-up-page-select"),
-        ("ctrl-[:n", "move-down-page"),
-        ("page-down", "move-down-page"),
-        ("shift-page-down", "move-down-page-select"),
-        ("ctrl-a", "move-start"),
-        ("home", "move-start"),
-        ("shift-home", "move-start-select"),
-        ("ctrl-e", "move-end"),
-        ("end", "move-end"),
-        ("shift-end", "move-end-select"),
-        ("ctrl-home", "move-top"),
-        ("ctrl-[:a", "move-top"),
-        ("shift-ctrl-home", "move-top-select"),
-        ("ctrl-end", "move-bottom"),
-        ("ctrl-[:e", "move-bottom"),
-        ("shift-ctrl-end", "move-bottom-select"),
-        ("shift-ctrl-up", "scroll-up"),
-        ("shift-ctrl-down", "scroll-down"),
-        ("ctrl-l", "scroll-center"),
-        ("ctrl-@", "set-mark"),
-        ("ctrl-_", "goto-line"),
-        // --- insertion and removal ---
-        ("ctrl-m", "insert-line"),
-        ("ctrl-d", "remove-right"),
-        ("ctrl-?", "remove-left"),
-        ("ctrl-h", "remove-left"),
-        ("ctrl-j", "remove-start"),
-        ("ctrl-k", "remove-end"),
-        // --- selection actions ---
-        ("ctrl-c", "copy"),
-        ("ctrl-v", "paste"),
-        ("ctrl-x", "cut"),
-        // --- file handling ---
-        ("ctrl-o", "open-file"),
-        ("ctrl-[:o:t", "open-file-top"),
-        ("ctrl-[:o:b", "open-file-bottom"),
-        ("ctrl-[:o:p", "open-file-above"),
-        ("ctrl-[:o:n", "open-file-below"),
-        ("ctrl-s", "save-file"),
-        ("ctrl-[:s", "save-file-as"),
-        // --- window handling ---
-        ("ctrl-w", "kill-window"),
-        ("ctrl-[:w:w", "close-window"),
-        ("ctrl-[:w:t", "top-window"),
-        ("ctrl-[:w:b", "bottom-window"),
-        ("ctrl-[:w:p", "prev-window"),
-        ("ctrl-[:,", "prev-window"),
-        ("ctrl-[:w:n", "next-window"),
-        ("ctrl-[:.", "next-window"),
-        // --- TEMPORARY ---
-        ("ctrl-t", "list-editors"),
-    ];
 }

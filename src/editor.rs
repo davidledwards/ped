@@ -1,9 +1,9 @@
 //! Editor.
 use crate::buffer::{Buffer, BufferRef};
 use crate::canvas::{Canvas, CanvasRef};
+use crate::config::{Configuration, ConfigurationRef};
 use crate::grid::Cell;
 use crate::size::{Point, Size};
-use crate::theme::{Theme, ThemeRef};
 use crate::window::{Banner, BannerRef, Window, WindowRef};
 use std::cell::{Ref, RefCell, RefMut};
 use std::cmp;
@@ -42,8 +42,8 @@ pub struct Editor {
     /// An optional mark used when selecting text.
     mark: Option<Mark>,
 
-    /// Color theme that applies to the window.
-    theme: ThemeRef,
+    /// Configuration that applies to the window.
+    config: ConfigurationRef,
 
     /// Canvas associated with the window.
     canvas: CanvasRef,
@@ -132,8 +132,8 @@ pub struct Mark(pub usize, pub bool);
 
 /// A drawing context provided to rendering functions.
 struct Draw {
-    /// Color theme that dictates colors and behaviors.
-    theme: ThemeRef,
+    /// Configuration that dictates colors and behaviors.
+    config: ConfigurationRef,
 
     /// Current cursor position.
     cursor: Point,
@@ -310,7 +310,7 @@ impl Draw {
             .unwrap_or(0..0);
 
         Draw {
-            theme: editor.theme.clone(),
+            config: editor.config.clone(),
             cursor: editor.cursor(),
             select_span,
         }
@@ -318,18 +318,18 @@ impl Draw {
 
     #[inline]
     fn as_line(&self, c: char) -> Cell {
-        Cell::new(c, self.theme.line_color)
+        Cell::new(c, self.config.colors.line)
     }
 
     #[inline]
     fn as_blank(&self, c: char) -> Cell {
-        Cell::new(c, self.theme.text_color)
+        Cell::new(c, self.config.colors.text)
     }
 
     #[inline]
     fn convert_char(&self, c: char) -> char {
         if c == '\n' {
-            if self.theme.show_eol {
+            if self.config.settings.show_eol {
                 Self::EOL_CHAR
             } else {
                 ' '
@@ -341,14 +341,14 @@ impl Draw {
 
     fn as_text(&self, c: char, render: &Render) -> Cell {
         let color = if self.select_span.contains(&render.pos) {
-            self.theme.select_color
-        } else if self.theme.highlight_row && render.row == self.cursor.row {
-            self.theme.highlight_color
+            self.config.colors.select
+        } else if self.config.settings.show_spotlight && render.row == self.cursor.row {
+            self.config.colors.spotlight
         } else {
-            if c == '\n' && self.theme.show_eol {
-                self.theme.eol_color
+            if c == '\n' && self.config.settings.show_eol {
+                self.config.colors.eol
             } else {
-                self.theme.text_color
+                self.config.colors.text
             }
         };
         Cell::new(self.convert_char(c), color)
@@ -420,7 +420,7 @@ impl Editor {
             snap_col: None,
             cursor: Point::ORIGIN,
             mark: None,
-            theme: Theme::default().to_ref(),
+            config: Configuration::default().to_ref(),
             canvas: Canvas::zero().to_ref(),
             banner: Banner::none().to_ref(),
             rows: 0,
@@ -500,14 +500,14 @@ impl Editor {
     /// Attaches the `window` to this editor.
     pub fn attach(&mut self, window: WindowRef, align: Align) {
         let is_zombie = window.borrow().is_zombie();
-        self.theme = window.borrow().theme().clone();
+        self.config = window.borrow().config().clone();
         self.canvas = window.borrow().canvas().clone();
         self.banner = window.borrow().banner().clone();
 
         // Allocate leftmost columns of window to line numbers, but only if enabled and
         // total width of window is large enough to reasonably accommodate.
         let Size { rows, cols } = self.canvas.borrow().size();
-        self.margin_cols = if self.theme.show_lines && cols >= Self::MARGIN_COLS * 2 {
+        self.margin_cols = if self.config.settings.show_lines && cols >= Self::MARGIN_COLS * 2 {
             Self::MARGIN_COLS
         } else {
             0

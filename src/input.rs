@@ -35,9 +35,6 @@ pub struct InputEditor {
 
     /// The position of the cursor on the visible canvas.
     cursor: u32,
-
-    /// A predefined blank cell honoring the workspace color theme.
-    blank_cell: Cell,
 }
 
 pub enum Directive {
@@ -51,7 +48,6 @@ impl InputEditor {
     const MIN_COLS: u32 = 2;
 
     pub fn new(workspace: WorkspaceRef) -> InputEditor {
-        let blank_cell = Cell::new(' ', workspace.borrow().theme().text_color);
         InputEditor {
             workspace,
             prompt: None,
@@ -61,7 +57,6 @@ impl InputEditor {
             input: Vec::new(),
             pos: 0,
             cursor: 0,
-            blank_cell,
         }
     }
 
@@ -251,7 +246,7 @@ impl InputEditor {
                 .collect::<String>();
 
             let (origin, _) = self.workspace.borrow().shared_region();
-            let color = self.workspace.borrow().theme().prompt_color;
+            let color = self.workspace.borrow().config().colors.prompt;
             Writer::new_at(origin)
                 .set_color(color)
                 .write_str(prompt.as_str())
@@ -266,7 +261,7 @@ impl InputEditor {
         let end = cmp::min(start + self.input_cols as usize, self.input.len());
 
         // Write characters to canvas.
-        let color = self.workspace.borrow().theme().text_color;
+        let color = self.workspace.borrow().config().colors.text;
         for (col, c) in self.input[start..end].iter().enumerate() {
             let cell = Cell::new(*c, color);
             self.canvas.set_cell(0, col as u32, cell);
@@ -275,7 +270,8 @@ impl InputEditor {
         // Clear unused area on canvas.
         let cols = (end - start) as u32;
         if cols < self.input_cols {
-            self.canvas.fill_row_from(0, cols, self.blank_cell);
+            let cell = Cell::new(' ', self.workspace.borrow().config().colors.text);
+            self.canvas.fill_row_from(0, cols, cell);
         }
 
         // Send pending changes to canvas and set new cursor position.

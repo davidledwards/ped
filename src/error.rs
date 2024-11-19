@@ -3,6 +3,7 @@ use std::error;
 use std::fmt::{self, Display, Formatter};
 use std::io;
 use std::str;
+use toml::de;
 
 /// A convenient `Result` type whose error type is [`Error`].
 pub type Result<T> = std::result::Result<T, Error>;
@@ -24,11 +25,18 @@ pub enum Error {
     UnexpectedArg {
         arg: String,
     },
+    ExpectedValue {
+        arg: String,
+    },
     InvalidKey {
         key: String,
     },
     BindOp {
         op: String,
+    },
+    Configuration {
+        path: String,
+        cause: String,
     },
 }
 
@@ -67,6 +75,12 @@ impl Error {
         }
     }
 
+    pub fn expected_value(arg: &str) -> Error {
+        Error::ExpectedValue {
+            arg: arg.to_string(),
+        }
+    }
+
     pub fn invalid_key(key: &str) -> Error {
         Error::InvalidKey {
             key: key.to_string(),
@@ -75,6 +89,13 @@ impl Error {
 
     pub fn bind_op(op: &str) -> Error {
         Error::BindOp { op: op.to_string() }
+    }
+
+    pub fn configuration(path: &str, e: &de::Error) -> Error {
+        Error::Configuration {
+            path: path.to_string(),
+            cause: format!("{e}"),
+        }
     }
 }
 
@@ -88,8 +109,12 @@ impl Display for Error {
             },
             Error::UTF8 { bytes, cause } => write!(f, "{bytes:?}: {cause}"),
             Error::UnexpectedArg { arg } => write!(f, "{arg}: unexpected argument"),
+            Error::ExpectedValue { arg } => write!(f, "{arg}: expecting value to follow"),
             Error::InvalidKey { key } => write!(f, "{key}: invalid key"),
             Error::BindOp { op } => write!(f, "{op}: bind operation not found"),
+            Error::Configuration { path, cause } => {
+                write!(f, "{path}: configuration error: {cause}")
+            }
         }
     }
 }

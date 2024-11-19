@@ -20,6 +20,7 @@ mod bind;
 mod buffer;
 mod canvas;
 mod color;
+mod config;
 mod control;
 mod echo;
 mod editor;
@@ -33,17 +34,16 @@ mod op;
 mod opt;
 mod size;
 mod term;
-mod theme;
 mod window;
 mod workspace;
 mod writer;
 
 use crate::bind::Bindings;
+use crate::config::Configuration;
 use crate::control::Controller;
 use crate::error::Result;
 use crate::key::Keyboard;
 use crate::opt::Options;
-use crate::theme::Theme;
 use crate::workspace::Workspace;
 use std::ops::Drop;
 use std::process::ExitCode;
@@ -90,16 +90,22 @@ fn run() -> Result<()> {
 }
 
 fn run_opts(opts: &Options) -> Result<()> {
-    // todo: load files from command line after creating the controller
+    let config = if let Some(ref rc_path) = opts.rc_path {
+        Configuration::load_file(rc_path)?
+    } else {
+        Configuration::load()?
+    };
+    run_config(config)
+}
 
-    let bindings = Bindings::new();
+fn run_config(config: Configuration) -> Result<()> {
+    let bindings = Bindings::new(&config.bindings);
 
     term::init()?;
     let _restore = RestoreTerminal;
 
     let keyboard = Keyboard::new();
-    let theme = Theme::new();
-    let workspace = Workspace::new(theme);
+    let workspace = Workspace::new(config);
     let mut controller = Controller::new(keyboard, bindings, workspace);
     controller.run()?;
     Ok(())

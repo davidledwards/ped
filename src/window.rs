@@ -1,14 +1,14 @@
 //! Window management.
 use crate::canvas::{Canvas, CanvasRef};
+use crate::config::{Configuration, ConfigurationRef};
 use crate::size::{Point, Size};
-use crate::theme::{Theme, ThemeRef};
 use crate::writer::Writer;
 use std::cell::RefCell;
 use std::rc::Rc;
 
 pub struct Banner {
     cols: u32,
-    theme: ThemeRef,
+    config: ConfigurationRef,
     title: String,
     dirty: bool,
     loc: Point,
@@ -30,10 +30,10 @@ impl Banner {
     /// Number of columns for whitespace between title and location.
     const GAP_SIZE: usize = 2;
 
-    fn new(origin: Point, cols: u32, theme: ThemeRef) -> Banner {
+    fn new(origin: Point, cols: u32, config: ConfigurationRef) -> Banner {
         Banner {
             cols,
-            theme,
+            config,
             title: String::new(),
             dirty: false,
             loc: Point::ORIGIN,
@@ -44,7 +44,7 @@ impl Banner {
     pub fn none() -> Banner {
         Banner {
             cols: 0,
-            theme: Theme::default().to_ref(),
+            config: Configuration::default().to_ref(),
             title: String::new(),
             dirty: false,
             loc: Point::ORIGIN,
@@ -58,7 +58,9 @@ impl Banner {
     }
 
     pub fn draw(&mut self) {
-        self.writer.set_origin().set_color(self.theme.banner_color);
+        self.writer
+            .set_origin()
+            .set_color(self.config.colors.banner);
 
         if self.cols < Self::MIN_COLS {
             self.writer
@@ -124,7 +126,7 @@ impl Banner {
 pub struct Window {
     origin: Point,
     size: Size,
-    theme: ThemeRef,
+    config: ConfigurationRef,
     canvas: CanvasRef,
     banner: BannerRef,
 }
@@ -135,17 +137,17 @@ impl Window {
     const CANVAS_ORIGIN_OFFSET: Size = Size::ZERO;
     const CANVAS_SIZE_ADJUST: Size = Size::rows(1);
 
-    pub fn new(origin: Point, size: Size, theme: ThemeRef) -> Window {
+    pub fn new(origin: Point, size: Size, config: ConfigurationRef) -> Window {
         let canvas_origin = origin + Self::CANVAS_ORIGIN_OFFSET;
         let canvas_size = size - Self::CANVAS_SIZE_ADJUST;
         let banner_origin = origin + Size::rows(size.rows - 1);
         let canvas = Canvas::new(canvas_origin, canvas_size);
-        let banner = Banner::new(banner_origin, size.cols, theme.clone());
+        let banner = Banner::new(banner_origin, size.cols, config.clone());
 
         let mut this = Window {
             origin,
             size,
-            theme,
+            config,
             canvas: canvas.to_ref(),
             banner: banner.to_ref(),
         };
@@ -157,7 +159,7 @@ impl Window {
         Window {
             origin: Point::ORIGIN,
             size: Size::ZERO,
-            theme: Theme::default().to_ref(),
+            config: Configuration::default().to_ref(),
             canvas: Canvas::zero().to_ref(),
             banner: Banner::none().to_ref(),
         }
@@ -175,8 +177,8 @@ impl Window {
         self.size
     }
 
-    pub fn theme(&self) -> &ThemeRef {
-        &self.theme
+    pub fn config(&self) -> &ConfigurationRef {
+        &self.config
     }
 
     pub fn canvas(&self) -> &CanvasRef {

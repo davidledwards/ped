@@ -2,4 +2,17 @@ usage: ped OPTIONS [file...]
        ped --help
        ped --version
 
-  The pedestrian terminal-based text editor.
+  The pedestrian text editor.
+
+  OPTIONS
+    --show-spotlight
+        Highlights the cursor row.
+
+    --show-lines
+        Show line numbers in the left margin.
+
+    --show-eol
+        Show the end-of-line as a special character.
+
+    --rc FILE
+        Load settings from FILE instead of searching in standard locations.
