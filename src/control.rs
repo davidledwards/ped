@@ -1,13 +1,14 @@
 //! Main controller.
 use crate::bind::Bindings;
 use crate::echo::Echo;
-use crate::env::Environment;
+use crate::editor::Align;
+use crate::env::{Environment, Focus};
 use crate::error::Result;
 use crate::input::{Directive, InputEditor};
 use crate::key::{Key, Keyboard, CTRL_G};
-use crate::op::{Action, AnswerFn};
+use crate::op::{self, Action, AnswerFn};
 use crate::term;
-use crate::workspace::Workspace;
+use crate::workspace::{Placement, Workspace};
 use std::fmt;
 use std::time::Instant;
 
@@ -83,6 +84,22 @@ impl Controller {
             question: None,
             term_changed: None,
         }
+    }
+
+    /// Opens the collection of `files`, placing each successive editor at the bottom
+    /// of the workspace.
+    pub fn open(&mut self, files: &Vec<String>) -> Result<()> {
+        let view_id = self.env.get_active();
+        for (i, path) in files.iter().enumerate() {
+            let editor = op::open_editor(path)?;
+            if i == 0 {
+                self.env.set_editor(editor, Align::Auto);
+            } else {
+                self.env.open_editor(editor, Placement::Bottom, Align::Auto);
+            }
+        }
+        self.env.set_active(Focus::To(view_id));
+        Ok(())
     }
 
     /// Runs the main processing loop.

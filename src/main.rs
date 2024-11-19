@@ -95,18 +95,16 @@ fn run_opts(opts: &Options) -> Result<()> {
     } else {
         Configuration::load()?
     };
-    run_config(config)
+    run_config(opts, config)
 }
 
-fn run_config(config: Configuration) -> Result<()> {
+fn run_config(opts: &Options, config: Configuration) -> Result<()> {
     let keyboard = Keyboard::new();
     let bindings = Bindings::new(&config.bindings);
     let workspace = Workspace::new(config);
-    let controller = Controller::new(keyboard, bindings, workspace);
-    run_editor(controller)
-}
+    let mut controller = Controller::new(keyboard, bindings, workspace);
+    controller.open(&opts.files)?;
 
-fn run_editor(mut controller: Controller) -> Result<()> {
     term::init()?;
     let _restore = RestoreTerminal;
     controller.run()

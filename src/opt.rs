@@ -16,11 +16,11 @@ impl Default for Options {
         Options {
             help: false,
             version: false,
-            files: vec![],
             show_spotlight: false,
             show_lines: false,
             show_eol: false,
             rc_path: None,
+            files: vec![],
         }
     }
 }

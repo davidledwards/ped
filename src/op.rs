@@ -768,7 +768,7 @@ fn list_editors(env: &mut Environment) -> Result<Option<Action>> {
 }
 
 /// Reads the file at `path` and returns a new editor with the persistent storage type.
-fn open_editor(path: &str) -> Result<EditorRef> {
+pub fn open_editor(path: &str) -> Result<EditorRef> {
     // Try reading file contents into buffer.
     let mut buffer = Buffer::new();
     let time = match io::read_file(path, &mut buffer) {
