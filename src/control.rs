@@ -164,7 +164,7 @@ impl Controller {
             if let Some(op_fn) = self.bindings.find(&self.key_seq) {
                 match op_fn(&mut self.env)? {
                     Some(Action::Quit) => return Ok(Step::Quit),
-                    Some(Action::Alert(text)) => {
+                    Some(Action::Echo(text)) => {
                         self.set_echo(text.as_str());
                     }
                     Some(Action::Question(prompt, answer_fn)) => {
@@ -213,7 +213,7 @@ impl Controller {
         };
         match action {
             Some(Action::Quit) => return Ok(Step::Quit),
-            Some(Action::Alert(text)) => {
+            Some(Action::Echo(text)) => {
                 self.set_echo(text.as_str());
             }
             Some(Action::Question(prompt, answer_fn)) => {

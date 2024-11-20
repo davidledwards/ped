@@ -28,7 +28,7 @@ pub type OpFn = fn(&mut Environment) -> Result<Option<Action>>;
 /// calls to such functions.
 pub enum Action {
     Quit,
-    Alert(String),
+    Echo(String),
     Question(String, Box<AnswerFn>),
 }
 
@@ -44,13 +44,13 @@ impl Action {
         Some(Action::Quit)
     }
 
-    fn as_alert(text: &str) -> Option<Action> {
-        let action = Action::Alert(text.to_string());
+    fn as_echo(text: &str) -> Option<Action> {
+        let action = Action::Echo(text.to_string());
         Some(action)
     }
 
-    fn as_alert_error(e: &Error) -> Option<Action> {
-        let action = Action::Alert(e.to_string());
+    fn as_echo_error(e: &Error) -> Option<Action> {
+        let action = Action::Echo(e.to_string());
         Some(action)
     }
 
@@ -122,13 +122,13 @@ fn quit_save_first(env: &mut Environment, dirty: Vec<u32>) -> Option<Action> {
         }
         Ok(false) => {
             if let Err(e) = save_editor(editor) {
-                Action::as_alert_error(&e)
+                Action::as_echo_error(&e)
             } else {
                 let dirty = dirty.iter().cloned().skip(1).collect();
                 quit_continue(env, dirty)
             }
         }
-        Err(e) => Action::as_alert_error(&e),
+        Err(e) => Action::as_echo_error(&e),
     }
 }
 
@@ -149,11 +149,11 @@ fn quit_save_all(env: &mut Environment, dirty: Vec<u32>) -> Option<Action> {
             }
             Ok(false) => {
                 if let Err(e) = save_editor(editor) {
-                    return Action::as_alert_error(&e);
+                    return Action::as_echo_error(&e);
                 }
             }
             Err(e) => {
-                return Action::as_alert_error(&e);
+                return Action::as_echo_error(&e);
             }
         }
     }
@@ -171,7 +171,7 @@ fn quit_save_override_answer(
         Some(yes_no) if yes_no == "y" => {
             let editor = get_editor(env, dirty[0]);
             if let Err(e) = save_editor(editor) {
-                Action::as_alert_error(&e)
+                Action::as_echo_error(&e)
             } else {
                 let dirty = dirty.iter().cloned().skip(1).collect();
                 quit_continue(env, dirty)
@@ -197,7 +197,7 @@ fn quit_save_override_answer(
 fn help(_: &mut Environment) -> Result<Option<Action>> {
     // open @help editor at bottom
     // write help text to editpr
-    Ok(Action::as_alert("help not yet implemented"))
+    Ok(Action::as_echo("help not yet implemented"))
 }
 
 /// Operation: `move-left`
@@ -417,7 +417,7 @@ fn goto_line(_: &mut Environment) -> Result<Option<Action>> {
                 env.get_editor().borrow_mut().move_line(line, Align::Center);
                 None
             } else {
-                Action::as_alert(&alert_invalid_line(s))
+                Action::as_echo(&echo_invalid_line(s))
             }
         } else {
             None
@@ -552,14 +552,14 @@ fn open_file_at(_: &mut Environment, place: Option<Placement>) -> Result<Option<
                             env.set_active(Focus::To(view_id));
                             None
                         } else {
-                            Action::as_alert(ALERT_CREATE_WINDOW_REFUSED)
+                            Action::as_echo(ECHO_CREATE_WINDOW_REFUSED)
                         }
                     } else {
                         env.set_editor(editor, Align::Auto);
                         None
                     }
                 }
-                Err(e) => Action::as_alert_error(&e),
+                Err(e) => Action::as_echo_error(&e),
             }
         } else {
             None
@@ -580,13 +580,13 @@ fn save_file(env: &mut Environment) -> Result<Option<Action>> {
             }
             Ok(false) => {
                 if let Err(e) = save_editor(editor) {
-                    Action::as_alert_error(&e)
+                    Action::as_echo_error(&e)
                 } else {
                     let path = path_of(editor);
-                    Action::as_alert(&alert_saved(&path))
+                    Action::as_echo(&echo_saved(&path))
                 }
             }
-            Err(e) => Action::as_alert_error(&e),
+            Err(e) => Action::as_echo_error(&e),
         }
     } else {
         Action::as_question(PROMPT_SAVE_AS, save_transient_answer)
@@ -600,10 +600,10 @@ fn save_override_answer(env: &mut Environment, answer: Option<&str>) -> Result<O
         Some(yes_no) if yes_no == "y" => {
             let editor = env.get_editor();
             if let Err(e) = save_editor(editor) {
-                Action::as_alert_error(&e)
+                Action::as_echo_error(&e)
             } else {
                 let path = path_of(editor);
-                Action::as_alert(&alert_saved(&path))
+                Action::as_echo(&echo_saved(&path))
             }
         }
         Some(yes_no) if yes_no == "n" => None,
@@ -633,9 +633,9 @@ fn save_transient_answer(env: &mut Environment, answer: Option<&str>) -> Result<
 
                 // Replace transient editor in current window with new editor.
                 env.set_editor(dup_editor, Align::Row(row));
-                Action::as_alert(&alert_saved(path))
+                Action::as_echo(&echo_saved(path))
             }
-            Err(e) => Action::as_alert_error(&e),
+            Err(e) => Action::as_echo_error(&e),
         }
     } else {
         None
@@ -653,9 +653,9 @@ fn save_file_as_answer(env: &mut Environment, answer: Option<&str>) -> Result<Op
     let action = if let Some(path) = answer {
         let editor = env.get_editor();
         if let Err(e) = save_editor_as(editor, Some(path)) {
-            Action::as_alert_error(&e)
+            Action::as_echo_error(&e)
         } else {
-            Action::as_alert(&alert_saved(&path))
+            Action::as_echo(&echo_saved(&path))
         }
     } else {
         None
@@ -675,7 +675,7 @@ fn kill_window(env: &mut Environment) -> Result<Option<Action>> {
             None
         }
     } else {
-        Action::as_alert(ALERT_CLOSE_WINDOW_REFUSED)
+        Action::as_echo(ECHO_CLOSE_WINDOW_REFUSED)
     };
     Ok(action)
 }
@@ -688,10 +688,10 @@ fn kill_save_override_answer(
         Some(yes_no) if yes_no == "y" => {
             let editor = env.get_editor();
             if let Err(e) = save_editor(editor) {
-                Action::as_alert_error(&e)
+                Action::as_echo_error(&e)
             } else {
                 let path = path_of(editor);
-                Action::as_alert(&alert_saved(&path))
+                Action::as_echo(&echo_saved(&path))
             }
         }
         Some(yes_no) if yes_no == "n" => None,
@@ -716,21 +716,21 @@ fn kill_save_answer(env: &mut Environment, answer: Option<&str>) -> Result<Optio
                 }
                 Ok(false) => {
                     if let Err(e) = save_editor(editor) {
-                        Action::as_alert_error(&e)
+                        Action::as_echo_error(&e)
                     } else {
                         let path = path_of(editor);
                         env.kill_window();
-                        Action::as_alert(&alert_saved(&path))
+                        Action::as_echo(&echo_saved(&path))
                     }
                 }
-                Err(e) => Action::as_alert_error(&e),
+                Err(e) => Action::as_echo_error(&e),
             }
         }
         Some(yes_no) if yes_no == "n" => {
             if let Some(_) = env.kill_window() {
                 None
             } else {
-                Action::as_alert(ALERT_CLOSE_WINDOW_REFUSED)
+                Action::as_echo(ECHO_CLOSE_WINDOW_REFUSED)
             }
         }
         Some(_) => {
@@ -747,7 +747,7 @@ fn close_window(env: &mut Environment) -> Result<Option<Action>> {
     let action = if let Some(_) = env.close_window() {
         None
     } else {
-        Action::as_alert(ALERT_CLOSE_WINDOW_REFUSED)
+        Action::as_echo(ECHO_CLOSE_WINDOW_REFUSED)
     };
     Ok(action)
 }
@@ -941,15 +941,15 @@ fn prompt_save_anyway(path: &str) -> String {
     format!("{path}: file in storage is newer, save anyway (y/n)?")
 }
 
-// This section contains string constants and formatting functions for alerts.
-const ALERT_CLOSE_WINDOW_REFUSED: &str = "cannot close only window";
-const ALERT_CREATE_WINDOW_REFUSED: &str = "unable to create new window";
+// This section contains string constants and formatting functions for echoing.
+const ECHO_CLOSE_WINDOW_REFUSED: &str = "cannot close only window";
+const ECHO_CREATE_WINDOW_REFUSED: &str = "unable to create new window";
 
-fn alert_invalid_line(s: &str) -> String {
+fn echo_invalid_line(s: &str) -> String {
     format!("{s}: invalid line")
 }
 
-fn alert_saved(path: &str) -> String {
+fn echo_saved(path: &str) -> String {
     format!("{path}: saved")
 }
 
