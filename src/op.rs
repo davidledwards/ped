@@ -440,7 +440,7 @@ fn insert_tab(env: &mut Environment) -> Result<Option<Action>> {
     let tab_size = env.workspace().config().settings.tab_size;
     let mut editor = env.get_editor().borrow_mut();
     editor.clear_mark();
-    let n = tab_size - (editor.cursor().col as usize % tab_size);
+    let n = tab_size - (editor.location().col as usize % tab_size);
     editor.insert_str(&" ".repeat(n));
     Ok(None)
 }
