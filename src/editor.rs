@@ -196,9 +196,10 @@ impl Line {
         self.row_pos == 0
     }
 
-    /// Returns `true` if the row of this line points to the bottom of the buffer.
-    fn is_bottom(&self) -> bool {
-        self.line_bottom && !self.does_wrap()
+    /// Returns `true` if the row of this line points to the bottom of the buffer,
+    /// where `cols` is the width of the display.
+    fn is_bottom(&self, cols: u32) -> bool {
+        self.line_bottom && self.row_len < cols as usize
     }
 
     /// Returns `true` if the row of this line wraps at least to the next row,
@@ -216,17 +217,17 @@ impl Line {
     }
 
     /// Returns a possibly smaller value of `col` if it extends beyond the end of
-    /// the row.
+    /// the row, where `cols` is the width of the display.
     ///
     /// In most cases, the right-most column aligns to the last character of the row,
     /// which is usually `\n` but may also be any other character if the row wraps.
     /// However, if this is the bottom-most row in the buffer, there is no terminating
     /// `\n`, and thus the right-most column is right of the last character.
     #[inline]
-    fn snap_col(&self, col: u32) -> u32 {
+    fn snap_col(&self, col: u32, cols: u32) -> u32 {
         if self.row_len == 0 {
             0
-        } else if self.is_bottom() {
+        } else if self.is_bottom(cols) {
             cmp::min(col, self.row_len as u32)
         } else {
             cmp::min(col, self.row_len as u32 - 1)
@@ -248,15 +249,16 @@ impl Line {
         (pos - self.row_pos) as u32
     }
 
-    /// Returns the right-most column number of this row.
+    /// Returns the right-most column number of this row, where `cols` is the width of
+    /// the display.
     ///
     /// See [`snap_col`](Line::snap_col) for further details on calculating the
     /// right-most column.
     #[inline]
-    fn end_col(&self) -> u32 {
+    fn end_col(&self, cols: u32) -> u32 {
         if self.row_len == 0 {
             0
-        } else if self.is_bottom() {
+        } else if self.is_bottom(cols) {
             self.row_len as u32
         } else {
             (self.row_len - 1) as u32
@@ -619,7 +621,7 @@ impl Editor {
             };
             let try_col = self.snap_col.take().unwrap_or(self.cursor.col);
             self.snap_col = Some(try_col);
-            let col = self.cur_line.snap_col(try_col);
+            let col = self.cur_line.snap_col(try_col, self.cols);
             self.cur_pos = self.cur_line.pos_of(col);
             self.cursor = Point::new(row, col);
             self.render();
@@ -652,7 +654,7 @@ impl Editor {
             };
             let try_col = self.snap_col.take().unwrap_or(self.cursor.col);
             self.snap_col = Some(try_col);
-            let col = self.cur_line.snap_col(try_col);
+            let col = self.cur_line.snap_col(try_col, self.cols);
             self.cur_pos = self.cur_line.pos_of(col);
             self.cursor = Point::new(row, col);
             self.render();
@@ -671,7 +673,7 @@ impl Editor {
 
     /// Moves the cursor to the *end* of the current row.
     pub fn move_end(&mut self) {
-        let end_col = self.cur_line.end_col();
+        let end_col = self.cur_line.end_col(self.cols);
         if self.cursor.col < end_col {
             self.cur_pos = self.cur_line.pos_of(end_col);
             self.cursor.col = end_col;
@@ -777,7 +779,7 @@ impl Editor {
                 self.cur_line = self.top_line.clone();
                 let try_col = self.snap_col.take().unwrap_or(self.cursor.col);
                 self.snap_col = Some(try_col);
-                let col = self.cur_line.snap_col(try_col);
+                let col = self.cur_line.snap_col(try_col, self.cols);
                 self.cur_pos = self.cur_line.pos_of(col);
                 (0, col)
             } else {
@@ -805,7 +807,7 @@ impl Editor {
                 self.up_cur_line(row - self.rows + 1);
                 let try_col = self.snap_col.take().unwrap_or(self.cursor.col);
                 self.snap_col = Some(try_col);
-                let col = self.cur_line.snap_col(try_col);
+                let col = self.cur_line.snap_col(try_col, self.cols);
                 self.cur_pos = self.cur_line.pos_of(col);
                 (self.rows - 1 as u32, col)
             };
@@ -827,7 +829,7 @@ impl Editor {
     /// Inserts the array of `text` at the current buffer position.
     pub fn insert(&mut self, text: &[char]) {
         if text.len() > 0 {
-            // Most common use case is single-character insertions, so favor use
+            // Most common use case is single-character insertions, so favor use of
             // more efficient buffer insertion in that case.
             self.buffer_mut().set_pos(self.cur_pos);
             let cur_pos = if text.len() == 1 {
@@ -1106,7 +1108,7 @@ impl Editor {
 
     fn find_down_cur_line(&mut self, pos: usize) -> u32 {
         let mut rows = 0;
-        while pos >= self.cur_line.end_pos() && !self.cur_line.is_bottom() {
+        while pos >= self.cur_line.end_pos() && !self.cur_line.is_bottom(self.cols) {
             self.cur_line = self.next_line_unchecked(&self.cur_line);
             rows += 1;
         }
@@ -1193,7 +1195,7 @@ impl Editor {
     /// Returns the line following `line`, or `None` if `line` is already at the
     /// bottom of the buffer.
     fn next_line(&self, line: &Line) -> Option<Line> {
-        if line.is_bottom() {
+        if line.is_bottom(self.cols) {
             None
         } else if line.does_wrap() {
             let row_pos = line.row_pos + line.row_len;
