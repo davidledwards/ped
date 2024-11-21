@@ -11,6 +11,7 @@
 //! See [`Bindings`](crate::bind::Bindings) for further details on binding keys
 //! at runtime.
 use crate::buffer::Buffer;
+use crate::complete::{self, CompleterAction, CompleterEvent, CompleterFn};
 use crate::editor::{self, Align, EditorRef, Storage};
 use crate::env::{Environment, Focus};
 use crate::error::{Error, Result};
@@ -29,7 +30,7 @@ pub type OpFn = fn(&mut Environment) -> Result<Option<Action>>;
 pub enum Action {
     Quit,
     Echo(String),
-    Question(String, Box<AnswerFn>),
+    Question(String, Box<AnswerFn>, Option<Box<CompleterFn>>),
 }
 
 /// A callback function that handles answers to [`Action::Question`] actions.
@@ -54,11 +55,24 @@ impl Action {
         Some(action)
     }
 
-    fn as_question<F>(prompt: &str, answer_fn: F) -> Option<Action>
+    fn as_question<A>(prompt: &str, answer_fn: A) -> Option<Action>
     where
-        F: for<'a> FnMut(&'a mut Environment, Option<&'a str>) -> Result<Option<Action>> + 'static,
+        A: for<'a> FnMut(&'a mut Environment, Option<&'a str>) -> Result<Option<Action>> + 'static,
     {
-        let action = Action::Question(prompt.to_string(), Box::new(answer_fn));
+        let action = Action::Question(prompt.to_string(), Box::new(answer_fn), None);
+        Some(action)
+    }
+
+    fn as_question_with<A, B>(prompt: &str, answer_fn: A, complete_fn: B) -> Option<Action>
+    where
+        A: for<'a> FnMut(&'a mut Environment, Option<&'a str>) -> Result<Option<Action>> + 'static,
+        B: Fn(CompleterEvent) -> Option<CompleterAction> + 'static,
+    {
+        let action = Action::Question(
+            prompt.to_string(),
+            Box::new(answer_fn),
+            Some(Box::new(complete_fn)),
+        );
         Some(action)
     }
 }
@@ -77,7 +91,7 @@ fn quit_continue(env: &mut Environment, dirty: Vec<u32>) -> Option<Action> {
             quit_save_answer(env, answer, dirty.clone())
         };
         let path = path_of(&get_editor(env, editor_id));
-        Action::as_question(&prompt_save_all(&path), answer_fn)
+        Action::as_question_with(&prompt_save_all(&path), answer_fn, complete::yes_no_all)
     } else {
         Action::as_quit()
     }
@@ -101,7 +115,7 @@ fn quit_save_answer(
             let answer_fn = move |env: &mut Environment, answer: Option<&str>| {
                 quit_save_answer(env, answer, dirty.clone())
             };
-            Action::as_question(&prompt_save_all(&path), answer_fn)
+            Action::as_question_with(&prompt_save_all(&path), answer_fn, complete::yes_no_all)
         }
         None => None,
     };

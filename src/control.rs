@@ -1,5 +1,6 @@
 //! Main controller.
 use crate::bind::Bindings;
+use crate::complete::CompleterFn;
 use crate::echo::Echo;
 use crate::editor::Align;
 use crate::env::{Environment, Focus};
@@ -167,9 +168,9 @@ impl Controller {
                     Some(Action::Echo(text)) => {
                         self.set_echo(text.as_str());
                     }
-                    Some(Action::Question(prompt, answer_fn)) => {
+                    Some(Action::Question(prompt, answer_fn, completer_fn)) => {
                         self.clear_echo();
-                        self.set_question(&prompt, answer_fn);
+                        self.set_question(&prompt, answer_fn, completer_fn);
                     }
                     None => {
                         self.clear_echo();
@@ -216,9 +217,9 @@ impl Controller {
             Some(Action::Echo(text)) => {
                 self.set_echo(text.as_str());
             }
-            Some(Action::Question(prompt, answer_fn)) => {
+            Some(Action::Question(prompt, answer_fn, completer_fn)) => {
                 self.clear_echo();
-                self.set_question(&prompt, answer_fn);
+                self.set_question(&prompt, answer_fn, completer_fn);
             }
             None => (),
         }
@@ -305,8 +306,13 @@ impl Controller {
         }
     }
 
-    fn set_question(&mut self, prompt: &str, answer_fn: Box<AnswerFn>) {
-        self.input.enable(prompt);
+    fn set_question(
+        &mut self,
+        prompt: &str,
+        answer_fn: Box<AnswerFn>,
+        completer_fn: Option<Box<CompleterFn>>,
+    ) {
+        self.input.enable(prompt, completer_fn);
         self.question = Some(answer_fn);
     }
 

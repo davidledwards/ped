@@ -20,6 +20,7 @@ mod bind;
 mod buffer;
 mod canvas;
 mod color;
+mod complete;
 mod config;
 mod control;
 mod echo;
