@@ -55,15 +55,7 @@ impl Action {
         Some(action)
     }
 
-    fn as_question<A>(prompt: &str, answer_fn: A) -> Option<Action>
-    where
-        A: for<'a> FnMut(&'a mut Environment, Option<&'a str>) -> Result<Option<Action>> + 'static,
-    {
-        let action = Action::Question(prompt.to_string(), Box::new(answer_fn), None);
-        Some(action)
-    }
-
-    fn as_question_with<A, B>(prompt: &str, answer_fn: A, complete_fn: B) -> Option<Action>
+    fn as_question<A, B>(prompt: &str, answer_fn: A, complete_fn: B) -> Option<Action>
     where
         A: for<'a> FnMut(&'a mut Environment, Option<&'a str>) -> Result<Option<Action>> + 'static,
         B: Fn(CompleterEvent) -> Option<CompleterAction> + 'static,
@@ -91,7 +83,7 @@ fn quit_continue(env: &mut Environment, dirty: Vec<u32>) -> Option<Action> {
             quit_save_answer(env, answer, dirty.clone())
         };
         let path = path_of(&get_editor(env, editor_id));
-        Action::as_question_with(&prompt_save_all(&path), answer_fn, complete::yes_no_all)
+        Action::as_question(&prompt_save(&path), answer_fn, complete::yes_no_all)
     } else {
         Action::as_quit()
     }
@@ -115,7 +107,7 @@ fn quit_save_answer(
             let answer_fn = move |env: &mut Environment, answer: Option<&str>| {
                 quit_save_answer(env, answer, dirty.clone())
             };
-            Action::as_question_with(&prompt_save_all(&path), answer_fn, complete::yes_no_all)
+            Action::as_question(&prompt_save(&path), answer_fn, complete::yes_no_all)
         }
         None => None,
     };
@@ -132,7 +124,7 @@ fn quit_save_first(env: &mut Environment, dirty: Vec<u32>) -> Option<Action> {
                 quit_save_override_answer(env, answer, dirty.clone())
             };
             let path = path_of(editor);
-            Action::as_question(&prompt_save_anyway(&path), answer_fn)
+            Action::as_question(&prompt_save_anyway(&path), answer_fn, complete::yes_no)
         }
         Ok(false) => {
             if let Err(e) = save_editor(editor) {
@@ -159,7 +151,11 @@ fn quit_save_all(env: &mut Environment, dirty: Vec<u32>) -> Option<Action> {
                     quit_save_override_answer(env, answer, dirty.clone())
                 };
                 let path = path_of(editor);
-                return Action::as_question(&prompt_save_anyway(&path), answer_fn);
+                return Action::as_question(
+                    &prompt_save_anyway(&path),
+                    answer_fn,
+                    complete::yes_no,
+                );
             }
             Ok(false) => {
                 if let Err(e) = save_editor(editor) {
@@ -200,7 +196,7 @@ fn quit_save_override_answer(
             let answer_fn = move |env: &mut Environment, answer: Option<&str>| {
                 quit_save_override_answer(env, answer, dirty.clone())
             };
-            Action::as_question(&prompt_save_anyway(&path), answer_fn)
+            Action::as_question(&prompt_save_anyway(&path), answer_fn, complete::yes_no)
         }
         None => None,
     };
@@ -438,7 +434,11 @@ fn goto_line(_: &mut Environment) -> Result<Option<Action>> {
         };
         Ok(action)
     };
-    Ok(Action::as_question(PROMPT_GOTO_LINE, answer_fn))
+    Ok(Action::as_question(
+        PROMPT_GOTO_LINE,
+        answer_fn,
+        complete::number::<u32>,
+    ))
 }
 
 /// Operation: `insert-line`
@@ -580,7 +580,11 @@ fn open_file_at(_: &mut Environment, place: Option<Placement>) -> Result<Option<
         };
         Ok(action)
     };
-    Ok(Action::as_question(PROMPT_OPEN_FILE, answer_fn))
+    Ok(Action::as_question(
+        PROMPT_OPEN_FILE,
+        answer_fn,
+        complete::file,
+    ))
 }
 
 /// Operation: `save-file`
@@ -590,7 +594,11 @@ fn save_file(env: &mut Environment) -> Result<Option<Action>> {
         match stale_editor(editor) {
             Ok(true) => {
                 let path = path_of(editor);
-                Action::as_question(&prompt_save_anyway(&path), save_override_answer)
+                Action::as_question(
+                    &prompt_save_anyway(&path),
+                    save_override_answer,
+                    complete::yes_no,
+                )
             }
             Ok(false) => {
                 if let Err(e) = save_editor(editor) {
@@ -603,7 +611,7 @@ fn save_file(env: &mut Environment) -> Result<Option<Action>> {
             Err(e) => Action::as_echo_error(&e),
         }
     } else {
-        Action::as_question(PROMPT_SAVE_AS, save_transient_answer)
+        Action::as_question(PROMPT_SAVE_AS, save_transient_answer, complete::file)
     };
     Ok(action)
 }
@@ -623,7 +631,11 @@ fn save_override_answer(env: &mut Environment, answer: Option<&str>) -> Result<O
         Some(yes_no) if yes_no == "n" => None,
         Some(_) => {
             let path = path_of(env.get_editor());
-            Action::as_question(&prompt_save_anyway(&path), save_override_answer)
+            Action::as_question(
+                &prompt_save_anyway(&path),
+                save_override_answer,
+                complete::yes_no,
+            )
         }
         None => None,
     };
@@ -659,7 +671,11 @@ fn save_transient_answer(env: &mut Environment, answer: Option<&str>) -> Result<
 
 /// Operation: `save-file-as`
 fn save_file_as(_: &mut Environment) -> Result<Option<Action>> {
-    Ok(Action::as_question(PROMPT_SAVE_AS, save_file_as_answer))
+    Ok(Action::as_question(
+        PROMPT_SAVE_AS,
+        save_file_as_answer,
+        complete::file,
+    ))
 }
 
 /// Question callback when saving editor using alternative path.
@@ -683,7 +699,7 @@ fn kill_window(env: &mut Environment) -> Result<Option<Action>> {
         let editor = env.get_editor();
         if is_persistent(editor) && editor.borrow().dirty() {
             let path = path_of(editor);
-            Action::as_question(&prompt_save(&path), kill_save_answer)
+            Action::as_question(&prompt_save(&path), kill_save_answer, complete::yes_no)
         } else {
             env.kill_window();
             None
@@ -711,7 +727,11 @@ fn kill_save_override_answer(
         Some(yes_no) if yes_no == "n" => None,
         Some(_) => {
             let path = path_of(env.get_editor());
-            Action::as_question(&prompt_save_anyway(&path), kill_save_override_answer)
+            Action::as_question(
+                &prompt_save_anyway(&path),
+                kill_save_override_answer,
+                complete::yes_no,
+            )
         }
         None => None,
     };
@@ -726,7 +746,11 @@ fn kill_save_answer(env: &mut Environment, answer: Option<&str>) -> Result<Optio
             match stale_editor(editor) {
                 Ok(true) => {
                     let path = path_of(editor);
-                    Action::as_question(&prompt_save_anyway(&path), kill_save_override_answer)
+                    Action::as_question(
+                        &prompt_save_anyway(&path),
+                        kill_save_override_answer,
+                        complete::yes_no,
+                    )
                 }
                 Ok(false) => {
                     if let Err(e) = save_editor(editor) {
@@ -749,7 +773,7 @@ fn kill_save_answer(env: &mut Environment, answer: Option<&str>) -> Result<Optio
         }
         Some(_) => {
             let path = path_of(env.get_editor());
-            Action::as_question(&prompt_save(&path), kill_save_answer)
+            Action::as_question(&prompt_save(&path), kill_save_answer, complete::yes_no)
         }
         None => None,
     };
@@ -944,15 +968,11 @@ const PROMPT_OPEN_FILE: &str = "open file:";
 const PROMPT_SAVE_AS: &str = "save as:";
 
 fn prompt_save(path: &str) -> String {
-    format!("{path}: save (y/n)?")
-}
-
-fn prompt_save_all(path: &str) -> String {
-    format!("{path}: save (y/n/a)?")
+    format!("{path}: save?")
 }
 
 fn prompt_save_anyway(path: &str) -> String {
-    format!("{path}: file in storage is newer, save anyway (y/n)?")
+    format!("{path}: file in storage is newer, save anyway?")
 }
 
 // This section contains string constants and formatting functions for echoing.
@@ -960,7 +980,7 @@ const ECHO_CLOSE_WINDOW_REFUSED: &str = "cannot close only window";
 const ECHO_CREATE_WINDOW_REFUSED: &str = "unable to create new window";
 
 fn echo_invalid_line(s: &str) -> String {
-    format!("{s}: invalid line")
+    format!("{s}: invalid line number")
 }
 
 fn echo_saved(path: &str) -> String {
