@@ -1,7 +1,7 @@
 //! # User interaction
 use crate::env::Environment;
 use crate::op::Action;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// Defines an interface for coordinating the solicitation of input from a user.
 pub trait Inquirer {
@@ -236,25 +236,45 @@ impl FileCompleter {
         }
     }
 
-    fn get_completions(input: &str) -> Vec<String> {
-        let input_path = Path::new(input);
+    fn find_matches(&self, prefix: &str) -> Vec<String> {
+        self.completions
+            .iter()
+            .filter(|p| p.starts_with(prefix))
+            .cloned()
+            .collect()
+    }
 
-        let dir_path = if input_path.is_dir() {
-            &input_path
+    /// Splits the `path` prefix into a normalized prefix and its directory component.
+    ///
+    /// The normalized prefix, returned as the first tuple value, may be different than
+    /// the value of `path` due to some nuances in file enumeration. Therefore, the
+    /// normalized prefix must be used when matching candidates.
+    fn split_path(path: &str) -> (String, PathBuf) {
+        fn no_parent(path: &Path) -> (PathBuf, PathBuf) {
+            let dir = PathBuf::from(".");
+            let mut prefix = dir.clone();
+            prefix.push(path);
+            (prefix, dir)
+        }
+        let path = Path::new(path);
+        let (prefix, dir) = if path.is_dir() {
+            (path.to_path_buf(), path.to_path_buf())
         } else {
-            match input_path.parent() {
-                Some(p) if p == Path::new("") => Path::new("."),
-                Some(p) => p,
-                None => Path::new("."),
+            match path.parent() {
+                Some(parent) if parent == Path::new("") => no_parent(path),
+                Some(parent) => (path.to_path_buf(), parent.to_path_buf()),
+                None => no_parent(path),
             }
         };
+        (prefix.display().to_string(), dir)
+    }
 
-        match dir_path.read_dir() {
+    fn get_completions(dir: &Path) -> Vec<String> {
+        match dir.read_dir() {
             Ok(entries) => entries
                 .flat_map(|entry| entry.ok().map(|e| e.path().display().to_string()))
                 .collect(),
             Err(_) => {
-                // consider returning result instead of empty vector
                 vec![]
             }
         }
@@ -267,11 +287,26 @@ impl Completer for FileCompleter {
     }
 
     fn evaluate(&mut self, value: &str) -> Option<String> {
-        None
+        let (prefix, _) = Self::split_path(value);
+        let matches = self.find_matches(&prefix);
+        if matches.len() == 1 {
+            matches[0].strip_prefix(&prefix).map(|s| s.to_string())
+        } else {
+            None
+        }
     }
 
     fn suggest(&mut self, value: &str) -> (Option<String>, Option<String>) {
-        (None, None)
+        let (prefix, dir) = Self::split_path(value);
+        self.completions = Self::get_completions(&dir);
+
+        let matches = self.find_matches(&prefix);
+
+        match matches.len() {
+            0 => (None, Some(" (no matches)".to_string())),
+            1 => (Some(matches[0].clone()), None),
+            n => (None, Some(format!(" ({n} matches)"))),
+        }
     }
 
     fn accept(&mut self, value: &str) -> Option<String> {

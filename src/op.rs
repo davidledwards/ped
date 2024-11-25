@@ -588,8 +588,7 @@ impl Inquirer for Open {
     }
 
     fn completer(&self) -> Box<dyn Completer> {
-        // todo: change this to file completer
-        user::null_completer()
+        user::file_completer()
     }
 
     fn respond(&mut self, env: &mut Environment, value: Option<&str>) -> Option<Action> {
