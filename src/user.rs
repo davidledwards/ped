@@ -230,7 +230,8 @@ impl Completer for NumberCompleter {
 
 struct FileCompleter {
     dir: PathBuf,
-    completions: Option<(PathBuf, Vec<String>)>,
+    comp_dir: PathBuf,
+    comps: Vec<String>,
     matches: Vec<String>,
     last_match: Option<usize>,
 }
@@ -238,36 +239,28 @@ struct FileCompleter {
 impl FileCompleter {
     fn new(dir: PathBuf) -> FileCompleter {
         FileCompleter {
-            dir,
-            completions: None,
+            dir: dir.clone(),
+            comp_dir: dir,
+            comps: Vec::new(),
             matches: Vec::new(),
             last_match: None,
         }
     }
 
     fn find_matches(&self, prefix: &str) -> Vec<String> {
-        if let Some((_, ref paths)) = self.completions {
-            paths
-                .iter()
-                .filter(|path| path.starts_with(prefix))
-                .cloned()
-                .collect()
-        } else {
-            vec![]
-        }
-
-        // self.completions
-        //     .iter()
-        //     .filter(|p| p.starts_with(prefix))
-        //     .cloned()
-        //     .collect()
+        self.comps
+            .iter()
+            .filter(|path| path.starts_with(prefix))
+            .cloned()
+            .collect()
     }
 
     fn refresh_completions(&mut self, path: &Path, matches: bool) -> (String, PathBuf) {
         let (prefix, dir) = Self::split_path(&path);
-        let stale = self.is_stale(&dir);
+        let stale = self.comp_dir != dir;
         if stale {
-            self.completions = Some((dir.to_path_buf(), Self::get_completions(&dir)));
+            self.comp_dir = dir.clone();
+            self.comps = Self::get_completions(&self.comp_dir);
         }
         if stale || matches {
             self.matches = self.find_matches(&prefix);
@@ -276,25 +269,12 @@ impl FileCompleter {
         (prefix, dir)
     }
 
-    fn is_stale(&self, dir: &Path) -> bool {
-        match self.completions {
-            Some((ref comp_dir, _)) => comp_dir != dir,
-            None => true,
-        }
-    }
-
     /// Splits the `path` prefix into a normalized prefix and its directory component.
     ///
     /// The normalized prefix, returned as the first tuple value, may be different than
     /// the value of `path` due to some nuances in file enumeration. Therefore, the
     /// normalized prefix must be used when matching candidates.
     fn split_path(path: &Path) -> (String, PathBuf) {
-        fn no_parent(path: &Path) -> (PathBuf, PathBuf) {
-            let dir = PathBuf::from(".");
-            // let mut prefix = dir.clone();
-            // prefix.push(path);
-            (dir.join(path), dir)
-        }
         let (prefix, dir) = if path.is_dir() {
             (path.to_path_buf(), path.to_path_buf())
         } else {
@@ -303,7 +283,6 @@ impl FileCompleter {
                     if p == Path::new("") {
                         let dir = PathBuf::from(".");
                         (dir.join(path), dir)
-                        //                        no_parent(path)
                     } else {
                         (path.to_path_buf(), p.to_path_buf())
                     }
@@ -311,13 +290,7 @@ impl FileCompleter {
                 .unwrap_or_else(|| {
                     let dir = PathBuf::from(".");
                     (dir.join(path), dir)
-                    //                    no_parent(path)
                 })
-            // match path.parent() {
-            //     Some(parent) if parent == Path::new("") => no_parent(path),
-            //     Some(parent) => (path.to_path_buf(), parent.to_path_buf()),
-            //     None => no_parent(path),
-            // }
         };
         (prefix.display().to_string(), dir)
     }
@@ -338,6 +311,8 @@ impl FileCompleter {
 
 impl Completer for FileCompleter {
     fn prepare(&mut self) -> Option<String> {
+        self.comps = Self::get_completions(&self.comp_dir);
+        self.matches = self.find_matches("");
         None
     }
 
@@ -354,7 +329,7 @@ impl Completer for FileCompleter {
 
     fn suggest(&mut self, value: &str) -> (Option<String>, Option<String>) {
         let path = self.dir.join(value);
-        self.refresh_completions(&path, false);
+        //        self.refresh_completions(&path, false);
 
         match self.matches.len() {
             0 => {
@@ -363,6 +338,7 @@ impl Completer for FileCompleter {
                 (None, Some(hint))
             }
             1 => {
+                self.last_match = Some(0);
                 let dir = self.dir.display().to_string();
                 let replace = self.matches[0]
                     .strip_prefix(&dir)
@@ -374,7 +350,6 @@ impl Completer for FileCompleter {
                         }
                     })
                     .unwrap_or(self.matches[0].clone());
-                //                let replace = self.matches[0].clone();
                 (Some(replace), None)
             }
             n => {
