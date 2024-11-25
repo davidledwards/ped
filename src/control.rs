@@ -1,14 +1,14 @@
 //! Main controller.
 use crate::bind::Bindings;
-use crate::complete::CompleterFn;
 use crate::echo::Echo;
 use crate::editor::Align;
 use crate::env::{Environment, Focus};
 use crate::error::Result;
 use crate::input::{Directive, InputEditor};
 use crate::key::{Key, Keyboard, CTRL_G};
-use crate::op::{self, Action, AnswerFn};
+use crate::op::{self, Action};
 use crate::term;
+use crate::user::Inquirer;
 use crate::workspace::{Placement, Workspace};
 use crate::{PACKAGE_NAME, PACKAGE_VERSION};
 use std::fmt;
@@ -38,7 +38,7 @@ pub struct Controller {
     input: InputEditor,
 
     /// An optional question solicited by an editing function or `None` otherwise.
-    question: Option<Box<AnswerFn>>,
+    question: Option<Box<dyn Inquirer>>,
 
     /// An optional time capturing the last terminal size change event.
     term_changed: Option<Instant>,
@@ -168,9 +168,9 @@ impl Controller {
                     Some(Action::Echo(text)) => {
                         self.set_echo(text.as_str());
                     }
-                    Some(Action::Question(prompt, answer_fn, completer_fn)) => {
+                    Some(Action::Question(inquirer)) => {
                         self.clear_echo();
-                        self.set_question(&prompt, answer_fn, completer_fn);
+                        self.set_question(inquirer);
                     }
                     None => {
                         self.clear_echo();
@@ -192,17 +192,18 @@ impl Controller {
     }
 
     fn process_question(&mut self, key: Key) -> Result<Step> {
-        let answer_fn = self.question.as_mut().unwrap();
+        let inquirer = self.question.as_mut().unwrap();
+        //        let answer_fn = self.question.as_mut().unwrap();
         let action = if key == CTRL_G {
-            let action = answer_fn(&mut self.env, None)?;
+            let action = inquirer.respond(&mut self.env, None);
             self.clear_question();
             action
         } else {
             match self.input.process_key(&key) {
                 Directive::Continue => None,
                 Directive::Accept => {
-                    let answer = self.input.buffer();
-                    let action = answer_fn(&mut self.env, Some(&answer))?;
+                    let value = self.input.value();
+                    let action = inquirer.respond(&mut self.env, Some(&value));
                     self.clear_question();
                     action
                 }
@@ -217,9 +218,9 @@ impl Controller {
             Some(Action::Echo(text)) => {
                 self.set_echo(text.as_str());
             }
-            Some(Action::Question(prompt, answer_fn, completer_fn)) => {
+            Some(Action::Question(inquirer)) => {
                 self.clear_echo();
-                self.set_question(&prompt, answer_fn, completer_fn);
+                self.set_question(inquirer);
             }
             None => (),
         }
@@ -306,14 +307,9 @@ impl Controller {
         }
     }
 
-    fn set_question(
-        &mut self,
-        prompt: &str,
-        answer_fn: Box<AnswerFn>,
-        completer_fn: Option<Box<CompleterFn>>,
-    ) {
-        self.input.enable(prompt, completer_fn);
-        self.question = Some(answer_fn);
+    fn set_question(&mut self, inquirer: Box<dyn Inquirer>) {
+        self.input.enable(&inquirer.prompt(), inquirer.completer());
+        self.question = Some(inquirer);
     }
 
     fn clear_question(&mut self) {

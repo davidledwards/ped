@@ -1,9 +1,9 @@
 //! Input editor.
 use crate::canvas::Canvas;
-use crate::complete::{CompleterAction, CompleterEvent, CompleterFn};
 use crate::grid::Cell;
 use crate::key::*;
 use crate::size::{Point, Size};
+use crate::user::{self, Completer};
 use crate::workspace::WorkspaceRef;
 use crate::writer::Writer;
 use std::cmp;
@@ -15,9 +15,9 @@ pub struct InputEditor {
     /// Contains a prompt when the input editor is enabled, otherwise `None`.
     prompt: Option<String>,
 
-    /// A completion function that optionally assigned when the editor is enabled,
-    /// otherwise it points to [`null_completer`](Self::null_completer).
-    completer: Box<CompleterFn>,
+    /// A completer assigned when the editor is enabled, otherwise it assumes the value
+    /// of [`null_completer`](user::null_completer).
+    completer: Box<dyn Completer>,
 
     /// Represents the number of columns reserved for the prompt area when enabled,
     /// otherwise `0`.
@@ -62,7 +62,7 @@ impl InputEditor {
         InputEditor {
             workspace,
             prompt: None,
-            completer: Self::null_completer(),
+            completer: user::null_completer(),
             prompt_cols: 0,
             input_cols: 0,
             canvas: Canvas::zero(),
@@ -74,23 +74,26 @@ impl InputEditor {
         }
     }
 
-    /// Enables the editor by associating `prompt` and an optional `completer`.
-    pub fn enable(&mut self, prompt: &str, completer: Option<Box<CompleterFn>>) {
+    /// Enables the editor by associating a `prompt` and a `completer`.
+    pub fn enable(&mut self, prompt: &str, completer: Box<dyn Completer>) {
         self.prompt = Some(prompt.to_string());
-        self.completer = completer.unwrap_or_else(|| Self::null_completer());
+        self.completer = completer;
         self.set_sizes();
         self.input.clear();
         self.len = 0;
         self.pos = 0;
         self.cursor = 0;
-        self.hint = None;
-        self.dispatch_init().draw();
+        self.hint = self.completer.prepare();
+        if let Some(hint) = self.hint.as_ref() {
+            self.input.extend(hint.chars());
+        }
+        self.draw();
     }
 
     /// Disables the editor and clears the area on the workspace.
     pub fn disable(&mut self) {
         self.prompt = None;
-        self.completer = Self::null_completer();
+        self.completer = user::null_completer();
         self.set_sizes();
         self.input.clear();
         self.len = 0;
@@ -101,7 +104,7 @@ impl InputEditor {
     }
 
     /// Returns the contents of the user-provided portion of the input buffer.
-    pub fn buffer(&self) -> String {
+    pub fn value(&self) -> String {
         self.input.iter().take(self.len).collect()
     }
 
@@ -128,7 +131,8 @@ impl InputEditor {
                 self.len += 1;
                 self.pos += 1;
                 self.cursor = cmp::min(self.cursor + 1, self.input_cols - 1);
-                self.dispatch_edit().draw_input();
+                self.evaluate();
+                self.draw_input();
             }
             DELETE => {
                 // Delete character left of cursor.
@@ -137,16 +141,17 @@ impl InputEditor {
                     self.pos -= 1;
                     self.input.remove(self.pos);
                     self.cursor = self.cursor.saturating_sub(1);
-                    self.dispatch_edit().draw_input();
+                    self.evaluate();
+                    self.draw_input();
                 }
             }
             CTRL_D => {
                 // Delete character right of cursor.
                 if self.pos < self.len {
-                    // if self.pos < self.input.len() {
                     self.input.remove(self.pos);
                     self.len -= 1;
-                    self.dispatch_edit().draw_input();
+                    self.evaluate();
+                    self.draw_input();
                 }
             }
             CTRL_J => {
@@ -156,23 +161,22 @@ impl InputEditor {
                     self.len -= self.pos;
                     self.pos = 0;
                     self.cursor = 0;
-                    self.dispatch_edit().draw_input();
+                    self.evaluate();
+                    self.draw_input();
                 }
             }
             CTRL_K => {
                 // Delete characters right of cursor to end of line.
                 if self.pos < self.len {
-                    // if self.pos < self.input.len() {
-                    // self.input.truncate(self.pos);
                     self.input.drain(self.pos..self.len);
                     self.len = self.pos;
-                    self.dispatch_edit().draw_input();
+                    self.evaluate();
+                    self.draw_input();
                 }
             }
             CTRL_F | RIGHT => {
                 // Move cursor right.
                 if self.pos < self.len {
-                    // if self.pos < self.input.len() {
                     self.pos += 1;
                     self.cursor = cmp::min(self.cursor + 1, self.input_cols - 1);
                     self.draw_input();
@@ -197,17 +201,17 @@ impl InputEditor {
             CTRL_E | END => {
                 // Move cursor to end of line.
                 if self.pos < self.len {
-                    // if self.pos < self.input.len() {
                     self.pos = self.len;
                     self.cursor = cmp::min(self.pos as u32, self.input_cols - 1);
                     self.draw_input();
                 }
             }
             TAB => {
-                self.dispatch_suggest().draw_input();
+                self.suggest();
+                self.draw_input();
             }
             CTRL_M => {
-                if self.dispatch_final() {
+                if self.accept() {
                     return Directive::Accept;
                 }
             }
@@ -219,69 +223,54 @@ impl InputEditor {
         Directive::Continue
     }
 
-    fn dispatch_final(&mut self) -> bool {
-        let input = self.buffer();
-        let action = (self.completer)(CompleterEvent::Finalize(input));
-        let done = match action {
-            Some(CompleterAction::Accept(_)) | None => true,
-            _ => false,
-        };
-        self.process_action(action);
-        done
+    /// Calls the attached completer to evaluate the input value in its current form.
+    fn evaluate(&mut self) {
+        if let Some(hint) = (self.completer).evaluate(&self.value()) {
+            self.input.truncate(self.len);
+            self.input.extend(hint.chars());
+            self.hint = Some(hint);
+        } else if let Some(_) = self.hint.take() {
+            self.input.truncate(self.len);
+        }
     }
 
-    /// Calls the completer with a [`CompleterEvent::Initialize`] event.
-    fn dispatch_init(&mut self) -> &mut Self {
-        let action = (self.completer)(CompleterEvent::Initialize);
-        self.process_action(action);
-        self
-    }
-
-    /// Calls the completer with an *edit* event.
-    fn dispatch_edit(&mut self) -> &mut Self {
-        let value = self.buffer();
-        let action = (self.completer)(CompleterEvent::Edit(value));
-        self.process_action(action);
-        self
-    }
-
-    /// Calls the completer with a *suggest* event.
-    fn dispatch_suggest(&mut self) -> &mut Self {
-        let value = self.buffer();
-        let action = (self.completer)(CompleterEvent::Suggest(value));
-        self.process_action(action);
-        self
-    }
-
-    /// Processes the action resulting from a call to the completer.
-    fn process_action(&mut self, action: Option<CompleterAction>) {
-        if let Some(action) = action {
-            match action {
-                CompleterAction::Hint(hint) => {
-                    self.input.truncate(self.len);
+    /// Calls the attached completer to make a suggestion based on the input value in
+    /// its current form.
+    fn suggest(&mut self) {
+        match (self.completer).suggest(&self.value()) {
+            (Some(replace), hint) => {
+                self.input = replace.chars().collect();
+                self.len = self.input.len();
+                if let Some(hint) = hint.as_ref() {
                     self.input.extend(hint.chars());
-                    self.hint = Some(hint);
                 }
-                CompleterAction::Replace(input, hint) => {
-                    self.input = input.chars().collect();
-                    self.len = self.input.len();
-                    if let Some(hint) = hint.as_ref() {
-                        self.input.extend(hint.chars());
-                    }
-                    self.pos = self.len;
-                    self.cursor = cmp::min(self.pos as u32, self.input_cols - 1);
-                    self.hint = hint;
-                }
-                CompleterAction::Accept(input) => {
-                    self.input = input.chars().collect();
-                    self.len = self.input.len();
-                    self.hint = None;
-                }
+                self.pos = self.len;
+                self.cursor = cmp::min(self.pos as u32, self.input_cols - 1);
+                self.hint = hint;
             }
-        } else {
-            if let Some(_) = self.hint.take() {
+            (None, Some(hint)) => {
                 self.input.truncate(self.len);
+                self.input.extend(hint.chars());
+                self.hint = Some(hint);
             }
+            (None, None) => {
+                if let Some(_) = self.hint.take() {
+                    self.input.truncate(self.len);
+                }
+            }
+        }
+    }
+
+    /// Calls the attached completer to accept or reject the input value in its
+    /// form, returning `true` if the accepted and `false` otherwise.
+    fn accept(&mut self) -> bool {
+        if let Some(value) = (self.completer).accept(&self.value()) {
+            self.input = value.chars().collect();
+            self.len = self.input.len();
+            self.hint = None;
+            true
+        } else {
+            false
         }
     }
 
@@ -386,14 +375,5 @@ impl InputEditor {
         // Send pending changes to canvas and set new cursor position.
         self.canvas.draw();
         self.canvas.set_cursor(Point::new(0, self.cursor));
-    }
-
-    fn null_completer() -> Box<CompleterFn> {
-        Box::new(Self::null_complete)
-    }
-
-    /// A completer that always returns `None`.
-    fn null_complete(_: CompleterEvent) -> Option<CompleterAction> {
-        None
     }
 }

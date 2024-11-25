@@ -11,12 +11,12 @@
 //! See [`Bindings`](crate::bind::Bindings) for further details on binding keys
 //! at runtime.
 use crate::buffer::Buffer;
-use crate::complete::{self, CompleterAction, CompleterEvent, CompleterFn};
 use crate::editor::{self, Align, EditorRef, Storage};
 use crate::env::{Environment, Focus};
 use crate::error::{Error, Result};
 use crate::io;
 use crate::size::{Point, Size};
+use crate::user::{self, Completer, Inquirer};
 use crate::workspace::Placement;
 use std::collections::HashMap;
 use std::io::ErrorKind;
@@ -30,12 +30,8 @@ pub type OpFn = fn(&mut Environment) -> Result<Option<Action>>;
 pub enum Action {
     Quit,
     Echo(String),
-    Question(String, Box<AnswerFn>, Option<Box<CompleterFn>>),
+    Question(Box<dyn Inquirer>),
 }
-
-/// A callback function that handles answers to [`Action::Question`] actions.
-pub type AnswerFn =
-    dyn for<'a> FnMut(&'a mut Environment, Option<&'a str>) -> Result<Option<Action>>;
 
 /// Map of editing operations to editing functions.
 pub type OpMap = HashMap<&'static str, OpFn>;
@@ -45,162 +41,153 @@ impl Action {
         Some(Action::Quit)
     }
 
-    fn as_echo(text: &str) -> Option<Action> {
+    fn as_echo<T: ToString + ?Sized>(text: &T) -> Option<Action> {
         let action = Action::Echo(text.to_string());
         Some(action)
     }
 
-    fn as_echo_error(e: &Error) -> Option<Action> {
-        let action = Action::Echo(e.to_string());
-        Some(action)
-    }
-
-    fn as_question<A, B>(prompt: &str, answer_fn: A, complete_fn: B) -> Option<Action>
-    where
-        A: for<'a> FnMut(&'a mut Environment, Option<&'a str>) -> Result<Option<Action>> + 'static,
-        B: Fn(CompleterEvent) -> Option<CompleterAction> + 'static,
-    {
-        let action = Action::Question(
-            prompt.to_string(),
-            Box::new(answer_fn),
-            Some(Box::new(complete_fn)),
-        );
+    fn as_question(inquirer: Box<dyn Inquirer>) -> Option<Action> {
+        let action = Action::Question(inquirer);
         Some(action)
     }
 }
 
 /// Operation: `quit`
 fn quit(env: &mut Environment) -> Result<Option<Action>> {
-    let action = quit_continue(env, dirty_editors(env));
+    let action = Quit::start(env);
     Ok(action)
 }
 
-/// Continues the process of saving editors before quitting until `dirty` is empty,
-/// an error occurs during saving, or the process is cancelled.
-fn quit_continue(env: &mut Environment, dirty: Vec<u32>) -> Option<Action> {
-    if let Some(editor_id) = dirty.first().cloned() {
-        let answer_fn = move |env: &mut Environment, answer: Option<&str>| {
-            quit_save_answer(env, answer, dirty.clone())
-        };
-        let path = path_of(&get_editor(env, editor_id));
-        Action::as_question(&prompt_save(&path), answer_fn, complete::yes_no_all)
-    } else {
+struct Quit {
+    dirty: Vec<EditorRef>,
+}
+
+impl Quit {
+    /// Starts the process of saving dirty editors before quitting.
+    fn start(env: &Environment) -> Option<Action> {
+        let dirty = dirty_editors(env);
+        if dirty.len() > 0 {
+            Action::as_question(Quit { dirty }.to_box())
+        } else {
+            Action::as_quit()
+        }
+    }
+
+    /// Continues the process of saving editors if `dirty` is not empty.
+    fn next(dirty: &Vec<EditorRef>) -> Option<Action> {
+        if dirty.len() > 1 {
+            let dirty = dirty[1..].to_vec();
+            Action::as_question(Quit { dirty }.to_box())
+        } else {
+            Action::as_quit()
+        }
+    }
+
+    fn to_box(self) -> Box<dyn Inquirer> {
+        Box::new(self)
+    }
+
+    /// Saves the first dirty editor and then continues to the next editor.
+    fn save_first(&mut self) -> Option<Action> {
+        let editor = &self.dirty[0];
+        match stale_editor(editor) {
+            Ok(true) => QuitOverride::question(self.dirty.clone()),
+            Ok(false) => {
+                if let Err(e) = save_editor(editor) {
+                    Action::as_echo(&e)
+                } else {
+                    Quit::next(&self.dirty)
+                }
+            }
+            Err(e) => Action::as_echo(&e),
+        }
+    }
+
+    /// Saves all dirty editors.
+    fn save_all(&mut self) -> Option<Action> {
+        let mut dirty_iter = self.dirty.iter();
+        while let Some(editor) = dirty_iter.next() {
+            match stale_editor(editor) {
+                Ok(true) => {
+                    let mut dirty = vec![editor.clone()];
+                    dirty.extend(dirty_iter.cloned());
+                    return QuitOverride::question(dirty);
+                }
+                Ok(false) => {
+                    if let Err(e) = save_editor(editor) {
+                        return Action::as_echo(&e);
+                    }
+                }
+                Err(e) => {
+                    return Action::as_echo(&e);
+                }
+            }
+        }
         Action::as_quit()
     }
 }
 
-/// Question callback when saving dirty editors during the quit process.
-fn quit_save_answer(
-    env: &mut Environment,
-    answer: Option<&str>,
-    dirty: Vec<u32>,
-) -> Result<Option<Action>> {
-    let action = match answer {
-        Some(yes_no) if yes_no == "y" => quit_save_first(env, dirty),
-        Some(yes_no) if yes_no == "a" => quit_save_all(env, dirty),
-        Some(yes_no) if yes_no == "n" => {
-            let dirty = dirty.iter().cloned().skip(1).collect();
-            quit_continue(env, dirty)
-        }
-        Some(_) => {
-            let path = path_of(&get_editor(env, dirty[0]));
-            let answer_fn = move |env: &mut Environment, answer: Option<&str>| {
-                quit_save_answer(env, answer, dirty.clone())
-            };
-            Action::as_question(&prompt_save(&path), answer_fn, complete::yes_no_all)
-        }
-        None => None,
-    };
-    Ok(action)
-}
+impl Inquirer for Quit {
+    fn prompt(&self) -> String {
+        let path = path_of(&self.dirty[0]);
+        format!("{path}: save?")
+    }
 
-/// Saves the first editor in `dirty` and then continues to the next editor.
-fn quit_save_first(env: &mut Environment, dirty: Vec<u32>) -> Option<Action> {
-    let editor_id = *dirty.get(0).expect("expecting at least one dirty editor");
-    let editor = get_editor(env, editor_id);
-    match stale_editor(editor) {
-        Ok(true) => {
-            let answer_fn = move |env: &mut Environment, answer: Option<&str>| {
-                quit_save_override_answer(env, answer, dirty.clone())
-            };
-            let path = path_of(editor);
-            Action::as_question(&prompt_save_anyway(&path), answer_fn, complete::yes_no)
+    fn completer(&self) -> Box<dyn Completer> {
+        user::yes_no_all_completer()
+    }
+
+    fn respond(&mut self, env: &mut Environment, value: Option<&str>) -> Option<Action> {
+        match value {
+            Some(yes_no) if yes_no == "y" => self.save_first(),
+            Some(yes_no) if yes_no == "a" => self.save_all(),
+            Some(yes_no) if yes_no == "n" => Quit::next(&self.dirty),
+            Some(_) => Quit::start(env),
+            None => None,
         }
-        Ok(false) => {
-            if let Err(e) = save_editor(editor) {
-                Action::as_echo_error(&e)
-            } else {
-                let dirty = dirty.iter().cloned().skip(1).collect();
-                quit_continue(env, dirty)
-            }
-        }
-        Err(e) => Action::as_echo_error(&e),
     }
 }
 
-/// Saves all editors in `dirty`.
-fn quit_save_all(env: &mut Environment, dirty: Vec<u32>) -> Option<Action> {
-    let mut dirty_iter = dirty.iter().cloned();
-    while let Some(editor_id) = dirty_iter.next() {
-        let editor = get_editor(env, editor_id);
-        match stale_editor(editor) {
-            Ok(true) => {
-                let mut dirty = vec![editor_id];
-                dirty.extend(dirty_iter);
-                let answer_fn = move |env: &mut Environment, answer: Option<&str>| {
-                    quit_save_override_answer(env, answer, dirty.clone())
-                };
-                let path = path_of(editor);
-                return Action::as_question(
-                    &prompt_save_anyway(&path),
-                    answer_fn,
-                    complete::yes_no,
-                );
-            }
-            Ok(false) => {
-                if let Err(e) = save_editor(editor) {
-                    return Action::as_echo_error(&e);
-                }
-            }
-            Err(e) => {
-                return Action::as_echo_error(&e);
-            }
-        }
-    }
-    Action::as_quit()
+struct QuitOverride {
+    dirty: Vec<EditorRef>,
 }
 
-/// Question callback when requesting override to save an editor during the quit
-/// process.
-fn quit_save_override_answer(
-    env: &mut Environment,
-    answer: Option<&str>,
-    dirty: Vec<u32>,
-) -> Result<Option<Action>> {
-    let action = match answer {
-        Some(yes_no) if yes_no == "y" => {
-            let editor = get_editor(env, dirty[0]);
-            if let Err(e) = save_editor(editor) {
-                Action::as_echo_error(&e)
-            } else {
-                let dirty = dirty.iter().cloned().skip(1).collect();
-                quit_continue(env, dirty)
-            }
+impl QuitOverride {
+    fn question(dirty: Vec<EditorRef>) -> Option<Action> {
+        Action::as_question(QuitOverride { dirty }.to_box())
+    }
+
+    fn to_box(self) -> Box<dyn Inquirer> {
+        Box::new(self)
+    }
+
+    fn save(&mut self) -> Option<Action> {
+        if let Err(e) = save_editor(&self.dirty[0]) {
+            Action::as_echo(&e)
+        } else {
+            Quit::next(&self.dirty)
         }
-        Some(yes_no) if yes_no == "n" => {
-            let dirty = dirty.iter().cloned().skip(1).collect();
-            quit_continue(env, dirty)
+    }
+}
+
+impl Inquirer for QuitOverride {
+    fn prompt(&self) -> String {
+        let path = path_of(&self.dirty[0]);
+        format!("{path}: file in storage is newer, save anyway?")
+    }
+
+    fn completer(&self) -> Box<dyn Completer> {
+        user::yes_no_completer()
+    }
+
+    fn respond(&mut self, _: &mut Environment, value: Option<&str>) -> Option<Action> {
+        match value {
+            Some(yes_no) if yes_no == "y" => self.save(),
+            Some(yes_no) if yes_no == "n" => Quit::next(&self.dirty),
+            Some(_) => QuitOverride::question(self.dirty.clone()),
+            None => None,
         }
-        Some(_) => {
-            let path = path_of(&get_editor(env, dirty[0]));
-            let answer_fn = move |env: &mut Environment, answer: Option<&str>| {
-                quit_save_override_answer(env, answer, dirty.clone())
-            };
-            Action::as_question(&prompt_save_anyway(&path), answer_fn, complete::yes_no)
-        }
-        None => None,
-    };
-    Ok(action)
+    }
 }
 
 /// Operation: `help`
@@ -418,10 +405,31 @@ fn set_mark(env: &mut Environment) -> Result<Option<Action>> {
     Ok(None)
 }
 
-/// Operation: `goto-line`
-fn goto_line(_: &mut Environment) -> Result<Option<Action>> {
-    let answer_fn = move |env: &mut Environment, answer: Option<&str>| {
-        let action = if let Some(s) = answer {
+pub struct Goto;
+
+impl Goto {
+    const PROMPT: &str = "goto line:";
+
+    fn question() -> Option<Action> {
+        Action::as_question(Goto.to_box())
+    }
+
+    fn to_box(self) -> Box<dyn Inquirer> {
+        Box::new(self)
+    }
+}
+
+impl Inquirer for Goto {
+    fn prompt(&self) -> String {
+        Self::PROMPT.to_string()
+    }
+
+    fn completer(&self) -> Box<dyn Completer> {
+        user::number_completer()
+    }
+
+    fn respond(&mut self, env: &mut Environment, value: Option<&str>) -> Option<Action> {
+        if let Some(s) = value {
             if let Ok(line) = s.parse::<u32>() {
                 let line = if line > 0 { line - 1 } else { line };
                 env.get_editor().borrow_mut().move_line(line, Align::Center);
@@ -431,14 +439,13 @@ fn goto_line(_: &mut Environment) -> Result<Option<Action>> {
             }
         } else {
             None
-        };
-        Ok(action)
-    };
-    Ok(Action::as_question(
-        PROMPT_GOTO_LINE,
-        answer_fn,
-        complete::number::<u32>,
-    ))
+        }
+    }
+}
+
+/// Operation: `goto-line`
+fn goto_line(_: &mut Environment) -> Result<Option<Action>> {
+    Ok(Goto::question())
 }
 
 /// Operation: `insert-line`
@@ -530,38 +537,66 @@ fn cut(env: &mut Environment) -> Result<Option<Action>> {
 }
 
 /// Operation: `open-file`
-fn open_file(env: &mut Environment) -> Result<Option<Action>> {
-    open_file_at(env, None)
+fn open_file(_: &mut Environment) -> Result<Option<Action>> {
+    let action = Open::question(None);
+    Ok(action)
 }
 
 /// Operation: `open-file-top`
-fn open_file_top(env: &mut Environment) -> Result<Option<Action>> {
-    open_file_at(env, Some(Placement::Top))
+fn open_file_top(_: &mut Environment) -> Result<Option<Action>> {
+    let action = Open::question(Some(Placement::Top));
+    Ok(action)
 }
 
 /// Operation: `open-file-bottom`
-fn open_file_bottom(env: &mut Environment) -> Result<Option<Action>> {
-    open_file_at(env, Some(Placement::Bottom))
+fn open_file_bottom(_: &mut Environment) -> Result<Option<Action>> {
+    let action = Open::question(Some(Placement::Bottom));
+    Ok(action)
 }
 
 /// Operation: `open-file-above`
 fn open_file_above(env: &mut Environment) -> Result<Option<Action>> {
-    open_file_at(env, Some(Placement::Above(env.get_active())))
+    let action = Open::question(Some(Placement::Above(env.get_active())));
+    Ok(action)
 }
 
 /// Operation: `open-file-below`
 fn open_file_below(env: &mut Environment) -> Result<Option<Action>> {
-    open_file_at(env, Some(Placement::Below(env.get_active())))
+    let action = Open::question(Some(Placement::Below(env.get_active())));
+    Ok(action)
 }
 
-/// Various `open-file-*` operations delegate to this functions, but provide `place`
-/// to determine the placement of the new window.
-fn open_file_at(_: &mut Environment, place: Option<Placement>) -> Result<Option<Action>> {
-    let answer_fn = move |env: &mut Environment, answer: Option<&str>| {
-        let action = if let Some(path) = answer {
+struct Open {
+    place: Option<Placement>,
+}
+
+impl Open {
+    const PROMPT: &str = "open file:";
+
+    fn question(place: Option<Placement>) -> Option<Action> {
+        Action::as_question(Open { place }.to_box())
+    }
+
+    fn to_box(self) -> Box<dyn Inquirer> {
+        Box::new(self)
+    }
+}
+
+impl Inquirer for Open {
+    fn prompt(&self) -> String {
+        Self::PROMPT.to_string()
+    }
+
+    fn completer(&self) -> Box<dyn Completer> {
+        // todo: change this to file completer
+        user::null_completer()
+    }
+
+    fn respond(&mut self, env: &mut Environment, value: Option<&str>) -> Option<Action> {
+        if let Some(path) = value {
             match open_editor(&path) {
                 Ok(editor) => {
-                    if let Some(place) = place {
+                    if let Some(place) = self.place {
                         if let Some((view_id, _)) = env.open_editor(editor, place, Align::Auto) {
                             env.set_active(Focus::To(view_id));
                             None
@@ -573,18 +608,122 @@ fn open_file_at(_: &mut Environment, place: Option<Placement>) -> Result<Option<
                         None
                     }
                 }
-                Err(e) => Action::as_echo_error(&e),
+                Err(e) => Action::as_echo(&e),
             }
         } else {
             None
-        };
-        Ok(action)
-    };
-    Ok(Action::as_question(
-        PROMPT_OPEN_FILE,
-        answer_fn,
-        complete::file,
-    ))
+        }
+    }
+}
+
+struct Save {
+    editor: EditorRef,
+}
+
+impl Save {
+    const PROMPT: &str = "save as:";
+
+    fn question(editor: EditorRef) -> Option<Action> {
+        Action::as_question(Save { editor }.to_box())
+    }
+
+    fn to_box(self) -> Box<dyn Inquirer> {
+        Box::new(self)
+    }
+
+    fn save_persistent(&mut self, path: &str) -> Option<Action> {
+        if let Err(e) = save_editor_as(&self.editor, Some(path)) {
+            Action::as_echo(&e)
+        } else {
+            Action::as_echo(&echo_saved(&path))
+        }
+    }
+
+    fn save_transient(&mut self, env: &mut Environment, path: &str) -> Option<Action> {
+        let time = write_editor(&self.editor, path);
+        match time {
+            Ok(time) => {
+                // Clone transient editor into persistent editor, ensuring that cursor
+                // position in buffer and cursor location are preserved.
+                let mut buffer = self.editor.borrow().buffer().clone();
+                let cur_pos = self.editor.borrow().cursor_pos();
+                buffer.set_pos(cur_pos);
+                let Point { row, col: _ } = self.editor.borrow().cursor();
+                let dup_editor = editor::persistent(path, Some(time), Some(buffer));
+
+                // Replace transient editor in current window with new editor.
+                env.set_editor(dup_editor, Align::Row(row));
+                Action::as_echo(&echo_saved(path))
+            }
+            Err(e) => Action::as_echo(&e),
+        }
+    }
+
+    fn save(editor: &EditorRef) -> Option<Action> {
+        if let Err(e) = save_editor(editor) {
+            Action::as_echo(&e)
+        } else {
+            let path = path_of(editor);
+            Action::as_echo(&echo_saved(&path))
+        }
+    }
+}
+
+impl Inquirer for Save {
+    fn prompt(&self) -> String {
+        Self::PROMPT.to_string()
+    }
+
+    fn completer(&self) -> Box<dyn Completer> {
+        // todo: change to file completer
+        user::null_completer()
+    }
+
+    fn respond(&mut self, env: &mut Environment, value: Option<&str>) -> Option<Action> {
+        if let Some(path) = value {
+            if is_persistent(&self.editor) {
+                self.save_persistent(path)
+            } else {
+                self.save_transient(env, path)
+            }
+        } else {
+            None
+        }
+    }
+}
+
+struct SaveOverride {
+    editor: EditorRef,
+}
+
+impl SaveOverride {
+    fn question(editor: EditorRef) -> Option<Action> {
+        Action::as_question(SaveOverride { editor }.to_box())
+    }
+
+    fn to_box(self) -> Box<dyn Inquirer> {
+        Box::new(self)
+    }
+}
+
+impl Inquirer for SaveOverride {
+    fn prompt(&self) -> String {
+        let path = path_of(&self.editor);
+        format!("{path}: file in storage is newer, save anyway?")
+    }
+
+    fn completer(&self) -> Box<dyn Completer> {
+        user::yes_no_completer()
+    }
+
+    fn respond(&mut self, _: &mut Environment, value: Option<&str>) -> Option<Action> {
+        match value {
+            Some(yes_no) if yes_no == "y" => Save::save(&self.editor),
+            Some(yes_no) if yes_no == "n" => None,
+            Some(_) => SaveOverride::question(self.editor.clone()),
+            None => None,
+        }
+    }
 }
 
 /// Operation: `save-file`
@@ -592,104 +731,19 @@ fn save_file(env: &mut Environment) -> Result<Option<Action>> {
     let editor = env.get_editor();
     let action = if is_persistent(editor) {
         match stale_editor(editor) {
-            Ok(true) => {
-                let path = path_of(editor);
-                Action::as_question(
-                    &prompt_save_anyway(&path),
-                    save_override_answer,
-                    complete::yes_no,
-                )
-            }
-            Ok(false) => {
-                if let Err(e) = save_editor(editor) {
-                    Action::as_echo_error(&e)
-                } else {
-                    let path = path_of(editor);
-                    Action::as_echo(&echo_saved(&path))
-                }
-            }
-            Err(e) => Action::as_echo_error(&e),
+            Ok(true) => SaveOverride::question(editor.clone()),
+            Ok(false) => Save::save(editor),
+            Err(e) => Action::as_echo(&e),
         }
     } else {
-        Action::as_question(PROMPT_SAVE_AS, save_transient_answer, complete::file)
-    };
-    Ok(action)
-}
-
-/// Question callback when requesting override to save an editor.
-fn save_override_answer(env: &mut Environment, answer: Option<&str>) -> Result<Option<Action>> {
-    let action = match answer {
-        Some(yes_no) if yes_no == "y" => {
-            let editor = env.get_editor();
-            if let Err(e) = save_editor(editor) {
-                Action::as_echo_error(&e)
-            } else {
-                let path = path_of(editor);
-                Action::as_echo(&echo_saved(&path))
-            }
-        }
-        Some(yes_no) if yes_no == "n" => None,
-        Some(_) => {
-            let path = path_of(env.get_editor());
-            Action::as_question(
-                &prompt_save_anyway(&path),
-                save_override_answer,
-                complete::yes_no,
-            )
-        }
-        None => None,
-    };
-    Ok(action)
-}
-
-/// Question callback when saving transient editors.
-fn save_transient_answer(env: &mut Environment, answer: Option<&str>) -> Result<Option<Action>> {
-    let action = if let Some(path) = answer {
-        let editor = env.get_editor();
-        let time = write_editor(editor, path);
-        match time {
-            Ok(time) => {
-                // Clone transient editor into persistent editor, ensuring that cursor
-                // position in buffer and cursor location are preserved.
-                let mut buffer = editor.borrow().buffer().clone();
-                let cur_pos = editor.borrow().cursor_pos();
-                buffer.set_pos(cur_pos);
-                let Point { row, col: _ } = editor.borrow().cursor();
-                let dup_editor = editor::persistent(path, Some(time), Some(buffer));
-
-                // Replace transient editor in current window with new editor.
-                env.set_editor(dup_editor, Align::Row(row));
-                Action::as_echo(&echo_saved(path))
-            }
-            Err(e) => Action::as_echo_error(&e),
-        }
-    } else {
-        None
+        Save::question(editor.clone())
     };
     Ok(action)
 }
 
 /// Operation: `save-file-as`
-fn save_file_as(_: &mut Environment) -> Result<Option<Action>> {
-    Ok(Action::as_question(
-        PROMPT_SAVE_AS,
-        save_file_as_answer,
-        complete::file,
-    ))
-}
-
-/// Question callback when saving editor using alternative path.
-fn save_file_as_answer(env: &mut Environment, answer: Option<&str>) -> Result<Option<Action>> {
-    let action = if let Some(path) = answer {
-        let editor = env.get_editor();
-        if let Err(e) = save_editor_as(editor, Some(path)) {
-            Action::as_echo_error(&e)
-        } else {
-            Action::as_echo(&echo_saved(&path))
-        }
-    } else {
-        None
-    };
+fn save_file_as(env: &mut Environment) -> Result<Option<Action>> {
+    let action = Save::question(env.get_editor().clone());
     Ok(action)
 }
 
@@ -698,8 +752,7 @@ fn kill_window(env: &mut Environment) -> Result<Option<Action>> {
     let action = if env.view_map().len() > 1 {
         let editor = env.get_editor();
         if is_persistent(editor) && editor.borrow().dirty() {
-            let path = path_of(editor);
-            Action::as_question(&prompt_save(&path), kill_save_answer, complete::yes_no)
+            Kill::question(editor.clone())
         } else {
             env.kill_window();
             None
@@ -710,74 +763,90 @@ fn kill_window(env: &mut Environment) -> Result<Option<Action>> {
     Ok(action)
 }
 
-fn kill_save_override_answer(
-    env: &mut Environment,
-    answer: Option<&str>,
-) -> Result<Option<Action>> {
-    let action = match answer {
-        Some(yes_no) if yes_no == "y" => {
-            let editor = env.get_editor();
-            if let Err(e) = save_editor(editor) {
-                Action::as_echo_error(&e)
-            } else {
-                let path = path_of(editor);
-                Action::as_echo(&echo_saved(&path))
-            }
-        }
-        Some(yes_no) if yes_no == "n" => None,
-        Some(_) => {
-            let path = path_of(env.get_editor());
-            Action::as_question(
-                &prompt_save_anyway(&path),
-                kill_save_override_answer,
-                complete::yes_no,
-            )
-        }
-        None => None,
-    };
-    Ok(action)
+struct Kill {
+    editor: EditorRef,
 }
 
-/// Question callback when killing a window with a dirty buffer.
-fn kill_save_answer(env: &mut Environment, answer: Option<&str>) -> Result<Option<Action>> {
-    let action = match answer {
-        Some(yes_no) if yes_no == "y" => {
-            let editor = env.get_editor();
-            match stale_editor(editor) {
-                Ok(true) => {
-                    let path = path_of(editor);
-                    Action::as_question(
-                        &prompt_save_anyway(&path),
-                        kill_save_override_answer,
-                        complete::yes_no,
-                    )
+impl Kill {
+    fn question(editor: EditorRef) -> Option<Action> {
+        Action::as_question(Kill { editor }.to_box())
+    }
+
+    fn to_box(self) -> Box<dyn Inquirer> {
+        Box::new(self)
+    }
+
+    fn kill(env: &mut Environment, editor: &EditorRef) -> Option<Action> {
+        let action = Save::save(editor);
+        if let Some(_) = action {
+            env.kill_window();
+        }
+        action
+    }
+}
+
+impl Inquirer for Kill {
+    fn prompt(&self) -> String {
+        let path = path_of(&self.editor);
+        format!("{path}: save?")
+    }
+
+    fn completer(&self) -> Box<dyn Completer> {
+        user::yes_no_completer()
+    }
+
+    fn respond(&mut self, env: &mut Environment, value: Option<&str>) -> Option<Action> {
+        match value {
+            Some(yes_no) if yes_no == "y" => match stale_editor(&self.editor) {
+                Ok(true) => KillOverride::question(self.editor.clone()),
+                Ok(false) => Kill::kill(env, &self.editor),
+                Err(e) => Action::as_echo(&e),
+            },
+            Some(yes_no) if yes_no == "n" => {
+                if let Some(_) = env.kill_window() {
+                    None
+                } else {
+                    Action::as_echo(ECHO_CLOSE_WINDOW_REFUSED)
                 }
-                Ok(false) => {
-                    if let Err(e) = save_editor(editor) {
-                        Action::as_echo_error(&e)
-                    } else {
-                        let path = path_of(editor);
-                        env.kill_window();
-                        Action::as_echo(&echo_saved(&path))
-                    }
-                }
-                Err(e) => Action::as_echo_error(&e),
             }
+            Some(_) => Kill::question(self.editor.clone()),
+            None => None,
         }
-        Some(yes_no) if yes_no == "n" => {
-            if let Some(_) = env.kill_window() {
-                None
-            } else {
-                Action::as_echo(ECHO_CLOSE_WINDOW_REFUSED)
-            }
+    }
+}
+
+struct KillOverride {
+    editor: EditorRef,
+}
+
+impl KillOverride {
+    fn question(editor: EditorRef) -> Option<Action> {
+        Action::as_question(KillOverride { editor }.to_box())
+    }
+
+    fn to_box(self) -> Box<dyn Inquirer> {
+        Box::new(self)
+    }
+}
+
+impl Inquirer for KillOverride {
+    fn prompt(&self) -> String {
+        let path = path_of(&self.editor);
+        format!("{path}: file in storage is newer, save anyway?")
+    }
+
+    fn completer(&self) -> Box<dyn Completer> {
+        user::yes_no_completer()
+    }
+
+    fn respond(&mut self, env: &mut Environment, value: Option<&str>) -> Option<Action> {
+        match value {
+            Some(yes_no) if yes_no == "y" => Kill::kill(env, &self.editor),
+            Some(yes_no) if yes_no == "n" => None,
+            Some(_) => KillOverride::question(self.editor.clone()),
+            None => None,
         }
-        Some(_) => {
-            let path = path_of(env.get_editor());
-            Action::as_question(&prompt_save(&path), kill_save_answer, complete::yes_no)
-        }
-        None => None,
-    };
-    Ok(action)
+    }
 }
 
 /// Operation: `close-window`
@@ -917,12 +986,12 @@ fn stale_editor(editor: &EditorRef) -> Result<bool> {
     }
 }
 
-/// Returns an ordered collection of ids for those editors that are *dirty*.
-fn dirty_editors(env: &Environment) -> Vec<u32> {
+/// Returns an ordered collection of *dirty* editors.
+fn dirty_editors(env: &Environment) -> Vec<EditorRef> {
     env.editor_map()
         .iter()
         .filter(|(_, e)| is_persistent(e) && e.borrow().dirty())
-        .map(|(id, _)| *id)
+        .map(|(_, e)| e.clone())
         .collect()
 }
 
@@ -945,13 +1014,6 @@ fn is_persistent(editor: &EditorRef) -> bool {
     }
 }
 
-/// Returns the editor for `editor_id`.
-fn get_editor(env: &Environment, editor_id: u32) -> &EditorRef {
-    env.editor_map()
-        .get(&editor_id)
-        .unwrap_or_else(|| panic!("expecting editor id {editor_id}"))
-}
-
 /// Returns the path associated with `editor` under the assumption that the storage
 /// type is [`Persistent`](Storage::Persistent), otherwise it panics.
 fn path_of(editor: &EditorRef) -> String {
@@ -960,19 +1022,6 @@ fn path_of(editor: &EditorRef) -> String {
         .storage()
         .path()
         .unwrap_or_else(|| panic!("path expected for editor"))
-}
-
-// This section contains string constants and formatting functions for prompts.
-const PROMPT_GOTO_LINE: &str = "goto line:";
-const PROMPT_OPEN_FILE: &str = "open file:";
-const PROMPT_SAVE_AS: &str = "save as:";
-
-fn prompt_save(path: &str) -> String {
-    format!("{path}: save?")
-}
-
-fn prompt_save_anyway(path: &str) -> String {
-    format!("{path}: file in storage is newer, save anyway?")
 }
 
 // This section contains string constants and formatting functions for echoing.
