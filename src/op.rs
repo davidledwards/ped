@@ -19,7 +19,9 @@ use crate::size::{Point, Size};
 use crate::user::{self, Completer, Inquirer};
 use crate::workspace::Placement;
 use std::collections::HashMap;
+use std::env;
 use std::io::ErrorKind;
+use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 /// A function type that implements an editing operation.
@@ -537,44 +539,52 @@ fn cut(env: &mut Environment) -> Result<Option<Action>> {
 }
 
 /// Operation: `open-file`
-fn open_file(_: &mut Environment) -> Result<Option<Action>> {
-    let action = Open::question(None);
+fn open_file(env: &mut Environment) -> Result<Option<Action>> {
+    let action = Open::question(derive_dir(env), None);
     Ok(action)
 }
 
 /// Operation: `open-file-top`
-fn open_file_top(_: &mut Environment) -> Result<Option<Action>> {
-    let action = Open::question(Some(Placement::Top));
+fn open_file_top(env: &mut Environment) -> Result<Option<Action>> {
+    let action = Open::question(derive_dir(env), Some(Placement::Top));
     Ok(action)
 }
 
 /// Operation: `open-file-bottom`
-fn open_file_bottom(_: &mut Environment) -> Result<Option<Action>> {
-    let action = Open::question(Some(Placement::Bottom));
+fn open_file_bottom(env: &mut Environment) -> Result<Option<Action>> {
+    let action = Open::question(derive_dir(env), Some(Placement::Bottom));
     Ok(action)
 }
 
 /// Operation: `open-file-above`
 fn open_file_above(env: &mut Environment) -> Result<Option<Action>> {
-    let action = Open::question(Some(Placement::Above(env.get_active())));
+    let action = Open::question(derive_dir(env), Some(Placement::Above(env.get_active())));
     Ok(action)
 }
 
 /// Operation: `open-file-below`
 fn open_file_below(env: &mut Environment) -> Result<Option<Action>> {
-    let action = Open::question(Some(Placement::Below(env.get_active())));
+    let action = Open::question(derive_dir(env), Some(Placement::Below(env.get_active())));
     Ok(action)
 }
 
 struct Open {
+    dir: PathBuf,
+    dir_pretty: String,
     place: Option<Placement>,
 }
 
 impl Open {
-    const PROMPT: &str = "open file:";
+    fn question(dir: PathBuf, place: Option<Placement>) -> Option<Action> {
+        Action::as_question(Open::new(dir, place).to_box())
+    }
 
-    fn question(place: Option<Placement>) -> Option<Action> {
-        Action::as_question(Open { place }.to_box())
+    fn new(dir: PathBuf, place: Option<Placement>) -> Open {
+        Open {
+            dir_pretty: pretty_dir(&dir),
+            dir,
+            place,
+        }
     }
 
     fn to_box(self) -> Box<dyn Inquirer> {
@@ -582,13 +592,68 @@ impl Open {
     }
 }
 
+/// Returns a pretty version of `dir` by attempting to strip the prefix if it matches
+/// the value of the `HOME` environment variable and replacing it with `"~/"`,
+/// otherwise `dir` itself is returned.
+fn pretty_dir(dir: &Path) -> String {
+    let dir_path = dir.display().to_string();
+    env::var_os("HOME")
+        .map(|path| PathBuf::from(path).display().to_string())
+        .and_then(|path| {
+            dir_path.strip_prefix(&path).map(|suffix| {
+                if suffix.len() > 0 {
+                    String::from("~") + suffix
+                } else {
+                    String::from("~/")
+                }
+            })
+        })
+        .unwrap_or(dir_path)
+}
+
+/// Returns the base directory of the active editor.
+fn derive_dir(env: &mut Environment) -> PathBuf {
+    derive_dir_from(env.get_editor())
+}
+
+/// Returns the base directory derived from `editor`, which is canonicalized so long
+/// as no failures occur along the way, otherwise it resorts to a directory path of
+/// `"."`
+fn derive_dir_from(editor: &EditorRef) -> PathBuf {
+    base_dir(editor)
+        .and_then(|dir| dir.canonicalize().ok())
+        .unwrap_or_else(|| PathBuf::from("."))
+}
+
+/// Returns the base directory of the path associated with `editor` so long as the
+/// editor is persistent, otherwise the current working directory is assumed.
+///
+/// `None` is returned if the base directory cannot be determined, possibly from a
+/// failure to get the current working directory.
+fn base_dir(editor: &EditorRef) -> Option<PathBuf> {
+    if let Some(path) = editor.borrow().storage().path() {
+        Path::new(&path)
+            .parent()
+            .map(|p| {
+                if p == Path::new("") {
+                    PathBuf::from(".")
+                } else {
+                    p.to_path_buf()
+                }
+            })
+            .or_else(|| Some(PathBuf::from(".")))
+    } else {
+        env::current_dir().ok()
+    }
+}
+
 impl Inquirer for Open {
     fn prompt(&self) -> String {
-        Self::PROMPT.to_string()
+        format!("open file [{}]:", self.dir_pretty)
     }
 
     fn completer(&self) -> Box<dyn Completer> {
-        user::file_completer()
+        user::file_completer(self.dir.clone())
     }
 
     fn respond(&mut self, env: &mut Environment, value: Option<&str>) -> Option<Action> {
