@@ -4,19 +4,29 @@ use crate::canvas::{Canvas, CanvasRef};
 use crate::config::{Configuration, ConfigurationRef};
 use crate::grid::Cell;
 use crate::size::{Point, Size};
+use crate::sys;
 use crate::window::{Banner, BannerRef, Window, WindowRef};
 use std::cell::{Ref, RefCell, RefMut};
 use std::cmp;
-use std::fmt;
 use std::ops::Range;
+use std::path::Path;
 use std::rc::Rc;
 use std::time::SystemTime;
 
 /// An editing controller with an underlying [`Buffer`] and an attachable
 /// [`Window`].
 pub struct Editor {
-    /// Type of storage associated with this editor.
-    storage: Storage,
+    /// Indicates that the editor is *persistent* as opposed to *transient*.
+    persistent: bool,
+
+    /// Path to storage when the editor is *persistent*, otherwise this is the
+    /// *transient* name.
+    path: String,
+
+    /// An optional timestamp that only applies to *persistent* editors, where the
+    /// presence of a value indicates the last modification time when the editor was
+    /// read or written to storage.
+    timestamp: Option<SystemTime>,
 
     /// Buffer containing the contents of this editor.
     buffer: BufferRef,
@@ -62,20 +72,6 @@ pub struct Editor {
 }
 
 pub type EditorRef = Rc<RefCell<Editor>>;
-
-/// The storage types associated with an [`Editor`].
-#[derive(Clone)]
-pub enum Storage {
-    /// A type of storage indicating that the buffer is stored and may be written to
-    /// a persistent medium.
-    Persistent {
-        path: String,
-        time: Option<SystemTime>,
-    },
-
-    /// A type of storage indicating that the buffer can be discarded.
-    Transient { name: String },
-}
 
 /// Represents contextual information for a line on the display.
 ///
@@ -150,43 +146,6 @@ struct Render {
     col: u32,
     line: u32,
     line_wrapped: bool,
-}
-
-impl Storage {
-    pub fn as_persistent(path: &str, time: Option<SystemTime>) -> Storage {
-        Storage::Persistent {
-            path: path.to_string(),
-            time,
-        }
-    }
-
-    pub fn as_transient(name: &str) -> Storage {
-        Storage::Transient {
-            name: name.to_string(),
-        }
-    }
-
-    pub fn path(&self) -> Option<String> {
-        match self {
-            Storage::Persistent { ref path, time: _ } => Some(path.clone()),
-            _ => None,
-        }
-    }
-}
-
-impl fmt::Display for Storage {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Storage::Persistent { path, time } => {
-                if let Some(_) = time {
-                    write!(f, "{path}")
-                } else {
-                    write!(f, "{path} (new)")
-                }
-            }
-            Storage::Transient { name } => write!(f, "@{name}"),
-        }
-    }
 }
 
 impl Line {
@@ -410,10 +369,25 @@ impl Editor {
     /// Exclusive upper bound on line numbers that can be displayed in the margin.
     const LINE_LIMIT: u32 = 10_u32.pow(Self::MARGIN_COLS - 1);
 
-    pub fn new(storage: Storage, buffer: BufferRef) -> Editor {
+    pub fn persistent(path: &str, timestamp: Option<SystemTime>, buffer: BufferRef) -> Editor {
+        Self::new(true, path, timestamp, buffer)
+    }
+
+    pub fn transient(name: &str, buffer: BufferRef) -> Editor {
+        Self::new(false, name, None, buffer)
+    }
+
+    fn new(
+        persistent: bool,
+        path: &str,
+        timestamp: Option<SystemTime>,
+        buffer: BufferRef,
+    ) -> Editor {
         let cur_pos = buffer.borrow().get_pos();
         Editor {
-            storage,
+            persistent,
+            path: path.to_string(),
+            timestamp,
             buffer,
             dirty: false,
             cur_pos,
@@ -436,8 +410,39 @@ impl Editor {
         Rc::new(RefCell::new(self))
     }
 
-    pub fn storage(&self) -> &Storage {
-        &self.storage
+    pub fn is_persistent(&self) -> bool {
+        self.persistent
+    }
+
+    pub fn make_persistent(&mut self, path: &str, timestamp: Option<SystemTime>) {
+        self.persistent = true;
+        self.path = path.to_string();
+        self.timestamp = timestamp;
+    }
+
+    pub fn path(&self) -> String {
+        if self.is_persistent() {
+            self.path.clone()
+        } else {
+            "".to_string()
+        }
+    }
+
+    pub fn timestamp(&self) -> Option<SystemTime> {
+        self.timestamp.clone()
+    }
+
+    pub fn name(&self) -> String {
+        if self.is_persistent() {
+            let path = sys::pretty_path(&Path::new(&self.path));
+            if let Some(_) = self.timestamp {
+                path
+            } else {
+                format!("{path} (new)")
+            }
+        } else {
+            self.path.clone()
+        }
     }
 
     #[inline]
@@ -454,8 +459,7 @@ impl Editor {
         self.dirty
     }
 
-    pub fn clear_dirty(&mut self, storage: Storage) {
-        self.storage = storage;
+    pub fn clear_dirty(&mut self) {
         self.dirty = false;
         self.show_banner();
     }
@@ -567,7 +571,7 @@ impl Editor {
         self.banner
             .borrow_mut()
             .set_dirty(self.dirty)
-            .set_title(self.storage.to_string())
+            .set_title(self.name())
             .set_location(self.location())
             .draw();
     }
@@ -1337,12 +1341,12 @@ impl Editor {
     }
 }
 
-pub fn persistent(path: &str, time: Option<SystemTime>, buffer: Option<Buffer>) -> EditorRef {
+pub fn persistent(path: &str, timestamp: Option<SystemTime>, buffer: Option<Buffer>) -> EditorRef {
     let buffer = buffer.unwrap_or_else(|| Buffer::new()).to_ref();
-    Editor::new(Storage::as_persistent(path, time), buffer).to_ref()
+    Editor::persistent(path, timestamp, buffer).to_ref()
 }
 
 pub fn transient(name: &str, buffer: Option<Buffer>) -> EditorRef {
     let buffer = buffer.unwrap_or_else(|| Buffer::new()).to_ref();
-    Editor::new(Storage::as_transient(name), buffer).to_ref()
+    Editor::transient(name, buffer).to_ref()
 }

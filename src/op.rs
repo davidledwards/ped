@@ -11,7 +11,7 @@
 //! See [`Bindings`](crate::bind::Bindings) for further details on binding keys
 //! at runtime.
 use crate::buffer::Buffer;
-use crate::editor::{self, Align, EditorRef, Storage};
+use crate::editor::{self, Align, EditorRef};
 use crate::env::{Environment, Focus};
 use crate::error::{Error, Result};
 use crate::io;
@@ -131,8 +131,8 @@ impl Quit {
 
 impl Inquirer for Quit {
     fn prompt(&self) -> String {
-        let path = path_of(&self.dirty[0]);
-        format!("{path}: save?")
+        let name = name_of(&self.dirty[0]);
+        format!("{name}: save?")
     }
 
     fn completer(&self) -> Box<dyn Completer> {
@@ -174,8 +174,8 @@ impl QuitOverride {
 
 impl Inquirer for QuitOverride {
     fn prompt(&self) -> String {
-        let path = path_of(&self.dirty[0]);
-        format!("{path}: file in storage is newer, save anyway?")
+        let name = name_of(&self.dirty[0]);
+        format!("{name}: file in storage is newer, save anyway?")
     }
 
     fn completer(&self) -> Box<dyn Completer> {
@@ -570,21 +570,12 @@ fn open_file_below(env: &mut Environment) -> Result<Option<Action>> {
 
 struct Open {
     dir: PathBuf,
-    dir_pretty: String,
     place: Option<Placement>,
 }
 
 impl Open {
     fn question(dir: PathBuf, place: Option<Placement>) -> Option<Action> {
-        Action::as_question(Open::new(dir, place).to_box())
-    }
-
-    fn new(dir: PathBuf, place: Option<Placement>) -> Open {
-        Open {
-            dir_pretty: sys::pretty_path(&dir),
-            dir,
-            place,
-        }
+        Action::as_question(Open { dir, place }.to_box())
     }
 
     fn to_box(self) -> Box<dyn Inquirer> {
@@ -612,7 +603,8 @@ fn derive_dir_from(editor: &EditorRef) -> PathBuf {
 /// `None` is returned if the base directory cannot be determined, possibly from a
 /// failure to get the current working directory.
 fn base_dir(editor: &EditorRef) -> PathBuf {
-    if let Some(path) = editor.borrow().storage().path() {
+    if editor.borrow().is_persistent() {
+        let path = editor.borrow().path();
         sys::base_dir(&Path::new(&path))
     } else {
         sys::working_dir()
@@ -621,7 +613,8 @@ fn base_dir(editor: &EditorRef) -> PathBuf {
 
 impl Inquirer for Open {
     fn prompt(&self) -> String {
-        format!("open file [{}]:", self.dir_pretty)
+        let path = sys::pretty_path(&self.dir);
+        format!("open file [{path}]:")
     }
 
     fn completer(&self) -> Box<dyn Completer> {
@@ -658,8 +651,6 @@ struct Save {
 }
 
 impl Save {
-    const PROMPT: &str = "save as:";
-
     fn question(editor: EditorRef) -> Option<Action> {
         Action::as_question(Save { editor }.to_box())
     }
@@ -708,7 +699,8 @@ impl Save {
 
 impl Inquirer for Save {
     fn prompt(&self) -> String {
-        Self::PROMPT.to_string()
+        let name = name_of(&self.editor);
+        format!("save {name} as:")
     }
 
     fn completer(&self) -> Box<dyn Completer> {
@@ -718,7 +710,7 @@ impl Inquirer for Save {
 
     fn respond(&mut self, env: &mut Environment, value: Option<&str>) -> Option<Action> {
         if let Some(path) = value {
-            if is_persistent(&self.editor) {
+            if self.editor.borrow().is_persistent() {
                 self.save_persistent(path)
             } else {
                 self.save_transient(env, path)
@@ -745,8 +737,8 @@ impl SaveOverride {
 
 impl Inquirer for SaveOverride {
     fn prompt(&self) -> String {
-        let path = path_of(&self.editor);
-        format!("{path}: file in storage is newer, save anyway?")
+        let name = name_of(&self.editor);
+        format!("{name}: file in storage is newer, save anyway?")
     }
 
     fn completer(&self) -> Box<dyn Completer> {
@@ -766,7 +758,7 @@ impl Inquirer for SaveOverride {
 /// Operation: `save-file`
 fn save_file(env: &mut Environment) -> Result<Option<Action>> {
     let editor = env.get_editor();
-    let action = if is_persistent(editor) {
+    let action = if editor.borrow().is_persistent() {
         match stale_editor(editor) {
             Ok(true) => SaveOverride::question(editor.clone()),
             Ok(false) => Save::save(editor),
@@ -788,7 +780,7 @@ fn save_file_as(env: &mut Environment) -> Result<Option<Action>> {
 fn kill_window(env: &mut Environment) -> Result<Option<Action>> {
     let action = if env.view_map().len() > 1 {
         let editor = env.get_editor();
-        if is_persistent(editor) && editor.borrow().dirty() {
+        if editor.borrow().is_persistent() && editor.borrow().dirty() {
             Kill::question(editor.clone())
         } else {
             env.kill_window();
@@ -824,8 +816,8 @@ impl Kill {
 
 impl Inquirer for Kill {
     fn prompt(&self) -> String {
-        let path = path_of(&self.editor);
-        format!("{path}: save?")
+        let name = name_of(&self.editor);
+        format!("{name}: save?")
     }
 
     fn completer(&self) -> Box<dyn Completer> {
@@ -868,8 +860,8 @@ impl KillOverride {
 
 impl Inquirer for KillOverride {
     fn prompt(&self) -> String {
-        let path = path_of(&self.editor);
-        format!("{path}: file in storage is newer, save anyway?")
+        let name = name_of(&self.editor);
+        format!("{name}: file in storage is newer, save anyway?")
     }
 
     fn completer(&self) -> Box<dyn Completer> {
@@ -946,7 +938,7 @@ fn list_editors(env: &mut Environment) -> Result<Option<Action>> {
     let active_id = env.get_active();
     let mut buffer = Buffer::new();
     for (id, e) in env.editor_map() {
-        buffer.insert_str(&format!("{id}: {}\n", e.borrow().storage()));
+        buffer.insert_str(&format!("{id}: {}\n", e.borrow().name()));
     }
     buffer.set_pos(0);
     let editor = editor::transient("editors", Some(buffer));
@@ -1004,30 +996,34 @@ fn write_editor(editor: &EditorRef, path: &str) -> Result<SystemTime> {
 }
 
 /// Clears the dirty flag on `editor` and sets its storage type to persistent using
-/// `path` and the modification `time`.
-fn update_editor(editor: &EditorRef, path: &str, time: SystemTime) {
-    editor
-        .borrow_mut()
-        .clear_dirty(Storage::as_persistent(path, Some(time)));
+/// `path` and the modification `timestamp`.
+fn update_editor(editor: &EditorRef, path: &str, timestamp: SystemTime) {
+    let mut editor = editor.borrow_mut();
+    editor.make_persistent(path, Some(timestamp));
+    editor.clear_dirty();
 }
 
 /// Returns `true` if `editor` has a modification time older than the modification time
 /// of the file in storage.
 fn stale_editor(editor: &EditorRef) -> Result<bool> {
-    match editor.borrow().storage() {
-        Storage::Persistent {
-            path,
-            time: Some(time),
-        } => Ok(io::get_time(&path)? > *time),
-        _ => Ok(false),
-    }
+    let editor = editor.borrow();
+    let stale = if editor.is_persistent() {
+        if let Some(timestamp) = editor.timestamp() {
+            io::get_time(&editor.path())? > timestamp
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+    Ok(stale)
 }
 
 /// Returns an ordered collection of *dirty* editors.
 fn dirty_editors(env: &Environment) -> Vec<EditorRef> {
     env.editor_map()
         .iter()
-        .filter(|(_, e)| is_persistent(e) && e.borrow().dirty())
+        .filter(|(_, e)| e.borrow().is_persistent() && e.borrow().dirty())
         .map(|(_, e)| e.clone())
         .collect()
 }
@@ -1043,22 +1039,14 @@ fn unattached_editors(env: &Environment) -> Vec<u32> {
         .collect()
 }
 
-/// Returns `true` if `editor` is persistent.
-fn is_persistent(editor: &EditorRef) -> bool {
-    match editor.borrow().storage() {
-        Storage::Persistent { path: _, time: _ } => true,
-        _ => false,
-    }
+/// Returns the path associated with `editor`.
+fn path_of(editor: &EditorRef) -> String {
+    editor.borrow().path()
 }
 
-/// Returns the path associated with `editor` under the assumption that the storage
-/// type is [`Persistent`](Storage::Persistent), otherwise it panics.
-fn path_of(editor: &EditorRef) -> String {
-    editor
-        .borrow()
-        .storage()
-        .path()
-        .unwrap_or_else(|| panic!("path expected for editor"))
+/// Returns the name of `editor`.
+fn name_of(editor: &EditorRef) -> String {
+    editor.borrow().name()
 }
 
 // This section contains string constants and formatting functions for echoing.

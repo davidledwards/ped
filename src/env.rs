@@ -34,7 +34,7 @@ impl Environment {
     ///
     /// Note that this collection must not be empty, otherwise initialization of the
     /// environment will panic.
-    const BUILTIN_EDITORS: [(u32, &'static str); 1] = [(0, "scratch")];
+    const BUILTIN_EDITORS: [(u32, &'static str); 1] = [(0, "@scratch")];
 
     pub fn new(workspace: WorkspaceRef) -> Environment {
         // Seed list of editors with builtins.
