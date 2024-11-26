@@ -33,6 +33,7 @@ mod key;
 mod op;
 mod opt;
 mod size;
+mod sys;
 mod term;
 mod user;
 mod window;

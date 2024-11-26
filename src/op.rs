@@ -16,10 +16,10 @@ use crate::env::{Environment, Focus};
 use crate::error::{Error, Result};
 use crate::io;
 use crate::size::{Point, Size};
+use crate::sys::{self, AsString};
 use crate::user::{self, Completer, Inquirer};
 use crate::workspace::Placement;
 use std::collections::HashMap;
-use std::env;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
@@ -596,17 +596,16 @@ impl Open {
 /// the value of the `HOME` environment variable and replacing it with `"~/"`,
 /// otherwise `dir` itself is returned.
 fn pretty_dir(dir: &Path) -> String {
-    let dir_path = dir.display().to_string();
-    env::var_os("HOME")
-        .map(|path| PathBuf::from(path).display().to_string())
-        .and_then(|path| {
-            dir_path.strip_prefix(&path).map(|suffix| {
-                if suffix.len() > 0 {
-                    String::from("~") + suffix
-                } else {
-                    String::from("~/")
-                }
-            })
+    let dir_path = dir.as_string();
+    let home_path = sys::home_dir().as_string();
+    dir_path
+        .strip_prefix(&home_path)
+        .map(|suffix| {
+            if suffix.len() > 0 {
+                String::from("~") + suffix
+            } else {
+                String::from("~/")
+            }
         })
         .unwrap_or(dir_path)
 }
@@ -621,8 +620,8 @@ fn derive_dir(env: &mut Environment) -> PathBuf {
 /// `"."`
 fn derive_dir_from(editor: &EditorRef) -> PathBuf {
     base_dir(editor)
-        .and_then(|dir| dir.canonicalize().ok())
-        .unwrap_or_else(|| PathBuf::from("."))
+        .canonicalize()
+        .unwrap_or_else(|_| sys::this_dir())
 }
 
 /// Returns the base directory of the path associated with `editor` so long as the
@@ -630,20 +629,11 @@ fn derive_dir_from(editor: &EditorRef) -> PathBuf {
 ///
 /// `None` is returned if the base directory cannot be determined, possibly from a
 /// failure to get the current working directory.
-fn base_dir(editor: &EditorRef) -> Option<PathBuf> {
+fn base_dir(editor: &EditorRef) -> PathBuf {
     if let Some(path) = editor.borrow().storage().path() {
-        Path::new(&path)
-            .parent()
-            .map(|p| {
-                if p == Path::new("") {
-                    PathBuf::from(".")
-                } else {
-                    p.to_path_buf()
-                }
-            })
-            .or_else(|| Some(PathBuf::from(".")))
+        sys::base_dir(&Path::new(&path))
     } else {
-        env::current_dir().ok()
+        sys::working_dir()
     }
 }
 

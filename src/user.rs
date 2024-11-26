@@ -1,10 +1,8 @@
 //! # User interaction
 use crate::env::Environment;
 use crate::op::Action;
-use std::{
-    env,
-    path::{Path, PathBuf},
-};
+use crate::sys::{self, AsString};
+use std::path::{Path, PathBuf};
 
 /// Defines an interface for coordinating the solicitation of input from a user.
 pub trait Inquirer {
@@ -256,7 +254,7 @@ impl FileCompleter {
         // equality with respect to paths is more relaxed. For example, paths of
         // "foo/" and "foo/." are equivalent, yet completions generated from each
         // do not have equivalent strings.
-        if self.comp_dir.display().to_string() != dir.display().to_string() {
+        if self.comp_dir.as_string() != dir.as_string() {
             self.comp_dir = dir.clone();
             self.comps = Self::completions(&self.comp_dir);
         }
@@ -268,7 +266,7 @@ impl FileCompleter {
     }
 
     fn replace_match(&mut self, index: usize) -> String {
-        let dir = self.dir.display().to_string();
+        let dir = self.dir.as_string();
         let path = &self.matches[index];
         path.strip_prefix(&dir)
             .map(|suffix| {
@@ -300,31 +298,25 @@ impl FileCompleter {
                         //
                         // Example: path of "foo" would end up here, so return value is
                         // coerced into ("./foo", ".").
-                        let dir = PathBuf::from(".");
+                        let dir = sys::this_dir();
                         (dir.join(path), dir)
                     } else {
                         (path.to_path_buf(), parent.to_path_buf())
                     }
                 })
                 .unwrap_or_else(|| {
-                    let dir = PathBuf::from(".");
+                    let dir = sys::this_dir();
                     (dir.join(path), dir)
                 })
         };
-        (prefix.display().to_string(), dir)
+        (prefix.as_string(), dir)
     }
 
     fn completions(dir: &Path) -> Vec<String> {
-        let mut entries = match dir.read_dir() {
-            Ok(entries) => entries
-                .flat_map(|entry| entry.ok().map(|e| e.path().display().to_string()))
-                .collect(),
-            Err(_) => {
-                vec![]
-            }
-        };
-        entries.sort();
-        entries
+        sys::list_dir(dir)
+            .iter()
+            .map(|path| path.as_string())
+            .collect()
     }
 
     fn matches(comps: &Vec<String>, prefix: &str) -> Vec<String> {
@@ -358,9 +350,7 @@ impl Completer for FileCompleter {
 
     fn suggest(&mut self, value: &str) -> (Option<String>, Option<String>) {
         if value == "~/" {
-            let replace = env::var_os("HOME")
-                .map(|path| PathBuf::from(path).join("").display().to_string())
-                .unwrap_or("./".to_string());
+            let replace = sys::home_dir().join("").as_string();
             self.refresh(&replace);
             (Some(replace), None)
         } else {
@@ -375,7 +365,7 @@ impl Completer for FileCompleter {
 
                     // Hint is provided when match is also directory, as this gives visual
                     // cue to user that typing / will navigate into directory.
-                    let hint = if Path::new(&self.matches[0]).is_dir() {
+                    let hint = if sys::is_dir(&self.matches[0]) {
                         Some("/".to_string())
                     } else {
                         None
@@ -399,7 +389,7 @@ impl Completer for FileCompleter {
                     // includes indication of current position in total number of matches.
                     let hint = format!(
                         "{} ({} of {count} matches)",
-                        if Path::new(&self.matches[index]).is_dir() {
+                        if sys::is_dir(&self.matches[index]) {
                             "/"
                         } else {
                             ""
