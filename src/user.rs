@@ -2,7 +2,7 @@
 use crate::env::Environment;
 use crate::op::Action;
 use std::{
-    f32::consts::PI,
+    env,
     path::{Path, PathBuf},
 };
 
@@ -228,6 +228,7 @@ impl Completer for NumberCompleter {
     }
 }
 
+/// A completer that provides assistance in navigating files and directories.
 struct FileCompleter {
     dir: PathBuf,
     comp_dir: PathBuf,
@@ -247,26 +248,37 @@ impl FileCompleter {
         }
     }
 
-    fn find_matches(&self, prefix: &str) -> Vec<String> {
-        self.comps
-            .iter()
-            .filter(|path| path.starts_with(prefix))
-            .cloned()
-            .collect()
+    fn refresh(&mut self, value: &str) -> (String, PathBuf) {
+        let path = self.dir.join(value);
+        let (prefix, dir) = Self::split_path(&path);
+
+        // Comparing strings, as opposed to paths, is necessary because notion of
+        // equality with respect to paths is more relaxed. For example, paths of
+        // "foo/" and "foo/." are equivalent, yet completions generated from each
+        // do not have equivalent strings.
+        if self.comp_dir.display().to_string() != dir.display().to_string() {
+            self.comp_dir = dir.clone();
+            self.comps = Self::completions(&self.comp_dir);
+        }
+
+        // Always generate new matches regardless of whether completions changed.
+        self.matches = Self::matches(&self.comps, &prefix);
+        self.last_match = None;
+        (prefix, dir)
     }
 
-    fn refresh_completions(&mut self, path: &Path, matches: bool) -> (String, PathBuf) {
-        let (prefix, dir) = Self::split_path(&path);
-        let stale = self.comp_dir != dir;
-        if stale {
-            self.comp_dir = dir.clone();
-            self.comps = Self::get_completions(&self.comp_dir);
-        }
-        if stale || matches {
-            self.matches = self.find_matches(&prefix);
-            self.last_match = None;
-        }
-        (prefix, dir)
+    fn replace_match(&mut self, index: usize) -> String {
+        let dir = self.dir.display().to_string();
+        let path = &self.matches[index];
+        path.strip_prefix(&dir)
+            .map(|suffix| {
+                if suffix.starts_with("/") {
+                    suffix[1..].to_string()
+                } else {
+                    suffix.to_string()
+                }
+            })
+            .unwrap_or(path.to_string())
     }
 
     /// Splits the `path` prefix into a normalized prefix and its directory component.
@@ -279,12 +291,19 @@ impl FileCompleter {
             (path.to_path_buf(), path.to_path_buf())
         } else {
             path.parent()
-                .map(|p| {
-                    if p == Path::new("") {
+                .map(|parent| {
+                    if parent == Path::new("") {
+                        // This occurs when path is valid but only has one component,
+                        // thus it is safe to assume that directory component is
+                        // current directory. Also, return prefix containing prepended
+                        // directory.
+                        //
+                        // Example: path of "foo" would end up here, so return value is
+                        // coerced into ("./foo", ".").
                         let dir = PathBuf::from(".");
                         (dir.join(path), dir)
                     } else {
-                        (path.to_path_buf(), p.to_path_buf())
+                        (path.to_path_buf(), parent.to_path_buf())
                     }
                 })
                 .unwrap_or_else(|| {
@@ -295,7 +314,7 @@ impl FileCompleter {
         (prefix.display().to_string(), dir)
     }
 
-    fn get_completions(dir: &Path) -> Vec<String> {
+    fn completions(dir: &Path) -> Vec<String> {
         let mut entries = match dir.read_dir() {
             Ok(entries) => entries
                 .flat_map(|entry| entry.ok().map(|e| e.path().display().to_string()))
@@ -307,19 +326,29 @@ impl FileCompleter {
         entries.sort();
         entries
     }
+
+    fn matches(comps: &Vec<String>, prefix: &str) -> Vec<String> {
+        comps
+            .iter()
+            .filter(|path| path.starts_with(prefix))
+            .cloned()
+            .collect()
+    }
 }
 
 impl Completer for FileCompleter {
     fn prepare(&mut self) -> Option<String> {
-        self.comps = Self::get_completions(&self.comp_dir);
-        self.matches = self.find_matches("");
+        let (prefix, _) = Self::split_path(&self.comp_dir);
+        self.comps = Self::completions(&self.comp_dir);
+        self.matches = Self::matches(&self.comps, &prefix);
         None
     }
 
     fn evaluate(&mut self, value: &str) -> Option<String> {
-        let path = self.dir.join(value);
-        let (prefix, _) = self.refresh_completions(&path, true);
+        let (prefix, _) = self.refresh(value);
 
+        // Return suffix of path when single match exists, which gives user opportunity
+        // to follow with suggestion to replace input.
         if self.matches.len() == 1 {
             self.matches[0].strip_prefix(&prefix).map(|s| s.to_string())
         } else {
@@ -328,50 +357,57 @@ impl Completer for FileCompleter {
     }
 
     fn suggest(&mut self, value: &str) -> (Option<String>, Option<String>) {
-        let path = self.dir.join(value);
-        //        self.refresh_completions(&path, false);
+        if value == "~/" {
+            let replace = env::var_os("HOME")
+                .map(|path| PathBuf::from(path).join("").display().to_string())
+                .unwrap_or("./".to_string());
+            self.refresh(&replace);
+            (Some(replace), None)
+        } else {
+            match self.matches.len() {
+                0 => {
+                    let hint = format!(" (no matches)");
+                    (None, Some(hint))
+                }
+                1 => {
+                    // Replace input value when single match exists.
+                    let replace = self.replace_match(0);
 
-        match self.matches.len() {
-            0 => {
-                self.last_match = None;
-                let hint = format!(" (no matches)");
-                (None, Some(hint))
-            }
-            1 => {
-                self.last_match = Some(0);
-                let dir = self.dir.display().to_string();
-                let replace = self.matches[0]
-                    .strip_prefix(&dir)
-                    .map(|s| {
-                        if s.starts_with("/") {
-                            s[1..].to_string()
+                    // Hint is provided when match is also directory, as this gives visual
+                    // cue to user that typing / will navigate into directory.
+                    let hint = if Path::new(&self.matches[0]).is_dir() {
+                        Some("/".to_string())
+                    } else {
+                        None
+                    };
+                    (Some(replace), hint)
+                }
+                count => {
+                    // Keep track of index when scrolling through matches, though note this
+                    // is only necessary when number of matches more than one.
+                    let index = if let Some(index) = self.last_match {
+                        (index + 1) % count
+                    } else {
+                        0
+                    };
+                    self.last_match = Some(index);
+
+                    // Replace input value with most recent suggestion from list of matches.
+                    let replace = self.replace_match(index);
+
+                    // Hint not only appends / for matches that are directories, but also
+                    // includes indication of current position in total number of matches.
+                    let hint = format!(
+                        "{} ({} of {count} matches)",
+                        if Path::new(&self.matches[index]).is_dir() {
+                            "/"
                         } else {
-                            s.to_string()
-                        }
-                    })
-                    .unwrap_or(self.matches[0].clone());
-                (Some(replace), None)
-            }
-            n => {
-                let i = if let Some(i) = self.last_match {
-                    (i + 1) % n
-                } else {
-                    0
-                };
-                self.last_match = Some(i);
-                let dir = self.dir.display().to_string();
-                let replace = self.matches[i]
-                    .strip_prefix(&dir)
-                    .map(|s| {
-                        if s.starts_with("/") {
-                            s[1..].to_string()
-                        } else {
-                            s.to_string()
-                        }
-                    })
-                    .unwrap_or(self.matches[i].clone());
-                let hint = format!(" ({} of {n} matches)", i + 1);
-                (Some(replace), Some(hint))
+                            ""
+                        },
+                        index + 1
+                    );
+                    (Some(replace), Some(hint))
+                }
             }
         }
     }
