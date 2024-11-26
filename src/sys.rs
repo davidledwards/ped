@@ -44,6 +44,24 @@ pub fn base_dir(path: &Path) -> PathBuf {
         .unwrap_or_else(|| this_dir())
 }
 
+pub fn extract_dir(path: &Path) -> (PathBuf, PathBuf) {
+    if path.is_dir() {
+        (path.to_path_buf(), path.to_path_buf())
+    } else {
+        if let Some(parent) = path.parent() {
+            if parent == Path::new("") {
+                let dir = this_dir();
+                (dir.join(path), dir)
+            } else {
+                (path.to_path_buf(), parent.to_path_buf())
+            }
+        } else {
+            let dir = this_dir();
+            (dir.join(path), dir)
+        }
+    }
+}
+
 pub fn is_dir(path: &str) -> bool {
     Path::new(path).is_dir()
 }

@@ -246,9 +246,9 @@ impl FileCompleter {
         }
     }
 
-    fn refresh(&mut self, value: &str) -> (String, PathBuf) {
+    fn refresh(&mut self, value: &str) -> (PathBuf, PathBuf) {
         let path = self.dir.join(value);
-        let (prefix, dir) = Self::split_path(&path);
+        let (prefix, dir) = sys::extract_dir(&path);
 
         // Comparing strings, as opposed to paths, is necessary because notion of
         // equality with respect to paths is more relaxed. For example, paths of
@@ -260,7 +260,7 @@ impl FileCompleter {
         }
 
         // Always generate new matches regardless of whether completions changed.
-        self.matches = Self::matches(&self.comps, &prefix);
+        self.matches = Self::matches(&self.comps, &prefix.as_string());
         self.last_match = None;
         (prefix, dir)
     }
@@ -277,39 +277,6 @@ impl FileCompleter {
                 }
             })
             .unwrap_or(path.to_string())
-    }
-
-    /// Splits the `path` prefix into a normalized prefix and its directory component.
-    ///
-    /// The normalized prefix, returned as the first tuple value, may be different than
-    /// the value of `path` due to some nuances in file enumeration. Therefore, the
-    /// normalized prefix must be used when matching candidates.
-    fn split_path(path: &Path) -> (String, PathBuf) {
-        let (prefix, dir) = if path.is_dir() {
-            (path.to_path_buf(), path.to_path_buf())
-        } else {
-            path.parent()
-                .map(|parent| {
-                    if parent == Path::new("") {
-                        // This occurs when path is valid but only has one component,
-                        // thus it is safe to assume that directory component is
-                        // current directory. Also, return prefix containing prepended
-                        // directory.
-                        //
-                        // Example: path of "foo" would end up here, so return value is
-                        // coerced into ("./foo", ".").
-                        let dir = sys::this_dir();
-                        (dir.join(path), dir)
-                    } else {
-                        (path.to_path_buf(), parent.to_path_buf())
-                    }
-                })
-                .unwrap_or_else(|| {
-                    let dir = sys::this_dir();
-                    (dir.join(path), dir)
-                })
-        };
-        (prefix.as_string(), dir)
     }
 
     fn completions(dir: &Path) -> Vec<String> {
@@ -330,9 +297,9 @@ impl FileCompleter {
 
 impl Completer for FileCompleter {
     fn prepare(&mut self) -> Option<String> {
-        let (prefix, _) = Self::split_path(&self.comp_dir);
+        let (prefix, _) = sys::extract_dir(&self.comp_dir);
         self.comps = Self::completions(&self.comp_dir);
-        self.matches = Self::matches(&self.comps, &prefix);
+        self.matches = Self::matches(&self.comps, &prefix.as_string());
         None
     }
 
@@ -342,7 +309,9 @@ impl Completer for FileCompleter {
         // Return suffix of path when single match exists, which gives user opportunity
         // to follow with suggestion to replace input.
         if self.matches.len() == 1 {
-            self.matches[0].strip_prefix(&prefix).map(|s| s.to_string())
+            self.matches[0]
+                .strip_prefix(&prefix.as_string())
+                .map(|s| s.to_string())
         } else {
             None
         }
