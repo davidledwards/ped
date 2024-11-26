@@ -311,11 +311,11 @@ impl Configuration {
         ("ESC:w:t", "top-window"),
         ("ESC:w:b", "bottom-window"),
         ("ESC:w:p", "prev-window"),
-        ("ESC:,", "prev-window"),
+        ("ESC:<", "prev-window"),
         ("ESC:w:n", "next-window"),
-        ("ESC:.", "next-window"),
-        ("ESC:<", "prev-editor"),
-        ("ESC:>", "next-editor"),
+        ("ESC:>", "next-window"),
+        ("ESC:,", "prev-editor"),
+        ("ESC:.", "next-editor"),
         // --- TEMPORARY ---
         ("C-t", "list-editors"),
     ];
