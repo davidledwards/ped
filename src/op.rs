@@ -581,7 +581,7 @@ impl Open {
 
     fn new(dir: PathBuf, place: Option<Placement>) -> Open {
         Open {
-            dir_pretty: pretty_dir(&dir),
+            dir_pretty: sys::pretty_path(&dir),
             dir,
             place,
         }
@@ -590,24 +590,6 @@ impl Open {
     fn to_box(self) -> Box<dyn Inquirer> {
         Box::new(self)
     }
-}
-
-/// Returns a pretty version of `dir` by attempting to strip the prefix if it matches
-/// the value of the `HOME` environment variable and replacing it with `"~/"`,
-/// otherwise `dir` itself is returned.
-fn pretty_dir(dir: &Path) -> String {
-    let dir_path = dir.as_string();
-    let home_path = sys::home_dir().as_string();
-    dir_path
-        .strip_prefix(&home_path)
-        .map(|suffix| {
-            if suffix.len() > 0 {
-                String::from("~") + suffix
-            } else {
-                String::from("~/")
-            }
-        })
-        .unwrap_or(dir_path)
 }
 
 /// Returns the base directory of the active editor.
@@ -648,6 +630,7 @@ impl Inquirer for Open {
 
     fn respond(&mut self, env: &mut Environment, value: Option<&str>) -> Option<Action> {
         if let Some(path) = value {
+            let path = sys::canonicalize(&self.dir.join(path)).as_string();
             match open_editor(&path) {
                 Ok(editor) => {
                     if let Some(place) = self.place {

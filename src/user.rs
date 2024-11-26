@@ -304,10 +304,9 @@ impl Completer for FileCompleter {
     }
 
     fn evaluate(&mut self, value: &str) -> Option<String> {
-        let (prefix, _) = self.refresh(value);
-
         // Return suffix of path when single match exists, which gives user opportunity
         // to follow with suggestion to replace input.
+        let (prefix, _) = self.refresh(value);
         if self.matches.len() == 1 {
             self.matches[0]
                 .strip_prefix(&prefix.as_string())
@@ -319,54 +318,55 @@ impl Completer for FileCompleter {
 
     fn suggest(&mut self, value: &str) -> (Option<String>, Option<String>) {
         if value == "~/" {
+            // A special case where input value references home directory, which is
+            // not recognized by file system operations. In this case, the value is
+            // replaced with home directory, ensuring that / is appended. Completions
+            // and matches are refreshed as side effect.
             let replace = sys::home_dir().join("").as_string();
             self.refresh(&replace);
             (Some(replace), None)
         } else {
-            match self.matches.len() {
-                0 => {
-                    let hint = format!(" (no matches)");
-                    (None, Some(hint))
-                }
-                1 => {
-                    // Replace input value when single match exists.
-                    let replace = self.replace_match(0);
+            let count = self.matches.len();
+            if count == 0 {
+                let hint = format!(" (no matches)");
+                (None, Some(hint))
+            } else if count == 1 {
+                // Replace input value when single match exists.
+                let replace = self.replace_match(0);
 
-                    // Hint is provided when match is also directory, as this gives visual
-                    // cue to user that typing / will navigate into directory.
-                    let hint = if sys::is_dir(&self.matches[0]) {
-                        Some("/".to_string())
+                // Hint is provided when match is also directory, as this gives visual
+                // cue to user that typing / will navigate into directory.
+                let hint = if sys::is_dir(&self.matches[0]) {
+                    Some("/".to_string())
+                } else {
+                    None
+                };
+                (Some(replace), hint)
+            } else {
+                // Keep track of index when scrolling through matches, though note this
+                // is only necessary when number of matches more than one.
+                let index = if let Some(index) = self.last_match {
+                    (index + 1) % count
+                } else {
+                    0
+                };
+                self.last_match = Some(index);
+
+                // Replace input value with most recent suggestion from list of matches.
+                let replace = self.replace_match(index);
+
+                // Hint not only appends / for matches that are directories, but also
+                // includes indication of current position in total number of matches.
+                let hint = format!(
+                    "{} ({} of {count} matches)",
+                    if sys::is_dir(&self.matches[index]) {
+                        "/"
                     } else {
-                        None
-                    };
-                    (Some(replace), hint)
-                }
-                count => {
-                    // Keep track of index when scrolling through matches, though note this
-                    // is only necessary when number of matches more than one.
-                    let index = if let Some(index) = self.last_match {
-                        (index + 1) % count
-                    } else {
-                        0
-                    };
-                    self.last_match = Some(index);
-
-                    // Replace input value with most recent suggestion from list of matches.
-                    let replace = self.replace_match(index);
-
-                    // Hint not only appends / for matches that are directories, but also
-                    // includes indication of current position in total number of matches.
-                    let hint = format!(
-                        "{} ({} of {count} matches)",
-                        if sys::is_dir(&self.matches[index]) {
-                            "/"
-                        } else {
-                            ""
-                        },
-                        index + 1
-                    );
-                    (Some(replace), Some(hint))
-                }
+                        ""
+                    },
+                    index + 1
+                );
+                (Some(replace), Some(hint))
             }
         }
     }
