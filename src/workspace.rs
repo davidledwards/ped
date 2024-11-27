@@ -1,4 +1,5 @@
 //! Workspace management.
+use crate::ansi;
 use crate::config::{Configuration, ConfigurationRef};
 use crate::size::{Point, Size};
 use crate::term;
@@ -82,6 +83,7 @@ impl Workspace {
             id_seq: 0,
             views: vec![],
         };
+        println!("{}", ansi::clear_screen());
         this.open_view(Placement::Top);
         this
     }
