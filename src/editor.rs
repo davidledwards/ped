@@ -9,7 +9,7 @@ use crate::window::{Banner, BannerRef, Window, WindowRef};
 use std::cell::{Ref, RefCell, RefMut};
 use std::cmp;
 use std::ops::Range;
-use std::path::Path;
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::SystemTime;
 
@@ -369,14 +369,25 @@ impl Editor {
     /// Exclusive upper bound on line numbers that can be displayed in the margin.
     const LINE_LIMIT: u32 = 10_u32.pow(Self::MARGIN_COLS - 1);
 
-    pub fn persistent(path: &str, timestamp: Option<SystemTime>, buffer: BufferRef) -> Editor {
+    /// Creates a *persistent* editor with `path` and an optional `timestamp`.
+    ///
+    /// If `buffer` is not specified, then an empty buffer is created.
+    pub fn persistent(path: &str, timestamp: Option<SystemTime>, buffer: Option<Buffer>) -> Editor {
+        let buffer = buffer.unwrap_or_else(|| Buffer::new()).to_ref();
         Self::new(true, path, timestamp, buffer)
     }
 
-    pub fn transient(name: &str, buffer: BufferRef) -> Editor {
+    /// Creates a *transient* editor with `name`.
+    ///
+    /// If `buffer` is not specified, then an empty buffer is created.
+    pub fn transient(name: &str, buffer: Option<Buffer>) -> Editor {
+        let buffer = buffer.unwrap_or_else(|| Buffer::new()).to_ref();
         Self::new(false, name, None, buffer)
     }
 
+    /// Creates a new editor.
+    ///
+    /// Prefer to use [`Editor::persistent`] and [`Editor::transient`].
     fn new(
         persistent: bool,
         path: &str,
@@ -420,11 +431,11 @@ impl Editor {
         self.timestamp = timestamp;
     }
 
-    pub fn path(&self) -> String {
+    pub fn path(&self) -> PathBuf {
         if self.is_persistent() {
-            self.path.clone()
+            PathBuf::from(&self.path)
         } else {
-            "".to_string()
+            PathBuf::from("")
         }
     }
 
@@ -434,7 +445,7 @@ impl Editor {
 
     pub fn name(&self) -> String {
         if self.is_persistent() {
-            let path = sys::pretty_path(&Path::new(&self.path));
+            let path = sys::pretty_path(&self.path);
             if let Some(_) = self.timestamp {
                 path
             } else {
@@ -492,11 +503,6 @@ impl Editor {
     #[inline(always)]
     pub fn rows(&self) -> u32 {
         self.rows
-    }
-
-    #[inline(always)]
-    pub fn cols(&self) -> u32 {
-        self.cols
     }
 
     pub fn size(&self) -> Size {
@@ -1339,14 +1345,4 @@ impl Editor {
             }
         }
     }
-}
-
-pub fn persistent(path: &str, timestamp: Option<SystemTime>, buffer: Option<Buffer>) -> EditorRef {
-    let buffer = buffer.unwrap_or_else(|| Buffer::new()).to_ref();
-    Editor::persistent(path, timestamp, buffer).to_ref()
-}
-
-pub fn transient(name: &str, buffer: Option<Buffer>) -> EditorRef {
-    let buffer = buffer.unwrap_or_else(|| Buffer::new()).to_ref();
-    Editor::transient(name, buffer).to_ref()
 }

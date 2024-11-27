@@ -2,13 +2,13 @@
 use crate::color::Color;
 use crate::error::{Error, Result};
 use crate::opt::Options;
+use crate::sys::{self, AsString};
 use serde::de::{self, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 use std::collections::HashMap;
-use std::env;
 use std::fmt;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::rc::Rc;
 use std::result;
 
@@ -184,7 +184,7 @@ impl Configuration {
     /// from well-known locations.
     pub fn load() -> Result<Configuration> {
         let mut config = Configuration::default();
-        let root_path = Self::home_dir();
+        let root_path = sys::home_dir();
         for try_path in Self::TRY_FILES {
             let path = root_path.join(try_path);
             if path.exists() {
@@ -197,9 +197,9 @@ impl Configuration {
     }
 
     /// Returns a configuration loaded from the resource file at `path`.
-    pub fn load_file(path: &str) -> Result<Configuration> {
+    pub fn load_file<P: AsRef<Path>>(path: P) -> Result<Configuration> {
         let mut config = Configuration::default();
-        let ext = Self::read_file(&PathBuf::from(path))?;
+        let ext = Self::read_file(path.as_ref())?;
         config.apply(ext);
         Ok(config)
     }
@@ -227,14 +227,9 @@ impl Configuration {
 
     fn read_file(path: &Path) -> Result<ExternalConfiguration> {
         let content =
-            fs::read_to_string(path).map_err(|e| Error::io(Some(&path.to_string_lossy()), e))?;
+            fs::read_to_string(path).map_err(|e| Error::io(Some(&path.as_string()), e))?;
         toml::from_str::<ExternalConfiguration>(&content)
-            .map_err(|e| Error::configuration(&path.to_string_lossy(), &e))
-    }
-
-    fn home_dir() -> PathBuf {
-        let path = env::var("HOME").unwrap_or(".".to_string());
-        PathBuf::from(path)
+            .map_err(|e| Error::configuration(&path.as_string(), &e))
     }
 
     fn default_bindings() -> HashMap<String, String> {

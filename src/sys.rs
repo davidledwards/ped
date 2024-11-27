@@ -46,7 +46,8 @@ pub fn this_dir() -> PathBuf {
 /// If `path` is either empty or a single component value, such as `"foo"`, the base
 /// directory will be [`this_dir`]. If `path` terminates in a root, then the path
 /// itself is returned.
-pub fn base_dir(path: &Path) -> PathBuf {
+pub fn base_dir<P: AsRef<Path>>(path: P) -> PathBuf {
+    let path = path.as_ref();
     path.parent()
         .map(|parent| {
             if parent == Path::new("") {
@@ -71,7 +72,8 @@ pub fn base_dir(path: &Path) -> PathBuf {
 /// component is the base directory.
 ///
 /// This function is equivalent to [`base_dir`] in determining the base directory.
-pub fn extract_dir(path: &Path) -> (PathBuf, PathBuf) {
+pub fn extract_dir<P: AsRef<Path>>(path: P) -> (PathBuf, PathBuf) {
+    let path = path.as_ref();
     if path.is_dir() {
         (path.to_path_buf(), path.to_path_buf())
     } else {
@@ -96,8 +98,8 @@ pub fn extract_dir(path: &Path) -> (PathBuf, PathBuf) {
 /// Returns a pretty version of `path` by attempting to strip the prefix if it matches
 /// the value of [`home_dir`] and replacing it with `"~/"`, otherwise `path` itself is
 /// returned.
-pub fn pretty_path(path: &Path) -> String {
-    let path = path.as_string();
+pub fn pretty_path<P: AsRef<Path>>(path: P) -> String {
+    let path = path.as_ref().as_string();
     path.strip_prefix(&home_dir().as_string())
         .map(|suffix| {
             if suffix.len() > 0 {
@@ -110,14 +112,14 @@ pub fn pretty_path(path: &Path) -> String {
 }
 
 /// Returns `true` if `path` is a directory.
-pub fn is_dir(path: &str) -> bool {
-    Path::new(path).is_dir()
+pub fn is_dir<P: AsRef<Path>>(path: P) -> bool {
+    Path::new(path.as_ref()).is_dir()
 }
 
 /// Returns a lexicographically-sorted list of files and directories contained
 /// in `dir`, quietly discarding any I/O errors when reading the directory.
-pub fn list_dir(dir: &Path) -> Vec<PathBuf> {
-    let mut entries = match dir.read_dir() {
+pub fn list_dir<P: AsRef<Path>>(dir: P) -> Vec<PathBuf> {
+    let mut entries = match dir.as_ref().read_dir() {
         Ok(entries) => entries
             .flat_map(|entry| entry.ok().map(|e| e.path()))
             .collect(),
@@ -131,6 +133,8 @@ pub fn list_dir(dir: &Path) -> Vec<PathBuf> {
 
 /// Returns the canonicalized form of `path`, or `path` itself if the canonicalization
 /// failed for any reason.
-pub fn canonicalize(path: &Path) -> PathBuf {
-    path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
+pub fn canonicalize<P: AsRef<Path>>(path: P) -> PathBuf {
+    path.as_ref()
+        .canonicalize()
+        .unwrap_or_else(|_| path.as_ref().to_path_buf())
 }

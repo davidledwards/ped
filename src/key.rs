@@ -111,7 +111,8 @@ impl fmt::Display for Ctrl {
 struct Control(u8);
 
 impl Control {
-    /// Mapping of control codes to display character, excluding DEL (^?), which is handled separately.
+    /// Mapping of control codes to display character, excluding DEL (^?), which is
+    /// handled separately.
     const CONTROL_CHAR: [char; 32] = [
         '@', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q',
         'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', '[', '\\', ']', '^', '_',
@@ -156,7 +157,8 @@ impl Keyboard {
 
     /// Reads the next key.
     ///
-    /// Reads one or more bytes from the underlying terminal and returns the corresponding [`Key`].
+    /// Reads one or more bytes from the underlying terminal and returns the
+    /// corresponding [`Key`].
     ///
     /// A value of [`Key::None`] will be returned under any of the following conditions:
     ///
@@ -164,12 +166,14 @@ impl Keyboard {
     /// - a byte or sequence of bytes is unrecognized
     /// - a byte or sequence of bytes is malformed, such as a `UTF-8` character
     ///
-    /// A keyboard assumes that characters from standard input are encoded as `UTF-8`. Any other
-    /// encoding will yield unpredictable results in the form of keys that may not be expected.
+    /// A keyboard assumes that characters from standard input are encoded as `UTF-8`.
+    /// Any other encoding will yield unpredictable results in the form of keys that may
+    /// not be expected.
     ///
     /// # Errors
     ///
-    /// Returns [`Err`] if an I/O error occurred while reading bytes from the underlying terminal.
+    /// Returns [`Err`] if an I/O error occurred while reading bytes from the underlying
+    /// terminal.
     pub fn read(&mut self) -> Result<Key> {
         let key = match self.next()? {
             Some(27) => self.read_escape()?,
@@ -185,8 +189,8 @@ impl Keyboard {
     /// Reads a sequence of bytes prefixed with `ESC`.
     ///
     /// In most cases, this reads an ANSI escape sequence. However, it may produce
-    /// [`Key::Control(27)`] itself if no further bytes are read, or [`Key::None`] if the
-    /// sequence is unrecognized.
+    /// [`Key::Control(27)`] itself if no further bytes are read, or [`Key::None`] if
+    /// the sequence is unrecognized.
     fn read_escape(&mut self) -> Result<Key> {
         let key = match self.next()? {
             Some(b'[') => self.read_ansi()?,
@@ -208,9 +212,10 @@ impl Keyboard {
 
     /// Reads a sequence of bytes prefixed with `ESC [`.
     ///
-    /// Note that this function will interpret the most common sequences only. It is possible that
-    /// some well-formed ANSI sequences will be ignored because they simply are not recognized. If
-    /// the sequence is unrecognized or malformed, then [`Key::None`] is returned.
+    /// Note that this function will interpret the most common sequences only. It is
+    /// possible that some well-formed ANSI sequences will be ignored because they
+    /// simply are not recognized. If the sequence is unrecognized or malformed, then
+    /// [`Key::None`] is returned.
     fn read_ansi(&mut self) -> Result<Key> {
         // Optional key code or key modifier depending on trailing byte, which
         // indicates either VT or xterm sequence.
@@ -250,7 +255,8 @@ impl Keyboard {
 
     /// Reads a number with a maximum of 2 digits whose first digit is `b`.
     ///
-    /// Returns a tuple containing the number itself and the next byte read from the terminal.
+    /// Returns a tuple containing the number itself and the next byte read from the
+    /// terminal.
     fn read_number(&mut self, b: u8) -> Result<(u8, Option<u8>)> {
         let n = b - b'0';
         let result = match self.next()? {
@@ -263,8 +269,8 @@ impl Keyboard {
 
     /// Reads a `UTF-8` sequence of bytes where `b` if the first byte.
     ///
-    /// `UTF-8` encoding is strictly limited to 2-4 bytes, so anything outside this range
-    /// is considered malformed, yielding [`Key::None`].
+    /// `UTF-8` encoding is strictly limited to 2-4 bytes, so anything outside this
+    /// range is considered malformed, yielding [`Key::None`].
     fn read_unicode(&mut self, b: u8) -> Result<Key> {
         let n = b.leading_ones() as usize;
         let key = if n < 2 || n > 4 {
@@ -288,8 +294,8 @@ impl Keyboard {
         Ok(key)
     }
 
-    /// Returns the key corresponding to the VT-style key code and key modifier, or [`Key::None`] if
-    /// unrecognized.
+    /// Returns the key corresponding to the VT-style key code and key modifier, or
+    /// [`Key::None`] if unrecognized.
     fn map_vt(key_code: u8, key_mod: u8) -> Key {
         match (key_code, Self::modifiers(key_mod)) {
             (1, (shift, ctrl)) => Key::Home(shift, ctrl),
@@ -317,8 +323,8 @@ impl Keyboard {
         }
     }
 
-    /// Returns the key corresponding to the xterm-style key code and key modifier, or [`Key::None`] if
-    /// unrecognized.
+    /// Returns the key corresponding to the xterm-style key code and key modifier,
+    /// or [`Key::None`] if unrecognized.
     fn map_xterm(key_code: u8, key_mod: u8) -> Key {
         match (key_code, Self::modifiers(key_mod)) {
             (b'A', (shift, ctrl)) => Key::Up(shift, ctrl),
@@ -336,8 +342,8 @@ impl Keyboard {
 
     /// Returns the state of _SHIFT_ and _CONTROL_ keys based on the given bitmask.
     fn modifiers(key_mod: u8) -> (Shift, Ctrl) {
-        // Bitmasks for each type of recognized key modifier per ANSI standard. Note that
-        // for sake of simplicity, only SHIFT and CONTROL keys are recognized.
+        // Bitmasks for each type of recognized key modifier per ANSI standard. Note
+        // that for sake of simplicity, only SHIFT and CONTROL keys are recognized.
         const MOD_SHIFT_MASK: u8 = 0x01;
         const MOD_CONTROL_MASK: u8 = 0x04;
         const MOD_ALL_MASK: u8 = MOD_SHIFT_MASK | MOD_CONTROL_MASK;

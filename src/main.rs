@@ -110,5 +110,6 @@ fn run_config(opts: &Options, config: Configuration) -> Result<()> {
 
     term::init()?;
     let _restore = RestoreTerminal;
-    controller.run()
+    controller.run();
+    Ok(())
 }

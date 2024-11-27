@@ -6,7 +6,6 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 pub struct Canvas {
-    origin: Point,
     size: Size,
     back: Grid,
     front: Grid,
@@ -18,7 +17,6 @@ pub type CanvasRef = Rc<RefCell<Canvas>>;
 impl Canvas {
     pub fn new(origin: Point, size: Size) -> Canvas {
         Canvas {
-            origin,
             size,
             back: Grid::new(size),
             front: Grid::new(size),
@@ -28,7 +26,6 @@ impl Canvas {
 
     pub fn zero() -> Canvas {
         Canvas {
-            origin: Point::ORIGIN,
             size: Size::ZERO,
             back: Grid::zero(),
             front: Grid::zero(),
@@ -70,11 +67,13 @@ impl Canvas {
     }
 
     /// Fills all cells with `cell` for the given `row`.
+    #[allow(dead_code)]
     pub fn fill_row(&mut self, row: u32, cell: Cell) {
         self.fill_row_from(row, 0, cell);
     }
 
     /// Fills all cells with `cell` for rows in the range [`start_row`, `end_row`).
+    #[allow(dead_code)]
     pub fn fill_rows(&mut self, start_row: u32, end_row: u32, cell: Cell) {
         for row in start_row..end_row {
             self.fill_row(row, cell);

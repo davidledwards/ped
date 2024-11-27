@@ -11,7 +11,7 @@
 //! See [`Bindings`](crate::bind::Bindings) for further details on binding keys
 //! at runtime.
 use crate::buffer::Buffer;
-use crate::editor::{self, Align, EditorRef};
+use crate::editor::{Align, Editor, EditorRef};
 use crate::env::{Environment, Focus};
 use crate::error::{Error, Result};
 use crate::io;
@@ -25,7 +25,7 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 /// A function type that implements an editing operation.
-pub type OpFn = fn(&mut Environment) -> Result<Option<Action>>;
+pub type OpFn = fn(&mut Environment) -> Option<Action>;
 
 /// An action returned by an [`OpFn`] that is carried out by a controller orchestrating
 /// calls to such functions.
@@ -55,12 +55,14 @@ impl Action {
 }
 
 /// Operation: `quit`
-fn quit(env: &mut Environment) -> Result<Option<Action>> {
-    let action = Quit::start(env);
-    Ok(action)
+fn quit(env: &mut Environment) -> Option<Action> {
+    Quit::start(env)
 }
 
+/// An inquirer that orchestrates the *quit* process, which may involve saving dirty
+/// editors.
 struct Quit {
+    /// List of dirty editors.
     dirty: Vec<EditorRef>,
 }
 
@@ -150,7 +152,10 @@ impl Inquirer for Quit {
     }
 }
 
+/// An inquirer spawned from [`Quit`] that orchestrates the saving of an editor whose
+/// corresponding file in storage is newer than its timestamp.
 struct QuitOverride {
+    /// List of dirty editors, where the first entry is pertinent to this flow.
     dirty: Vec<EditorRef>,
 }
 
@@ -193,190 +198,190 @@ impl Inquirer for QuitOverride {
 }
 
 /// Operation: `help`
-fn help(_: &mut Environment) -> Result<Option<Action>> {
+fn help(_: &mut Environment) -> Option<Action> {
     // open @help editor at bottom
     // write help text to editpr
-    Ok(Action::as_echo("help not yet implemented"))
+    Action::as_echo("help not yet implemented")
 }
 
 /// Operation: `move-left`
-fn move_left(env: &mut Environment) -> Result<Option<Action>> {
+fn move_left(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_editor().borrow_mut();
     editor.clear_soft_mark();
     editor.move_left(1);
-    Ok(None)
+    None
 }
 
 /// Operation: `move-left-select`
-fn move_left_select(env: &mut Environment) -> Result<Option<Action>> {
+fn move_left_select(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_editor().borrow_mut();
     editor.set_soft_mark();
     editor.move_left(1);
-    Ok(None)
+    None
 }
 
 /// Operation: `move-right`
-fn move_right(env: &mut Environment) -> Result<Option<Action>> {
+fn move_right(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_editor().borrow_mut();
     editor.clear_soft_mark();
     editor.move_right(1);
-    Ok(None)
+    None
 }
 
 /// Operation: `move-right-select`
-fn move_right_select(env: &mut Environment) -> Result<Option<Action>> {
+fn move_right_select(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_editor().borrow_mut();
     editor.set_soft_mark();
     editor.move_right(1);
-    Ok(None)
+    None
 }
 
 /// Operation: `move-up`
-fn move_up(env: &mut Environment) -> Result<Option<Action>> {
+fn move_up(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_editor().borrow_mut();
     editor.clear_soft_mark();
     editor.move_up(1, false);
-    Ok(None)
+    None
 }
 
 /// Operation: `move-up-select`
-fn move_up_select(env: &mut Environment) -> Result<Option<Action>> {
+fn move_up_select(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_editor().borrow_mut();
     editor.set_soft_mark();
     editor.move_up(1, false);
-    Ok(None)
+    None
 }
 
 /// Operation: `move-down`
-fn move_down(env: &mut Environment) -> Result<Option<Action>> {
+fn move_down(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_editor().borrow_mut();
     editor.clear_soft_mark();
     editor.move_down(1, false);
-    Ok(None)
+    None
 }
 
 /// Operation: `move-down-select`
-fn move_down_select(env: &mut Environment) -> Result<Option<Action>> {
+fn move_down_select(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_editor().borrow_mut();
     editor.set_soft_mark();
     editor.move_down(1, false);
-    Ok(None)
+    None
 }
 
 /// Operation: `move-up-page`
-fn move_up_page(env: &mut Environment) -> Result<Option<Action>> {
+fn move_up_page(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_editor().borrow_mut();
     editor.clear_soft_mark();
     let rows = editor.rows();
     editor.move_up(rows, true);
-    Ok(None)
+    None
 }
 
 /// Operation: `move-up-page-select`
-fn move_up_page_select(env: &mut Environment) -> Result<Option<Action>> {
+fn move_up_page_select(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_editor().borrow_mut();
     editor.set_soft_mark();
     let rows = editor.rows();
     editor.move_up(rows, true);
-    Ok(None)
+    None
 }
 
 /// Operation: `move-down-page`
-fn move_down_page(env: &mut Environment) -> Result<Option<Action>> {
+fn move_down_page(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_editor().borrow_mut();
     editor.clear_soft_mark();
     let rows = editor.rows();
     editor.move_down(rows, true);
-    Ok(None)
+    None
 }
 
 /// Operation: `move-down-page-select`
-fn move_down_page_select(env: &mut Environment) -> Result<Option<Action>> {
+fn move_down_page_select(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_editor().borrow_mut();
     editor.set_soft_mark();
     let rows = editor.rows();
     editor.move_down(rows, true);
-    Ok(None)
+    None
 }
 
 /// Operation: `move-start`
-fn move_start(env: &mut Environment) -> Result<Option<Action>> {
+fn move_start(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_editor().borrow_mut();
     editor.clear_soft_mark();
     editor.move_start();
-    Ok(None)
+    None
 }
 
 /// Operation: `move-start-select`
-fn move_start_select(env: &mut Environment) -> Result<Option<Action>> {
+fn move_start_select(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_editor().borrow_mut();
     editor.set_soft_mark();
     editor.move_start();
-    Ok(None)
+    None
 }
 
 /// Operation: `move-end`
-fn move_end(env: &mut Environment) -> Result<Option<Action>> {
+fn move_end(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_editor().borrow_mut();
     editor.clear_soft_mark();
     editor.move_end();
-    Ok(None)
+    None
 }
 
 /// Operation: `move-end-select`
-fn move_end_select(env: &mut Environment) -> Result<Option<Action>> {
+fn move_end_select(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_editor().borrow_mut();
     editor.set_soft_mark();
     editor.move_end();
-    Ok(None)
+    None
 }
 
 /// Operation: `move-top`
-fn move_top(env: &mut Environment) -> Result<Option<Action>> {
+fn move_top(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_editor().borrow_mut();
     editor.clear_soft_mark();
     editor.move_top();
-    Ok(None)
+    None
 }
 
 /// Operation: `move-top-select`
-fn move_top_select(env: &mut Environment) -> Result<Option<Action>> {
+fn move_top_select(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_editor().borrow_mut();
     editor.set_soft_mark();
     editor.move_top();
-    Ok(None)
+    None
 }
 
 /// Operation: `move-bottom`
-fn move_bottom(env: &mut Environment) -> Result<Option<Action>> {
+fn move_bottom(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_editor().borrow_mut();
     editor.clear_soft_mark();
     editor.move_bottom();
-    Ok(None)
+    None
 }
 
 /// Operation: `move-bottom-select`
-fn move_bottom_select(env: &mut Environment) -> Result<Option<Action>> {
+fn move_bottom_select(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_editor().borrow_mut();
     editor.set_soft_mark();
     editor.move_bottom();
-    Ok(None)
+    None
 }
 
 /// Operation: `scroll-up`
-fn scroll_up(env: &mut Environment) -> Result<Option<Action>> {
+fn scroll_up(env: &mut Environment) -> Option<Action> {
     env.get_editor().borrow_mut().scroll_up(1);
-    Ok(None)
+    None
 }
 
 /// Operation: `scroll-down`
-fn scroll_down(env: &mut Environment) -> Result<Option<Action>> {
+fn scroll_down(env: &mut Environment) -> Option<Action> {
     env.get_editor().borrow_mut().scroll_down(1);
-    Ok(None)
+    None
 }
 
 /// Operation: `scroll-center`
-fn scroll_center(env: &mut Environment) -> Result<Option<Action>> {
+fn scroll_center(env: &mut Environment) -> Option<Action> {
     // Rotate through alignment based on current cursor position using following
     // cycle: center -> bottom -> top.
     //
@@ -395,25 +400,33 @@ fn scroll_center(env: &mut Environment) -> Result<Option<Action>> {
         Align::Center
     };
     editor.align_cursor(align);
-    Ok(None)
+    None
 }
 
 /// Operation: `set-mark`
-fn set_mark(env: &mut Environment) -> Result<Option<Action>> {
+fn set_mark(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_editor().borrow_mut();
     if let Some(_) = editor.set_hard_mark() {
         editor.render();
     }
-    Ok(None)
+    None
 }
 
-pub struct Goto;
+/// Operation: `goto-line`
+fn goto_line(env: &mut Environment) -> Option<Action> {
+    Goto::question(env.get_editor().clone())
+}
+
+/// An inquirer that orchestrates going to a specific line in an editor.
+pub struct Goto {
+    editor: EditorRef,
+}
 
 impl Goto {
     const PROMPT: &str = "goto line:";
 
-    fn question() -> Option<Action> {
-        Action::as_question(Goto.to_box())
+    fn question(editor: EditorRef) -> Option<Action> {
+        Action::as_question(Goto { editor }.to_box())
     }
 
     fn to_box(self) -> Box<dyn Inquirer> {
@@ -430,14 +443,14 @@ impl Inquirer for Goto {
         user::number_completer()
     }
 
-    fn respond(&mut self, env: &mut Environment, value: Option<&str>) -> Option<Action> {
+    fn respond(&mut self, _: &mut Environment, value: Option<&str>) -> Option<Action> {
         if let Some(s) = value {
             if let Ok(line) = s.parse::<u32>() {
                 let line = if line > 0 { line - 1 } else { line };
-                env.get_editor().borrow_mut().move_line(line, Align::Center);
+                self.editor.borrow_mut().move_line(line, Align::Center);
                 None
             } else {
-                Action::as_echo(&echo_invalid_line(s))
+                Action::as_echo(&format!("{s}: invalid line number"))
             }
         } else {
             None
@@ -445,31 +458,26 @@ impl Inquirer for Goto {
     }
 }
 
-/// Operation: `goto-line`
-fn goto_line(_: &mut Environment) -> Result<Option<Action>> {
-    Ok(Goto::question())
-}
-
 /// Operation: `insert-line`
-fn insert_line(env: &mut Environment) -> Result<Option<Action>> {
+fn insert_line(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_editor().borrow_mut();
     editor.clear_mark();
     editor.insert_char('\n');
-    Ok(None)
+    None
 }
 
 /// Operation: `insert-tab`
-fn insert_tab(env: &mut Environment) -> Result<Option<Action>> {
+fn insert_tab(env: &mut Environment) -> Option<Action> {
     let tab_size = env.workspace().config().settings.tab_size;
     let mut editor = env.get_editor().borrow_mut();
     editor.clear_mark();
     let n = tab_size - (editor.location().col as usize % tab_size);
     editor.insert_str(&" ".repeat(n));
-    Ok(None)
+    None
 }
 
 /// Operation: `remove-left`
-fn remove_left(env: &mut Environment) -> Result<Option<Action>> {
+fn remove_left(env: &mut Environment) -> Option<Action> {
     let maybe_mark = env.get_editor().borrow_mut().clear_mark();
     if let Some(mark) = maybe_mark {
         let text = env.get_editor().borrow_mut().remove_mark(mark);
@@ -477,35 +485,35 @@ fn remove_left(env: &mut Environment) -> Result<Option<Action>> {
     } else {
         let _ = env.get_editor().borrow_mut().remove_left();
     }
-    Ok(None)
+    None
 }
 
 /// Operation: `remove-right`
-fn remove_right(env: &mut Environment) -> Result<Option<Action>> {
+fn remove_right(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_editor().borrow_mut();
     editor.clear_mark();
     let _ = editor.remove_right();
-    Ok(None)
+    None
 }
 
 /// Operation: `remove-start`
-fn remove_start(env: &mut Environment) -> Result<Option<Action>> {
+fn remove_start(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_editor().borrow_mut();
     editor.clear_mark();
     let _ = editor.remove_start();
-    Ok(None)
+    None
 }
 
 /// Operation: `remove-end`
-fn remove_end(env: &mut Environment) -> Result<Option<Action>> {
+fn remove_end(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_editor().borrow_mut();
     editor.clear_mark();
     let _ = editor.remove_end();
-    Ok(None)
+    None
 }
 
 /// Operation: `copy`
-fn copy(env: &mut Environment) -> Result<Option<Action>> {
+fn copy(env: &mut Environment) -> Option<Action> {
     let maybe_mark = env.get_editor().borrow_mut().clear_mark();
     let text = if let Some(mark) = maybe_mark {
         env.get_editor().borrow_mut().copy_mark(mark)
@@ -514,20 +522,20 @@ fn copy(env: &mut Environment) -> Result<Option<Action>> {
     };
     env.set_clipboard(text);
     env.get_editor().borrow_mut().render();
-    Ok(None)
+    None
 }
 
 /// Operation: `paste`
-fn paste(env: &mut Environment) -> Result<Option<Action>> {
+fn paste(env: &mut Environment) -> Option<Action> {
     let maybe_text = env.get_clipboard();
     if let Some(text) = maybe_text {
         env.get_editor().borrow_mut().insert(text);
     }
-    Ok(None)
+    None
 }
 
 /// Operation: `cut`
-fn cut(env: &mut Environment) -> Result<Option<Action>> {
+fn cut(env: &mut Environment) -> Option<Action> {
     let maybe_mark = env.get_editor().borrow_mut().clear_mark();
     let text = if let Some(mark) = maybe_mark {
         env.get_editor().borrow_mut().remove_mark(mark)
@@ -535,41 +543,42 @@ fn cut(env: &mut Environment) -> Result<Option<Action>> {
         env.get_editor().borrow_mut().remove_line()
     };
     env.set_clipboard(text);
-    Ok(None)
+    None
 }
 
 /// Operation: `open-file`
-fn open_file(env: &mut Environment) -> Result<Option<Action>> {
-    let action = Open::question(derive_dir(env), None);
-    Ok(action)
+fn open_file(env: &mut Environment) -> Option<Action> {
+    Open::question(derive_dir(env), None)
 }
 
 /// Operation: `open-file-top`
-fn open_file_top(env: &mut Environment) -> Result<Option<Action>> {
-    let action = Open::question(derive_dir(env), Some(Placement::Top));
-    Ok(action)
+fn open_file_top(env: &mut Environment) -> Option<Action> {
+    Open::question(derive_dir(env), Some(Placement::Top))
 }
 
 /// Operation: `open-file-bottom`
-fn open_file_bottom(env: &mut Environment) -> Result<Option<Action>> {
-    let action = Open::question(derive_dir(env), Some(Placement::Bottom));
-    Ok(action)
+fn open_file_bottom(env: &mut Environment) -> Option<Action> {
+    Open::question(derive_dir(env), Some(Placement::Bottom))
 }
 
 /// Operation: `open-file-above`
-fn open_file_above(env: &mut Environment) -> Result<Option<Action>> {
-    let action = Open::question(derive_dir(env), Some(Placement::Above(env.get_active())));
-    Ok(action)
+fn open_file_above(env: &mut Environment) -> Option<Action> {
+    Open::question(derive_dir(env), Some(Placement::Above(env.get_active())))
 }
 
 /// Operation: `open-file-below`
-fn open_file_below(env: &mut Environment) -> Result<Option<Action>> {
-    let action = Open::question(derive_dir(env), Some(Placement::Below(env.get_active())));
-    Ok(action)
+fn open_file_below(env: &mut Environment) -> Option<Action> {
+    Open::question(derive_dir(env), Some(Placement::Below(env.get_active())))
 }
 
+/// An inquirer that orchestrates the process of opening a file.
 struct Open {
+    /// Base directory used for joining paths entered by the user, which is typically
+    /// derived from the path of the active editor.
     dir: PathBuf,
+
+    /// Where to open the new window if specified, otherwise is replaces the editor in
+    /// the current window.
     place: Option<Placement>,
 }
 
@@ -581,33 +590,25 @@ impl Open {
     fn to_box(self) -> Box<dyn Inquirer> {
         Box::new(self)
     }
-}
 
-/// Returns the base directory of the active editor.
-fn derive_dir(env: &mut Environment) -> PathBuf {
-    derive_dir_from(env.get_editor())
-}
-
-/// Returns the base directory derived from `editor`, which is canonicalized so long
-/// as no failures occur along the way, otherwise it resorts to a directory path of
-/// `"."`
-fn derive_dir_from(editor: &EditorRef) -> PathBuf {
-    base_dir(editor)
-        .canonicalize()
-        .unwrap_or_else(|_| sys::this_dir())
-}
-
-/// Returns the base directory of the path associated with `editor` so long as the
-/// editor is persistent, otherwise the current working directory is assumed.
-///
-/// `None` is returned if the base directory cannot be determined, possibly from a
-/// failure to get the current working directory.
-fn base_dir(editor: &EditorRef) -> PathBuf {
-    if editor.borrow().is_persistent() {
-        let path = editor.borrow().path();
-        sys::base_dir(&Path::new(&path))
-    } else {
-        sys::working_dir()
+    fn open(&mut self, env: &mut Environment, path: &str) -> Option<Action> {
+        let path = sys::canonicalize(&self.dir.join(path)).as_string();
+        match open_editor(&path) {
+            Ok(editor) => {
+                if let Some(place) = self.place {
+                    if let Some((view_id, _)) = env.open_editor(editor, place, Align::Auto) {
+                        env.set_active(Focus::To(view_id));
+                        None
+                    } else {
+                        Action::as_echo("unable to create new window")
+                    }
+                } else {
+                    env.set_editor(editor, Align::Auto);
+                    None
+                }
+            }
+            Err(e) => Action::as_echo(&e),
+        }
     }
 }
 
@@ -623,29 +624,33 @@ impl Inquirer for Open {
 
     fn respond(&mut self, env: &mut Environment, value: Option<&str>) -> Option<Action> {
         if let Some(path) = value {
-            let path = sys::canonicalize(&self.dir.join(path)).as_string();
-            match open_editor(&path) {
-                Ok(editor) => {
-                    if let Some(place) = self.place {
-                        if let Some((view_id, _)) = env.open_editor(editor, place, Align::Auto) {
-                            env.set_active(Focus::To(view_id));
-                            None
-                        } else {
-                            Action::as_echo(ECHO_CREATE_WINDOW_REFUSED)
-                        }
-                    } else {
-                        env.set_editor(editor, Align::Auto);
-                        None
-                    }
-                }
-                Err(e) => Action::as_echo(&e),
-            }
+            self.open(env, path)
         } else {
             None
         }
     }
 }
 
+/// Operation: `save-file`
+fn save_file(env: &mut Environment) -> Option<Action> {
+    let editor = env.get_editor();
+    if editor.borrow().is_persistent() {
+        match stale_editor(editor) {
+            Ok(true) => SaveOverride::question(editor.clone()),
+            Ok(false) => Save::save(editor),
+            Err(e) => Action::as_echo(&e),
+        }
+    } else {
+        Save::question(editor.clone())
+    }
+}
+
+/// Operation: `save-file-as`
+fn save_file_as(env: &mut Environment) -> Option<Action> {
+    Save::question(env.get_editor().clone())
+}
+
+/// An inquirer that orchestrates the process of saving a file.
 struct Save {
     editor: EditorRef,
 }
@@ -659,29 +664,37 @@ impl Save {
         Box::new(self)
     }
 
-    fn save_persistent(&mut self, path: &str) -> Option<Action> {
-        if let Err(e) = save_editor_as(&self.editor, Some(path)) {
-            Action::as_echo(&e)
+    fn save_as(editor: &EditorRef, env: &mut Environment, path: &str) -> Option<Action> {
+        if editor.borrow().is_persistent() {
+            Self::save_persistent(editor, path)
         } else {
-            Action::as_echo(&echo_saved(&path))
+            Self::save_transient(editor, env, path)
         }
     }
 
-    fn save_transient(&mut self, env: &mut Environment, path: &str) -> Option<Action> {
-        let time = write_editor(&self.editor, path);
+    fn save_persistent(editor: &EditorRef, path: &str) -> Option<Action> {
+        if let Err(e) = save_editor_as(editor, Some(path)) {
+            Action::as_echo(&e)
+        } else {
+            Action::as_echo(&Self::echo_saved(&path))
+        }
+    }
+
+    fn save_transient(editor: &EditorRef, env: &mut Environment, path: &str) -> Option<Action> {
+        let time = write_editor(editor, path);
         match time {
             Ok(time) => {
                 // Clone transient editor into persistent editor, ensuring that cursor
                 // position in buffer and cursor location are preserved.
-                let mut buffer = self.editor.borrow().buffer().clone();
-                let cur_pos = self.editor.borrow().cursor_pos();
+                let mut buffer = editor.borrow().buffer().clone();
+                let cur_pos = editor.borrow().cursor_pos();
                 buffer.set_pos(cur_pos);
-                let Point { row, col: _ } = self.editor.borrow().cursor();
-                let dup_editor = editor::persistent(path, Some(time), Some(buffer));
+                let Point { row, col: _ } = editor.borrow().cursor();
+                let dup_editor = Editor::persistent(path, Some(time), Some(buffer)).to_ref();
 
                 // Replace transient editor in current window with new editor.
                 env.set_editor(dup_editor, Align::Row(row));
-                Action::as_echo(&echo_saved(path))
+                Action::as_echo(&Self::echo_saved(path))
             }
             Err(e) => Action::as_echo(&e),
         }
@@ -692,8 +705,12 @@ impl Save {
             Action::as_echo(&e)
         } else {
             let path = path_of(editor);
-            Action::as_echo(&echo_saved(&path))
+            Action::as_echo(&Self::echo_saved(&path.as_string()))
         }
+    }
+
+    fn echo_saved(path: &str) -> String {
+        format!("{path}: saved")
     }
 }
 
@@ -704,16 +721,15 @@ impl Inquirer for Save {
     }
 
     fn completer(&self) -> Box<dyn Completer> {
-        // todo: change to file completer
-        user::null_completer()
+        user::file_completer(sys::working_dir())
     }
 
     fn respond(&mut self, env: &mut Environment, value: Option<&str>) -> Option<Action> {
         if let Some(path) = value {
-            if self.editor.borrow().is_persistent() {
-                self.save_persistent(path)
+            if Path::new(path).exists() {
+                SaveExists::question(self.editor.clone(), path.to_string())
             } else {
-                self.save_transient(env, path)
+                Self::save_as(&self.editor, env, path)
             }
         } else {
             None
@@ -721,6 +737,45 @@ impl Inquirer for Save {
     }
 }
 
+/// An inquirer spawned from [`Save`] that orchestrates the saving of an editor whose
+/// path provided by the user conflicts with an existing file in storage.
+struct SaveExists {
+    editor: EditorRef,
+    path: String,
+}
+
+impl SaveExists {
+    fn question(editor: EditorRef, path: String) -> Option<Action> {
+        Action::as_question(SaveExists { editor, path }.to_box())
+    }
+
+    fn to_box(self) -> Box<dyn Inquirer> {
+        Box::new(self)
+    }
+}
+
+impl Inquirer for SaveExists {
+    fn prompt(&self) -> String {
+        let path = sys::pretty_path(&self.path);
+        format!("{path}: file already exists, overwrite?")
+    }
+
+    fn completer(&self) -> Box<dyn Completer> {
+        user::yes_no_completer()
+    }
+
+    fn respond(&mut self, env: &mut Environment, value: Option<&str>) -> Option<Action> {
+        match value {
+            Some(yes_no) if yes_no == "y" => Save::save_as(&self.editor, env, &self.path),
+            Some(yes_no) if yes_no == "n" => None,
+            Some(_) => SaveExists::question(self.editor.clone(), self.path.clone()),
+            None => None,
+        }
+    }
+}
+
+/// An inquirer spawned from [`Save`] that orchestrates the saving of an editor whose
+/// corresponding file in storage is newer than its timestamp.
 struct SaveOverride {
     editor: EditorRef,
 }
@@ -755,30 +810,9 @@ impl Inquirer for SaveOverride {
     }
 }
 
-/// Operation: `save-file`
-fn save_file(env: &mut Environment) -> Result<Option<Action>> {
-    let editor = env.get_editor();
-    let action = if editor.borrow().is_persistent() {
-        match stale_editor(editor) {
-            Ok(true) => SaveOverride::question(editor.clone()),
-            Ok(false) => Save::save(editor),
-            Err(e) => Action::as_echo(&e),
-        }
-    } else {
-        Save::question(editor.clone())
-    };
-    Ok(action)
-}
-
-/// Operation: `save-file-as`
-fn save_file_as(env: &mut Environment) -> Result<Option<Action>> {
-    let action = Save::question(env.get_editor().clone());
-    Ok(action)
-}
-
 /// Operation: `kill-window`
-fn kill_window(env: &mut Environment) -> Result<Option<Action>> {
-    let action = if env.view_map().len() > 1 {
+fn kill_window(env: &mut Environment) -> Option<Action> {
+    if env.view_map().len() > 1 {
         let editor = env.get_editor();
         if editor.borrow().is_persistent() && editor.borrow().dirty() {
             Kill::question(editor.clone())
@@ -787,11 +821,12 @@ fn kill_window(env: &mut Environment) -> Result<Option<Action>> {
             None
         }
     } else {
-        Action::as_echo(ECHO_CLOSE_WINDOW_REFUSED)
-    };
-    Ok(action)
+        Action::as_echo("cannot close only window")
+    }
 }
 
+/// An inquirer that orchestrates the process of killing a window with a dirty editor
+/// attached.
 struct Kill {
     editor: EditorRef,
 }
@@ -806,11 +841,10 @@ impl Kill {
     }
 
     fn kill(env: &mut Environment, editor: &EditorRef) -> Option<Action> {
-        let action = Save::save(editor);
-        if let Some(_) = action {
+        Save::save(editor).and_then(|action| {
             env.kill_window();
-        }
-        action
+            Some(action)
+        })
     }
 }
 
@@ -835,7 +869,7 @@ impl Inquirer for Kill {
                 if let Some(_) = env.kill_window() {
                     None
                 } else {
-                    Action::as_echo(ECHO_CLOSE_WINDOW_REFUSED)
+                    Action::as_echo("cannot close only window")
                 }
             }
             Some(_) => Kill::question(self.editor.clone()),
@@ -844,6 +878,8 @@ impl Inquirer for Kill {
     }
 }
 
+/// An inquirer spawned from [`Kill`] that orchestrates the saving of an editor whose
+/// corresponding file in storage is newer than its timestamp.
 struct KillOverride {
     editor: EditorRef,
 }
@@ -879,72 +915,72 @@ impl Inquirer for KillOverride {
 }
 
 /// Operation: `close-window`
-fn close_window(env: &mut Environment) -> Result<Option<Action>> {
+fn close_window(env: &mut Environment) -> Option<Action> {
     let action = if let Some(_) = env.close_window() {
         None
     } else {
-        Action::as_echo(ECHO_CLOSE_WINDOW_REFUSED)
+        Action::as_echo("cannot close only window")
     };
-    Ok(action)
+    action
 }
 
 /// Operation: `top-window`
-fn top_window(env: &mut Environment) -> Result<Option<Action>> {
+fn top_window(env: &mut Environment) -> Option<Action> {
     env.set_active(Focus::Top);
-    Ok(None)
+    None
 }
 
 /// Operation: `bottom-window`
-fn bottom_window(env: &mut Environment) -> Result<Option<Action>> {
+fn bottom_window(env: &mut Environment) -> Option<Action> {
     env.set_active(Focus::Bottom);
-    Ok(None)
+    None
 }
 
 /// Operation: `prev-window`
-fn prev_window(env: &mut Environment) -> Result<Option<Action>> {
+fn prev_window(env: &mut Environment) -> Option<Action> {
     env.set_active(Focus::Above);
-    Ok(None)
+    None
 }
 
 /// Operation: `next-window`
-fn next_window(env: &mut Environment) -> Result<Option<Action>> {
+fn next_window(env: &mut Environment) -> Option<Action> {
     env.set_active(Focus::Below);
-    Ok(None)
+    None
 }
 
 /// Operation: `prev-editor`
-fn prev_editor(env: &mut Environment) -> Result<Option<Action>> {
+fn prev_editor(env: &mut Environment) -> Option<Action> {
     let ids = unattached_editors(env);
     if ids.len() > 0 {
         let editor_id = env.get_editor_id();
         let i = ids.iter().rev().position(|id| *id < editor_id).unwrap_or(0);
         env.switch_editor(ids[ids.len() - i - 1], Align::Auto);
     }
-    Ok(None)
+    None
 }
 
 /// Operation: `next-editor`
-fn next_editor(env: &mut Environment) -> Result<Option<Action>> {
+fn next_editor(env: &mut Environment) -> Option<Action> {
     let ids = unattached_editors(env);
     if ids.len() > 0 {
         let editor_id = env.get_editor_id();
         let i = ids.iter().position(|id| *id > editor_id).unwrap_or(0);
         env.switch_editor(ids[i], Align::Auto);
     }
-    Ok(None)
+    None
 }
 
-fn list_editors(env: &mut Environment) -> Result<Option<Action>> {
+fn list_editors(env: &mut Environment) -> Option<Action> {
     let active_id = env.get_active();
     let mut buffer = Buffer::new();
     for (id, e) in env.editor_map() {
         buffer.insert_str(&format!("{id}: {}\n", e.borrow().name()));
     }
     buffer.set_pos(0);
-    let editor = editor::transient("editors", Some(buffer));
+    let editor = Editor::transient("@editors", Some(buffer)).to_ref();
     env.open_editor(editor, Placement::Bottom, Align::Auto);
     env.set_active(Focus::To(active_id));
-    Ok(None)
+    None
 }
 
 /// Reads the file at `path` and returns a new editor with the persistent storage type.
@@ -955,7 +991,7 @@ pub fn open_editor(path: &str) -> Result<EditorRef> {
         Ok(_) => {
             // Contents read successfully, so fetch time of last modification for use
             // in checking before subsequent write operation.
-            io::get_time(path.as_ref()).ok()
+            io::get_time(path).ok()
         }
         Err(Error::IO { device: _, cause }) if cause.kind() == ErrorKind::NotFound => {
             // File was not found, but still treat this error condition as successful,
@@ -970,7 +1006,7 @@ pub fn open_editor(path: &str) -> Result<EditorRef> {
 
     // Create persistent buffer with position set at top.
     buffer.set_pos(0);
-    let editor = editor::persistent(path, time, Some(buffer));
+    let editor = Editor::persistent(path, time, Some(buffer)).to_ref();
     Ok(editor)
 }
 
@@ -984,7 +1020,7 @@ fn save_editor(editor: &EditorRef) -> Result<()> {
 fn save_editor_as(editor: &EditorRef, path: Option<&str>) -> Result<()> {
     let path = path
         .map(|path| path.to_string())
-        .unwrap_or_else(|| path_of(editor));
+        .unwrap_or_else(|| path_of(editor).as_string());
     write_editor(editor, &path).map(|time| update_editor(editor, &path, time))
 }
 
@@ -1009,7 +1045,7 @@ fn stale_editor(editor: &EditorRef) -> Result<bool> {
     let editor = editor.borrow();
     let stale = if editor.is_persistent() {
         if let Some(timestamp) = editor.timestamp() {
-            io::get_time(&editor.path())? > timestamp
+            io::get_time(editor.path())? > timestamp
         } else {
             false
         }
@@ -1040,7 +1076,7 @@ fn unattached_editors(env: &Environment) -> Vec<u32> {
 }
 
 /// Returns the path associated with `editor`.
-fn path_of(editor: &EditorRef) -> String {
+fn path_of(editor: &EditorRef) -> PathBuf {
     editor.borrow().path()
 }
 
@@ -1049,16 +1085,31 @@ fn name_of(editor: &EditorRef) -> String {
     editor.borrow().name()
 }
 
-// This section contains string constants and formatting functions for echoing.
-const ECHO_CLOSE_WINDOW_REFUSED: &str = "cannot close only window";
-const ECHO_CREATE_WINDOW_REFUSED: &str = "unable to create new window";
-
-fn echo_invalid_line(s: &str) -> String {
-    format!("{s}: invalid line number")
+/// Returns the base directory of the active editor.
+fn derive_dir(env: &mut Environment) -> PathBuf {
+    derive_dir_from(env.get_editor())
 }
 
-fn echo_saved(path: &str) -> String {
-    format!("{path}: saved")
+/// Returns the base directory derived from `editor`, which is canonicalized so long
+/// as no failures occur along the way, otherwise it resorts to a directory path of
+/// `"."`
+fn derive_dir_from(editor: &EditorRef) -> PathBuf {
+    base_dir(editor)
+        .canonicalize()
+        .unwrap_or_else(|_| sys::this_dir())
+}
+
+/// Returns the base directory of the path associated with `editor` so long as the
+/// editor is persistent, otherwise the current working directory is assumed.
+///
+/// `None` is returned if the base directory cannot be determined, possibly from a
+/// failure to get the current working directory.
+fn base_dir(editor: &EditorRef) -> PathBuf {
+    if editor.borrow().is_persistent() {
+        sys::base_dir(editor.borrow().path())
+    } else {
+        sys::working_dir()
+    }
 }
 
 /// Predefined mapping of editing operations to editing functions.

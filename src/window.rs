@@ -124,7 +124,6 @@ impl Banner {
 }
 
 pub struct Window {
-    origin: Point,
     size: Size,
     config: ConfigurationRef,
     canvas: CanvasRef,
@@ -145,7 +144,6 @@ impl Window {
         let banner = Banner::new(banner_origin, size.cols, config.clone());
 
         let mut this = Window {
-            origin,
             size,
             config,
             canvas: canvas.to_ref(),
@@ -157,7 +155,6 @@ impl Window {
 
     pub fn zombie() -> Window {
         Window {
-            origin: Point::ORIGIN,
             size: Size::ZERO,
             config: Configuration::default().to_ref(),
             canvas: Canvas::zero().to_ref(),
@@ -171,10 +168,6 @@ impl Window {
 
     pub fn to_ref(self) -> WindowRef {
         Rc::new(RefCell::new(self))
-    }
-
-    pub fn size(&self) -> Size {
-        self.size
     }
 
     pub fn config(&self) -> &ConfigurationRef {

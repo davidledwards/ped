@@ -109,24 +109,23 @@ impl Controller {
     /// This loop orchestrates the entire editing experience, reading sequences of
     /// [keys](Key) and calling their corresponding editing functions until instructed to
     /// quit.
-    pub fn run(&mut self) -> Result<()> {
+    pub fn run(&mut self) {
         self.set_echo(&format!(
             "{PACKAGE_NAME} {PACKAGE_VERSION} | type C-h for help"
         ));
         self.show_cursor();
         loop {
-            let key = self.keyboard.read()?;
+            let key = self.keyboard.read().unwrap_or(Key::None);
             if key == Key::None {
-                self.process_background()?;
+                self.process_background();
             } else {
-                if let Step::Quit = self.process_key(key)? {
+                if let Step::Quit = self.process_key(key) {
                     break;
                 } else {
                     self.show_cursor();
                 }
             }
         }
-        Ok(())
     }
 
     fn show_cursor(&mut self) {
@@ -135,7 +134,7 @@ impl Controller {
         }
     }
 
-    fn process_key(&mut self, key: Key) -> Result<Step> {
+    fn process_key(&mut self, key: Key) -> Step {
         if self.question.is_some() {
             self.process_question(key)
         } else {
@@ -143,7 +142,7 @@ impl Controller {
         }
     }
 
-    fn process_normal(&mut self, key: Key) -> Result<Step> {
+    fn process_normal(&mut self, key: Key) -> Step {
         if let Some(c) = self.possible_char(&key) {
             // Inserting text is statistically most prevalent scenario, so this
             // short circuits detection and bypasses normal indirection of key
@@ -163,8 +162,8 @@ impl Controller {
         } else {
             self.key_seq.push(key.clone());
             if let Some(op_fn) = self.bindings.find(&self.key_seq) {
-                match op_fn(&mut self.env)? {
-                    Some(Action::Quit) => return Ok(Step::Quit),
+                match op_fn(&mut self.env) {
+                    Some(Action::Quit) => return Step::Quit,
                     Some(Action::Echo(text)) => {
                         self.set_echo(text.as_str());
                     }
@@ -188,12 +187,11 @@ impl Controller {
                 self.clear_keys();
             }
         }
-        Ok(Step::Continue)
+        Step::Continue
     }
 
-    fn process_question(&mut self, key: Key) -> Result<Step> {
+    fn process_question(&mut self, key: Key) -> Step {
         let inquirer = self.question.as_mut().unwrap();
-        //        let answer_fn = self.question.as_mut().unwrap();
         let action = if key == CTRL_G {
             let action = inquirer.respond(&mut self.env, None);
             self.clear_question();
@@ -214,7 +212,7 @@ impl Controller {
             }
         };
         match action {
-            Some(Action::Quit) => return Ok(Step::Quit),
+            Some(Action::Quit) => return Step::Quit,
             Some(Action::Echo(text)) => {
                 self.set_echo(text.as_str());
             }
@@ -224,10 +222,10 @@ impl Controller {
             }
             None => (),
         }
-        Ok(Step::Continue)
+        Step::Continue
     }
 
-    fn process_background(&mut self) -> Result<Step> {
+    fn process_background(&mut self) -> Step {
         // Detect change in terminal size and resize workspace, but not immediately.
         // In practice, a rapid series of change events could be detected because
         // human movement is significantly slower.
@@ -248,7 +246,7 @@ impl Controller {
         } else {
             None
         };
-        Ok(Step::Continue)
+        Step::Continue
     }
 
     /// An efficient means of detecting the very common case of a single character,

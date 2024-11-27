@@ -1,5 +1,5 @@
 //! Editing environment.
-use crate::editor::{self, Align, EditorRef};
+use crate::editor::{Align, Editor, EditorRef};
 use crate::window::WindowRef;
 use crate::workspace::{Placement, Workspace, WorkspaceRef};
 use std::cell::{Ref, RefMut};
@@ -40,7 +40,7 @@ impl Environment {
         // Seed list of editors with builtins.
         let mut editor_map = EditorMap::new();
         for (id, name) in Self::BUILTIN_EDITORS {
-            editor_map.insert(id, editor::transient(name, None));
+            editor_map.insert(id, Editor::transient(name, None).to_ref());
         }
         let editor_id_seq = editor_map.len() as u32;
 

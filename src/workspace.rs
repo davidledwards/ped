@@ -36,34 +36,6 @@ impl View {
     }
 }
 
-pub struct Views<'a> {
-    views: &'a Vec<View>,
-    index: usize,
-}
-
-impl Views<'_> {
-    fn new(ws: &Workspace) -> Views {
-        Views {
-            views: &ws.views,
-            index: 0,
-        }
-    }
-}
-
-impl<'a> Iterator for Views<'a> {
-    type Item = &'a View;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.index < self.views.len() {
-            let r = &self.views[self.index];
-            self.index += 1;
-            Some(r)
-        } else {
-            None
-        }
-    }
-}
-
 /// A workspace is a collection of [`View`]s that encapsulate the entire editing
 /// experience.
 ///
@@ -333,11 +305,6 @@ impl Workspace {
     /// Returns the view associated with `id`, otherwise `None`.
     pub fn find_view(&self, id: u32) -> Option<&View> {
         self.views.iter().find(|v| v.id == id)
-    }
-
-    /// Returns an iterator over the [`View`]s.
-    pub fn views(&self) -> Views {
-        Views::new(self)
     }
 
     pub fn clear_shared(&mut self) {

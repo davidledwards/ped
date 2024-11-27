@@ -85,6 +85,7 @@ impl Buffer {
         self.gap
     }
 
+    #[allow(dead_code)]
     pub fn get_char(&self, pos: usize) -> Option<char> {
         if pos < self.size {
             Some(self.get_char_unchecked(pos))
