@@ -311,8 +311,7 @@ impl Configuration {
         ("ESC:>", "next-window"),
         ("ESC:,", "prev-editor"),
         ("ESC:.", "next-editor"),
-        // --- TEMPORARY ---
-        ("C-t", "list-editors"),
+        ("C-y", "select-editor"),
     ];
 }
 

@@ -107,6 +107,7 @@ impl Buffer {
         self.gap
     }
 
+    #[allow(dead_code)]
     pub fn insert_str(&mut self, cs: &str) -> usize {
         for c in cs.chars() {
             self.insert_char(c);

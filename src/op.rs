@@ -414,19 +414,19 @@ fn set_mark(env: &mut Environment) -> Option<Action> {
 
 /// Operation: `goto-line`
 fn goto_line(env: &mut Environment) -> Option<Action> {
-    Goto::question(env.get_editor().clone())
+    GotoLine::question(env.get_editor().clone())
 }
 
 /// An inquirer that orchestrates going to a specific line in an editor.
-pub struct Goto {
+struct GotoLine {
     editor: EditorRef,
 }
 
-impl Goto {
+impl GotoLine {
     const PROMPT: &str = "goto line:";
 
     fn question(editor: EditorRef) -> Option<Action> {
-        Action::as_question(Goto { editor }.to_box())
+        Action::as_question(GotoLine { editor }.to_box())
     }
 
     fn to_box(self) -> Box<dyn Inquirer> {
@@ -434,7 +434,7 @@ impl Goto {
     }
 }
 
-impl Inquirer for Goto {
+impl Inquirer for GotoLine {
     fn prompt(&self) -> String {
         Self::PROMPT.to_string()
     }
@@ -950,37 +950,94 @@ fn next_window(env: &mut Environment) -> Option<Action> {
 
 /// Operation: `prev-editor`
 fn prev_editor(env: &mut Environment) -> Option<Action> {
-    let ids = unattached_editors(env);
-    if ids.len() > 0 {
+    let editors = unattached_editors(env);
+    if editors.len() > 0 {
         let editor_id = env.get_editor_id();
-        let i = ids.iter().rev().position(|id| *id < editor_id).unwrap_or(0);
-        env.switch_editor(ids[ids.len() - i - 1], Align::Auto);
+        let index = editors
+            .iter()
+            .rev()
+            .position(|(id, _)| *id < editor_id)
+            .unwrap_or(0);
+        let (prev_id, _) = editors[editors.len() - index - 1];
+        env.switch_editor(prev_id, Align::Auto);
     }
     None
 }
 
 /// Operation: `next-editor`
 fn next_editor(env: &mut Environment) -> Option<Action> {
-    let ids = unattached_editors(env);
-    if ids.len() > 0 {
+    let editors = unattached_editors(env);
+    if editors.len() > 0 {
         let editor_id = env.get_editor_id();
-        let i = ids.iter().position(|id| *id > editor_id).unwrap_or(0);
-        env.switch_editor(ids[i], Align::Auto);
+        let index = editors
+            .iter()
+            .position(|(id, _)| *id > editor_id)
+            .unwrap_or(0);
+        let (next_id, _) = editors[index];
+        env.switch_editor(next_id, Align::Auto);
     }
     None
 }
 
-fn list_editors(env: &mut Environment) -> Option<Action> {
-    let active_id = env.get_active();
-    let mut buffer = Buffer::new();
-    for (id, e) in env.editor_map() {
-        buffer.insert_str(&format!("{id}: {}\n", e.borrow().name()));
+/// Operation: `select-editor`
+fn select_editor(env: &mut Environment) -> Option<Action> {
+    let editors = unattached_editors(env);
+    if editors.len() > 0 {
+        SelectEditor::question(editors)
+    } else {
+        Action::as_echo("only editor")
     }
-    buffer.set_pos(0);
-    let editor = Editor::transient("@editors", Some(buffer)).to_ref();
-    env.open_editor(editor, Placement::Bottom, Align::Auto);
-    env.set_active(Focus::To(active_id));
-    None
+}
+
+/// An iquirer that orchetrates the selection of an editor by name, replacing the editor
+/// in the active window.
+struct SelectEditor {
+    editors: Vec<(u32, EditorRef)>,
+}
+
+impl SelectEditor {
+    const PROMPT: &str = "editor:";
+
+    fn question(editors: Vec<(u32, EditorRef)>) -> Option<Action> {
+        Action::as_question(SelectEditor { editors }.to_box())
+    }
+
+    fn to_box(self) -> Box<dyn Inquirer> {
+        Box::new(self)
+    }
+}
+
+impl Inquirer for SelectEditor {
+    fn prompt(&self) -> String {
+        Self::PROMPT.to_string()
+    }
+
+    fn completer(&self) -> Box<dyn Completer> {
+        let accepted = self
+            .editors
+            .iter()
+            .map(|(_, e)| e.borrow().name())
+            .collect();
+        user::list_completer(accepted)
+    }
+
+    fn respond(&mut self, env: &mut Environment, value: Option<&str>) -> Option<Action> {
+        if let Some(value) = value {
+            let editor = self
+                .editors
+                .iter()
+                .find(|(_, e)| e.borrow().name() == value)
+                .map(|(id, _)| *id);
+            if let Some(editor_id) = editor {
+                env.switch_editor(editor_id, Align::Auto);
+                None
+            } else {
+                Action::as_echo("{value}: editor not found")
+            }
+        } else {
+            None
+        }
+    }
 }
 
 /// Reads the file at `path` and returns a new editor with the persistent storage type.
@@ -1064,14 +1121,14 @@ fn dirty_editors(env: &Environment) -> Vec<EditorRef> {
         .collect()
 }
 
-/// Returns an ordered collection of ids for those editors that are not attached
-/// to a window.
-fn unattached_editors(env: &Environment) -> Vec<u32> {
+/// Returns an ordered collection of editor ids and editors for those that are not
+/// attached to a window.
+fn unattached_editors(env: &Environment) -> Vec<(u32, EditorRef)> {
     let attached = env.view_map().values().cloned().collect::<Vec<_>>();
     env.editor_map()
-        .keys()
-        .cloned()
-        .filter(|id| !attached.contains(id))
+        .iter()
+        .filter(|(id, _)| !attached.contains(id))
+        .map(|(id, e)| (*id, e.clone()))
         .collect()
 }
 
@@ -1172,8 +1229,7 @@ const OP_MAPPINGS: [(&'static str, OpFn); 52] = [
     ("next-window", next_window),
     ("prev-editor", prev_editor),
     ("next-editor", next_editor),
-    // --- TEMPORARY ---
-    ("list-editors", list_editors),
+    ("select-editor", select_editor),
 ];
 
 pub fn init_op_map() -> OpMap {

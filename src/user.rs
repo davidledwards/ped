@@ -72,6 +72,13 @@ pub fn number_completer() -> Box<dyn Completer> {
     Box::new(NumberCompleter::new())
 }
 
+/// Returns an implementation of [`Completer`] that accepts a finite collection of
+/// strings and provides searchability over the collection.
+pub fn list_completer(accepted: Vec<String>) -> Box<dyn Completer> {
+    Box::new(ListCompleter::new(accepted))
+}
+
+/// Returns an implementation of [`Completer`] that navigates files and directories.
 pub fn file_completer(dir: PathBuf) -> Box<dyn Completer> {
     Box::new(FileCompleter::new(dir))
 }
@@ -226,6 +233,93 @@ impl Completer for NumberCompleter {
     }
 }
 
+/// A completer that accepts a finite collection of strings and provides searchability
+/// over the collection.
+struct ListCompleter {
+    accepted: Vec<String>,
+    matches: Vec<usize>,
+    last_match: Option<usize>,
+}
+
+impl ListCompleter {
+    fn new(accepted: Vec<String>) -> ListCompleter {
+        ListCompleter {
+            accepted,
+            matches: Vec::new(),
+            last_match: None,
+        }
+    }
+
+    fn refresh(&mut self, value: &str) -> usize {
+        self.matches = self
+            .accepted
+            .iter()
+            .enumerate()
+            .filter(|(_, v)| v.contains(value))
+            .map(|(index, _)| index)
+            .collect();
+        self.last_match = None;
+        self.matches.len()
+    }
+
+    fn match_for(&self, index: usize) -> &String {
+        &self.accepted[self.matches[index]]
+    }
+}
+
+impl Completer for ListCompleter {
+    fn prepare(&mut self) -> Option<String> {
+        let count = self.refresh("");
+        let hint = if count == 1 {
+            format!(" ({})", self.match_for(0))
+        } else {
+            format!(" ({count} available)")
+        };
+        Some(hint)
+    }
+
+    fn evaluate(&mut self, value: &str) -> Option<String> {
+        let count = self.refresh(value);
+        let hint = if count == 0 {
+            format!(" (no matches)")
+        } else if count == 1 {
+            format!(" ({})", self.match_for(0))
+        } else {
+            format!(" ({count} matches)")
+        };
+        Some(hint)
+    }
+
+    fn suggest(&mut self, _: &str) -> (Option<String>, Option<String>) {
+        let count = self.matches.len();
+        if count == 0 {
+            (None, Some(format!(" (no matches)")))
+        } else if count == 1 {
+            let replace = self.match_for(0).to_string();
+            (Some(replace), None)
+        } else {
+            let index = if let Some(index) = self.last_match {
+                (index + 1) % count
+            } else {
+                0
+            };
+            self.last_match = Some(index);
+            let replace = self.match_for(index).to_string();
+            let hint = format!(" ({} of {count} matches)", index + 1);
+            (Some(replace), Some(hint))
+        }
+    }
+
+    fn accept(&mut self, value: &str) -> Option<String> {
+        let value = value.to_string();
+        if self.accepted.contains(&value) {
+            Some(value)
+        } else {
+            None
+        }
+    }
+}
+
 /// A completer that provides assistance in navigating files and directories.
 struct FileCompleter {
     dir: PathBuf,
@@ -328,8 +422,7 @@ impl Completer for FileCompleter {
         } else {
             let count = self.matches.len();
             if count == 0 {
-                let hint = format!(" (no matches)");
-                (None, Some(hint))
+                (None, Some(format!(" (no matches)")))
             } else if count == 1 {
                 // Replace input value when single match exists.
                 let replace = self.replace_match(0);
