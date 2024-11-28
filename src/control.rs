@@ -111,7 +111,7 @@ impl Controller {
     /// quit.
     pub fn run(&mut self) {
         self.set_echo(&format!(
-            "{PACKAGE_NAME} {PACKAGE_VERSION} | type C-h for help"
+            "{PACKAGE_NAME} {PACKAGE_VERSION} | type C-h for help, C-q to quit"
         ));
         self.show_cursor();
         loop {
