@@ -200,8 +200,8 @@ impl Inquirer for QuitOverride {
 
 /// Operation: `help`
 fn help(env: &mut Environment) -> Option<Action> {
-    if let Some(editor_id) = env.find_editor(help::EDITOR_NAME) {
-        if let Some(view_id) = env.find_view_for(editor_id) {
+    if let Some(editor_id) = env.find_editor_id(help::EDITOR_NAME) {
+        if let Some(view_id) = env.find_editor_view_id(editor_id) {
             env.kill_window_for(view_id);
             None
         } else {
@@ -225,7 +225,7 @@ fn help(env: &mut Environment) -> Option<Action> {
 
 /// Operation: `move-left`
 fn move_left(env: &mut Environment) -> Option<Action> {
-    let mut editor = env.get_editor().borrow_mut();
+    let mut editor = env.get_active_editor().borrow_mut();
     editor.clear_soft_mark();
     editor.move_left(1);
     None
@@ -233,7 +233,7 @@ fn move_left(env: &mut Environment) -> Option<Action> {
 
 /// Operation: `move-left-select`
 fn move_left_select(env: &mut Environment) -> Option<Action> {
-    let mut editor = env.get_editor().borrow_mut();
+    let mut editor = env.get_active_editor().borrow_mut();
     editor.set_soft_mark();
     editor.move_left(1);
     None
@@ -241,7 +241,7 @@ fn move_left_select(env: &mut Environment) -> Option<Action> {
 
 /// Operation: `move-right`
 fn move_right(env: &mut Environment) -> Option<Action> {
-    let mut editor = env.get_editor().borrow_mut();
+    let mut editor = env.get_active_editor().borrow_mut();
     editor.clear_soft_mark();
     editor.move_right(1);
     None
@@ -249,7 +249,7 @@ fn move_right(env: &mut Environment) -> Option<Action> {
 
 /// Operation: `move-right-select`
 fn move_right_select(env: &mut Environment) -> Option<Action> {
-    let mut editor = env.get_editor().borrow_mut();
+    let mut editor = env.get_active_editor().borrow_mut();
     editor.set_soft_mark();
     editor.move_right(1);
     None
@@ -257,7 +257,7 @@ fn move_right_select(env: &mut Environment) -> Option<Action> {
 
 /// Operation: `move-up`
 fn move_up(env: &mut Environment) -> Option<Action> {
-    let mut editor = env.get_editor().borrow_mut();
+    let mut editor = env.get_active_editor().borrow_mut();
     editor.clear_soft_mark();
     editor.move_up(1, false);
     None
@@ -265,7 +265,7 @@ fn move_up(env: &mut Environment) -> Option<Action> {
 
 /// Operation: `move-up-select`
 fn move_up_select(env: &mut Environment) -> Option<Action> {
-    let mut editor = env.get_editor().borrow_mut();
+    let mut editor = env.get_active_editor().borrow_mut();
     editor.set_soft_mark();
     editor.move_up(1, false);
     None
@@ -273,7 +273,7 @@ fn move_up_select(env: &mut Environment) -> Option<Action> {
 
 /// Operation: `move-down`
 fn move_down(env: &mut Environment) -> Option<Action> {
-    let mut editor = env.get_editor().borrow_mut();
+    let mut editor = env.get_active_editor().borrow_mut();
     editor.clear_soft_mark();
     editor.move_down(1, false);
     None
@@ -281,7 +281,7 @@ fn move_down(env: &mut Environment) -> Option<Action> {
 
 /// Operation: `move-down-select`
 fn move_down_select(env: &mut Environment) -> Option<Action> {
-    let mut editor = env.get_editor().borrow_mut();
+    let mut editor = env.get_active_editor().borrow_mut();
     editor.set_soft_mark();
     editor.move_down(1, false);
     None
@@ -289,7 +289,7 @@ fn move_down_select(env: &mut Environment) -> Option<Action> {
 
 /// Operation: `move-up-page`
 fn move_up_page(env: &mut Environment) -> Option<Action> {
-    let mut editor = env.get_editor().borrow_mut();
+    let mut editor = env.get_active_editor().borrow_mut();
     editor.clear_soft_mark();
     let rows = editor.rows();
     editor.move_up(rows, true);
@@ -298,7 +298,7 @@ fn move_up_page(env: &mut Environment) -> Option<Action> {
 
 /// Operation: `move-up-page-select`
 fn move_up_page_select(env: &mut Environment) -> Option<Action> {
-    let mut editor = env.get_editor().borrow_mut();
+    let mut editor = env.get_active_editor().borrow_mut();
     editor.set_soft_mark();
     let rows = editor.rows();
     editor.move_up(rows, true);
@@ -307,7 +307,7 @@ fn move_up_page_select(env: &mut Environment) -> Option<Action> {
 
 /// Operation: `move-down-page`
 fn move_down_page(env: &mut Environment) -> Option<Action> {
-    let mut editor = env.get_editor().borrow_mut();
+    let mut editor = env.get_active_editor().borrow_mut();
     editor.clear_soft_mark();
     let rows = editor.rows();
     editor.move_down(rows, true);
@@ -316,7 +316,7 @@ fn move_down_page(env: &mut Environment) -> Option<Action> {
 
 /// Operation: `move-down-page-select`
 fn move_down_page_select(env: &mut Environment) -> Option<Action> {
-    let mut editor = env.get_editor().borrow_mut();
+    let mut editor = env.get_active_editor().borrow_mut();
     editor.set_soft_mark();
     let rows = editor.rows();
     editor.move_down(rows, true);
@@ -325,7 +325,7 @@ fn move_down_page_select(env: &mut Environment) -> Option<Action> {
 
 /// Operation: `move-start`
 fn move_start(env: &mut Environment) -> Option<Action> {
-    let mut editor = env.get_editor().borrow_mut();
+    let mut editor = env.get_active_editor().borrow_mut();
     editor.clear_soft_mark();
     editor.move_start();
     None
@@ -333,7 +333,7 @@ fn move_start(env: &mut Environment) -> Option<Action> {
 
 /// Operation: `move-start-select`
 fn move_start_select(env: &mut Environment) -> Option<Action> {
-    let mut editor = env.get_editor().borrow_mut();
+    let mut editor = env.get_active_editor().borrow_mut();
     editor.set_soft_mark();
     editor.move_start();
     None
@@ -341,7 +341,7 @@ fn move_start_select(env: &mut Environment) -> Option<Action> {
 
 /// Operation: `move-end`
 fn move_end(env: &mut Environment) -> Option<Action> {
-    let mut editor = env.get_editor().borrow_mut();
+    let mut editor = env.get_active_editor().borrow_mut();
     editor.clear_soft_mark();
     editor.move_end();
     None
@@ -349,7 +349,7 @@ fn move_end(env: &mut Environment) -> Option<Action> {
 
 /// Operation: `move-end-select`
 fn move_end_select(env: &mut Environment) -> Option<Action> {
-    let mut editor = env.get_editor().borrow_mut();
+    let mut editor = env.get_active_editor().borrow_mut();
     editor.set_soft_mark();
     editor.move_end();
     None
@@ -357,7 +357,7 @@ fn move_end_select(env: &mut Environment) -> Option<Action> {
 
 /// Operation: `move-top`
 fn move_top(env: &mut Environment) -> Option<Action> {
-    let mut editor = env.get_editor().borrow_mut();
+    let mut editor = env.get_active_editor().borrow_mut();
     editor.clear_soft_mark();
     editor.move_top();
     None
@@ -365,7 +365,7 @@ fn move_top(env: &mut Environment) -> Option<Action> {
 
 /// Operation: `move-top-select`
 fn move_top_select(env: &mut Environment) -> Option<Action> {
-    let mut editor = env.get_editor().borrow_mut();
+    let mut editor = env.get_active_editor().borrow_mut();
     editor.set_soft_mark();
     editor.move_top();
     None
@@ -373,7 +373,7 @@ fn move_top_select(env: &mut Environment) -> Option<Action> {
 
 /// Operation: `move-bottom`
 fn move_bottom(env: &mut Environment) -> Option<Action> {
-    let mut editor = env.get_editor().borrow_mut();
+    let mut editor = env.get_active_editor().borrow_mut();
     editor.clear_soft_mark();
     editor.move_bottom();
     None
@@ -381,7 +381,7 @@ fn move_bottom(env: &mut Environment) -> Option<Action> {
 
 /// Operation: `move-bottom-select`
 fn move_bottom_select(env: &mut Environment) -> Option<Action> {
-    let mut editor = env.get_editor().borrow_mut();
+    let mut editor = env.get_active_editor().borrow_mut();
     editor.set_soft_mark();
     editor.move_bottom();
     None
@@ -389,13 +389,13 @@ fn move_bottom_select(env: &mut Environment) -> Option<Action> {
 
 /// Operation: `scroll-up`
 fn scroll_up(env: &mut Environment) -> Option<Action> {
-    env.get_editor().borrow_mut().scroll_up(1);
+    env.get_active_editor().borrow_mut().scroll_up(1);
     None
 }
 
 /// Operation: `scroll-down`
 fn scroll_down(env: &mut Environment) -> Option<Action> {
-    env.get_editor().borrow_mut().scroll_down(1);
+    env.get_active_editor().borrow_mut().scroll_down(1);
     None
 }
 
@@ -406,7 +406,7 @@ fn scroll_center(env: &mut Environment) -> Option<Action> {
     //
     // If position is not precisely on one of these rows, then start at center. This
     // behavior allows user to quickly align cursor with successive key presses.
-    let mut editor = env.get_editor().borrow_mut();
+    let mut editor = env.get_active_editor().borrow_mut();
     let Size { rows, .. } = editor.size();
     let Point { row, .. } = editor.cursor();
     let align = if row == 0 {
@@ -424,7 +424,7 @@ fn scroll_center(env: &mut Environment) -> Option<Action> {
 
 /// Operation: `set-mark`
 fn set_mark(env: &mut Environment) -> Option<Action> {
-    let mut editor = env.get_editor().borrow_mut();
+    let mut editor = env.get_active_editor().borrow_mut();
     if let Some(_) = editor.set_hard_mark() {
         editor.render();
     }
@@ -433,7 +433,7 @@ fn set_mark(env: &mut Environment) -> Option<Action> {
 
 /// Operation: `goto-line`
 fn goto_line(env: &mut Environment) -> Option<Action> {
-    GotoLine::question(env.get_editor().clone())
+    GotoLine::question(env.get_active_editor().clone())
 }
 
 /// An inquirer that orchestrates going to a specific line in an editor.
@@ -479,7 +479,7 @@ impl Inquirer for GotoLine {
 
 /// Operation: `insert-line`
 fn insert_line(env: &mut Environment) -> Option<Action> {
-    let mut editor = env.get_editor().borrow_mut();
+    let mut editor = env.get_active_editor().borrow_mut();
     editor.clear_mark();
     editor.insert_char('\n');
     None
@@ -488,7 +488,7 @@ fn insert_line(env: &mut Environment) -> Option<Action> {
 /// Operation: `insert-tab`
 fn insert_tab(env: &mut Environment) -> Option<Action> {
     let tab_size = env.workspace().config().settings.tab_size;
-    let mut editor = env.get_editor().borrow_mut();
+    let mut editor = env.get_active_editor().borrow_mut();
     editor.clear_mark();
     let n = tab_size - (editor.location().col as usize % tab_size);
     editor.insert_str(&" ".repeat(n));
@@ -497,19 +497,19 @@ fn insert_tab(env: &mut Environment) -> Option<Action> {
 
 /// Operation: `remove-left`
 fn remove_left(env: &mut Environment) -> Option<Action> {
-    let maybe_mark = env.get_editor().borrow_mut().clear_mark();
+    let maybe_mark = env.get_active_editor().borrow_mut().clear_mark();
     if let Some(mark) = maybe_mark {
-        let text = env.get_editor().borrow_mut().remove_mark(mark);
+        let text = env.get_active_editor().borrow_mut().remove_mark(mark);
         env.set_clipboard(text);
     } else {
-        let _ = env.get_editor().borrow_mut().remove_left();
+        let _ = env.get_active_editor().borrow_mut().remove_left();
     }
     None
 }
 
 /// Operation: `remove-right`
 fn remove_right(env: &mut Environment) -> Option<Action> {
-    let mut editor = env.get_editor().borrow_mut();
+    let mut editor = env.get_active_editor().borrow_mut();
     editor.clear_mark();
     let _ = editor.remove_right();
     None
@@ -517,7 +517,7 @@ fn remove_right(env: &mut Environment) -> Option<Action> {
 
 /// Operation: `remove-start`
 fn remove_start(env: &mut Environment) -> Option<Action> {
-    let mut editor = env.get_editor().borrow_mut();
+    let mut editor = env.get_active_editor().borrow_mut();
     editor.clear_mark();
     let _ = editor.remove_start();
     None
@@ -525,7 +525,7 @@ fn remove_start(env: &mut Environment) -> Option<Action> {
 
 /// Operation: `remove-end`
 fn remove_end(env: &mut Environment) -> Option<Action> {
-    let mut editor = env.get_editor().borrow_mut();
+    let mut editor = env.get_active_editor().borrow_mut();
     editor.clear_mark();
     let _ = editor.remove_end();
     None
@@ -533,14 +533,14 @@ fn remove_end(env: &mut Environment) -> Option<Action> {
 
 /// Operation: `copy`
 fn copy(env: &mut Environment) -> Option<Action> {
-    let maybe_mark = env.get_editor().borrow_mut().clear_mark();
+    let maybe_mark = env.get_active_editor().borrow_mut().clear_mark();
     let text = if let Some(mark) = maybe_mark {
-        env.get_editor().borrow_mut().copy_mark(mark)
+        env.get_active_editor().borrow_mut().copy_mark(mark)
     } else {
-        env.get_editor().borrow_mut().copy_line()
+        env.get_active_editor().borrow_mut().copy_line()
     };
     env.set_clipboard(text);
-    env.get_editor().borrow_mut().render();
+    env.get_active_editor().borrow_mut().render();
     None
 }
 
@@ -548,18 +548,18 @@ fn copy(env: &mut Environment) -> Option<Action> {
 fn paste(env: &mut Environment) -> Option<Action> {
     let maybe_text = env.get_clipboard();
     if let Some(text) = maybe_text {
-        env.get_editor().borrow_mut().insert(text);
+        env.get_active_editor().borrow_mut().insert(text);
     }
     None
 }
 
 /// Operation: `cut`
 fn cut(env: &mut Environment) -> Option<Action> {
-    let maybe_mark = env.get_editor().borrow_mut().clear_mark();
+    let maybe_mark = env.get_active_editor().borrow_mut().clear_mark();
     let text = if let Some(mark) = maybe_mark {
-        env.get_editor().borrow_mut().remove_mark(mark)
+        env.get_active_editor().borrow_mut().remove_mark(mark)
     } else {
-        env.get_editor().borrow_mut().remove_line()
+        env.get_active_editor().borrow_mut().remove_line()
     };
     env.set_clipboard(text);
     None
@@ -582,12 +582,18 @@ fn open_file_bottom(env: &mut Environment) -> Option<Action> {
 
 /// Operation: `open-file-above`
 fn open_file_above(env: &mut Environment) -> Option<Action> {
-    Open::question(derive_dir(env), Some(Placement::Above(env.get_active())))
+    Open::question(
+        derive_dir(env),
+        Some(Placement::Above(env.get_active_view_id())),
+    )
 }
 
 /// Operation: `open-file-below`
 fn open_file_below(env: &mut Environment) -> Option<Action> {
-    Open::question(derive_dir(env), Some(Placement::Below(env.get_active())))
+    Open::question(
+        derive_dir(env),
+        Some(Placement::Below(env.get_active_view_id())),
+    )
 }
 
 /// An inquirer that orchestrates the process of opening a file.
@@ -652,7 +658,7 @@ impl Inquirer for Open {
 
 /// Operation: `save-file`
 fn save_file(env: &mut Environment) -> Option<Action> {
-    let editor = env.get_editor();
+    let editor = env.get_active_editor();
     if editor.borrow().is_persistent() {
         match stale_editor(editor) {
             Ok(true) => SaveOverride::question(editor.clone()),
@@ -666,7 +672,7 @@ fn save_file(env: &mut Environment) -> Option<Action> {
 
 /// Operation: `save-file-as`
 fn save_file_as(env: &mut Environment) -> Option<Action> {
-    Save::question(env.get_editor().clone())
+    Save::question(env.get_active_editor().clone())
 }
 
 /// An inquirer that orchestrates the process of saving a file.
@@ -832,7 +838,7 @@ impl Inquirer for SaveOverride {
 /// Operation: `kill-window`
 fn kill_window(env: &mut Environment) -> Option<Action> {
     if env.view_map().len() > 1 {
-        let editor = env.get_editor();
+        let editor = env.get_active_editor();
         if editor.borrow().is_persistent() && editor.borrow().dirty() {
             Kill::question(editor.clone())
         } else {
@@ -944,7 +950,7 @@ fn close_window(env: &mut Environment) -> Option<Action> {
 
 /// Operation: `close-other-windows`
 fn close_other_windows(env: &mut Environment) -> Option<Action> {
-    let active_id = env.get_active();
+    let active_id = env.get_active_view_id();
     let other_ids = env
         .view_map()
         .keys()
@@ -985,7 +991,7 @@ fn next_window(env: &mut Environment) -> Option<Action> {
 fn prev_editor(env: &mut Environment) -> Option<Action> {
     let editors = unattached_editors(env);
     if editors.len() > 0 {
-        let editor_id = env.get_editor_id();
+        let editor_id = env.get_active_editor_id();
         let index = editors
             .iter()
             .rev()
@@ -1001,7 +1007,7 @@ fn prev_editor(env: &mut Environment) -> Option<Action> {
 fn next_editor(env: &mut Environment) -> Option<Action> {
     let editors = unattached_editors(env);
     if editors.len() > 0 {
-        let editor_id = env.get_editor_id();
+        let editor_id = env.get_active_editor_id();
         let index = editors
             .iter()
             .position(|(id, _)| *id > editor_id)
@@ -1177,7 +1183,7 @@ fn name_of(editor: &EditorRef) -> String {
 
 /// Returns the base directory of the active editor.
 fn derive_dir(env: &mut Environment) -> PathBuf {
-    derive_dir_from(env.get_editor())
+    derive_dir_from(env.get_active_editor())
 }
 
 /// Returns the base directory derived from `editor`, which is canonicalized so long

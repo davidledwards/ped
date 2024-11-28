@@ -67,8 +67,18 @@ impl Environment {
     }
 
     /// Returns the id of the *active* view.
-    pub fn get_active(&self) -> u32 {
+    pub fn get_active_view_id(&self) -> u32 {
         self.active_view_id
+    }
+
+    /// Returns the id of the *active* editor.
+    pub fn get_active_editor_id(&self) -> u32 {
+        self.get_view_editor_id_unchecked(self.active_view_id)
+    }
+
+    /// Returns a reference to the *active* editor.
+    pub fn get_active_editor(&self) -> &EditorRef {
+        self.get_view_editor_unchecked(self.active_view_id)
     }
 
     /// Sets the *active* view based on `focus` and returns the view id.
@@ -89,27 +99,17 @@ impl Environment {
         self.active_view_id
     }
 
-    /// Returns a reference to the editor associated with `view_id`.
-    pub fn get_editor_for(&self, view_id: u32) -> &EditorRef {
-        self.editor_of(view_id)
-    }
-
-    pub fn get_editor(&self) -> &EditorRef {
-        self.get_editor_for(self.active_view_id)
-    }
-
-    pub fn get_editor_id(&self) -> u32 {
-        self.editor_id_of(self.active_view_id)
-    }
-
-    pub fn find_view_for(&self, editor_id: u32) -> Option<u32> {
+    /// Returns the view id attached to `editor_id` or `None` if unattached.
+    pub fn find_editor_view_id(&self, editor_id: u32) -> Option<u32> {
         self.view_map
             .iter()
             .find(|(_, e_id)| **e_id == editor_id)
             .map(|(v_id, _)| *v_id)
     }
 
-    pub fn find_editor(&self, name: &str) -> Option<u32> {
+    /// Returns the id of the editor whose [`name`](Editor::name) matches `name`,
+    /// otherwise `None`.
+    pub fn find_editor_id(&self, name: &str) -> Option<u32> {
         self.editor_map
             .iter()
             .find(|(_, e)| e.borrow().name() == name)
@@ -117,10 +117,8 @@ impl Environment {
     }
 
     /// Opens a new window whose placement is specified by `place`, attaches `editor`
-    /// to that window, and returns a tuple containing the new view id and editor id.
-    ///
-    /// This function returns `None` if the workspace is unable to create the new
-    /// view.
+    /// to that window, and returns a tuple containing the new view id and editor id,
+    /// or `None` if the workspace is unable to create the new view.
     pub fn open_editor(
         &mut self,
         editor: EditorRef,
@@ -136,8 +134,14 @@ impl Environment {
         })
     }
 
+    /// Opens a new window whose placement is specified by `place`, attaches the editor
+    /// of `editor_id` to that window, and returns the new view id, or `None` if the
+    /// workspace is unable to create the new view.
+    ///
+    /// If `editor_id` is already attached to an existing window, then a new window is
+    /// not opened and the view id of the attached window is returned instead.
     pub fn open_window(&mut self, editor_id: u32, place: Placement, align: Align) -> Option<u32> {
-        self.find_view_for(editor_id).or_else(|| {
+        self.find_editor_view_id(editor_id).or_else(|| {
             let view_id = self.workspace_mut().open_view(place);
             view_id.map(|view_id| {
                 self.reattach_views();
@@ -172,7 +176,7 @@ impl Environment {
     /// A side effect of this function is that the current editor, if any, associated
     /// with `view_id` is detached before attaching to the new editor.
     pub fn switch_editor_for(&mut self, view_id: u32, editor_id: u32, align: Align) -> u32 {
-        let view_editor_id = self.editor_id_of(view_id);
+        let view_editor_id = self.get_view_editor_id_unchecked(view_id);
         if editor_id == view_editor_id {
             editor_id
         } else {
@@ -219,7 +223,7 @@ impl Environment {
     /// This function returns `None` if the workspace is unable to close the window,
     /// which happens when it is the only remaining window.
     pub fn kill_window_for(&mut self, view_id: u32) -> Option<u32> {
-        let editor_id = self.editor_id_of(view_id);
+        let editor_id = self.get_view_editor_id_unchecked(view_id);
         let next_id = self.close_window_for(view_id);
         next_id.map(|next_id| {
             if !self.is_builtin(editor_id) {
@@ -314,15 +318,15 @@ impl Environment {
             .unwrap_or_else(|| panic!("expecting editor id {editor_id}"))
     }
 
-    fn editor_id_of(&self, view_id: u32) -> u32 {
+    fn get_view_editor_id_unchecked(&self, view_id: u32) -> u32 {
         *self
             .view_map
             .get(&view_id)
             .unwrap_or_else(|| panic!("expecting view id {view_id}"))
     }
 
-    fn editor_of(&self, view_id: u32) -> &EditorRef {
-        self.get_editor_unchecked(self.editor_id_of(view_id))
+    fn get_view_editor_unchecked(&self, view_id: u32) -> &EditorRef {
+        self.get_editor_unchecked(self.get_view_editor_id_unchecked(view_id))
     }
 
     fn window_of(&self, view_id: u32) -> WindowRef {

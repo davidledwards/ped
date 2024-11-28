@@ -34,9 +34,9 @@ Editing
 
 Selection
   C-SPACE    Set mark
-  C-c        Copy selection or line to paste buffer
-  C-x        Cut selection or line and copy to paste buffer
-  C-v        Insert contents of paste buffer
+  C-c        Copy selection or line to clipboard
+  C-x        Cut selection or line and copy to clipboard
+  C-v        Paste contents of clipboard
 
   As an alternative to setting a mark using C-SPACE, pressing SHIFT while
   navigating will select a region of text.

@@ -91,7 +91,7 @@ impl Controller {
     /// Opens the collection of `files`, placing each successive editor at the bottom
     /// of the workspace.
     pub fn open(&mut self, files: &Vec<String>) -> Result<()> {
-        let view_id = self.env.get_active();
+        let view_id = self.env.get_active_view_id();
         for (i, path) in files.iter().enumerate() {
             let editor = op::open_editor(path)?;
             if i == 0 {
@@ -130,7 +130,7 @@ impl Controller {
 
     fn show_cursor(&mut self) {
         if let None = self.question {
-            self.env.get_editor().borrow_mut().show_cursor();
+            self.env.get_active_editor().borrow_mut().show_cursor();
         }
     }
 
@@ -148,13 +148,13 @@ impl Controller {
             // short circuits detection and bypasses normal indirection of key
             // binding.
             self.clear_echo();
-            let mut editor = self.env.get_editor().borrow_mut();
+            let mut editor = self.env.get_active_editor().borrow_mut();
             editor.clear_mark();
             editor.insert_char(c);
         } else if key == CTRL_G {
             self.clear_echo();
             if !self.clear_keys() {
-                let mut editor = self.env.get_editor().borrow_mut();
+                let mut editor = self.env.get_active_editor().borrow_mut();
                 if let Some(_) = editor.clear_mark() {
                     editor.render();
                 }
