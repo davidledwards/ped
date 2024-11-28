@@ -3,7 +3,7 @@ use crate::color::Color;
 use crate::size::Point;
 
 pub fn clear_screen() -> &'static str {
-    "\x1b[2J"
+    "\x1b[2J\x1b[H"
 }
 
 pub fn show_cursor() -> &'static str {

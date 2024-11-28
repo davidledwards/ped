@@ -102,6 +102,20 @@ impl Environment {
         self.editor_id_of(self.active_view_id)
     }
 
+    pub fn find_view_for(&self, editor_id: u32) -> Option<u32> {
+        self.view_map
+            .iter()
+            .find(|(_, e_id)| **e_id == editor_id)
+            .map(|(v_id, _)| *v_id)
+    }
+
+    pub fn find_editor(&self, name: &str) -> Option<u32> {
+        self.editor_map
+            .iter()
+            .find(|(_, e)| e.borrow().name() == name)
+            .map(|(id, _)| *id)
+    }
+
     /// Opens a new window whose placement is specified by `place`, attaches `editor`
     /// to that window, and returns a tuple containing the new view id and editor id.
     ///
@@ -119,6 +133,17 @@ impl Environment {
             self.reattach_views();
             self.attach_to_editor(view_id, editor_id, align);
             (view_id, editor_id)
+        })
+    }
+
+    pub fn open_window(&mut self, editor_id: u32, place: Placement, align: Align) -> Option<u32> {
+        self.find_view_for(editor_id).or_else(|| {
+            let view_id = self.workspace_mut().open_view(place);
+            view_id.map(|view_id| {
+                self.reattach_views();
+                self.attach_to_editor(view_id, editor_id, align);
+                view_id
+            })
         })
     }
 
@@ -241,8 +266,6 @@ impl Environment {
     /// Attaches the window of `view_id` to the editor referenced by `editor_id`, and
     /// also detaches the window from its current editor if an association exists.
     fn attach_to_editor(&mut self, view_id: u32, editor_id: u32, align: Align) {
-        // todo: this test should always succeed because a view cannot exist without
-        // an editor being attached. why is this needed?
         if let Some(id) = self.view_map.get(&view_id) {
             self.get_editor_unchecked(*id).borrow_mut().detach();
         }

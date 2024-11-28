@@ -14,6 +14,7 @@ use crate::buffer::Buffer;
 use crate::editor::{Align, Editor, EditorRef};
 use crate::env::{Environment, Focus};
 use crate::error::{Error, Result};
+use crate::help;
 use crate::io;
 use crate::size::{Point, Size};
 use crate::sys::{self, AsString};
@@ -198,10 +199,28 @@ impl Inquirer for QuitOverride {
 }
 
 /// Operation: `help`
-fn help(_: &mut Environment) -> Option<Action> {
-    // open @help editor at bottom
-    // write help text to editpr
-    Action::as_echo("help not yet implemented")
+fn help(env: &mut Environment) -> Option<Action> {
+    if let Some(editor_id) = env.find_editor(help::EDITOR_NAME) {
+        if let Some(view_id) = env.find_view_for(editor_id) {
+            env.kill_window_for(view_id);
+            None
+        } else {
+            if let Some(view_id) = env.open_window(editor_id, Placement::Bottom, Align::Auto) {
+                env.set_active(Focus::To(view_id));
+                None
+            } else {
+                Action::as_echo("unable to create window")
+            }
+        }
+    } else {
+        let editor = Editor::transient(help::EDITOR_NAME, Some(help::help())).to_ref();
+        if let Some((view_id, _)) = env.open_editor(editor, Placement::Bottom, Align::Auto) {
+            env.set_active(Focus::To(view_id));
+            None
+        } else {
+            Action::as_echo("unable to create window")
+        }
+    }
 }
 
 /// Operation: `move-left`
