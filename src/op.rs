@@ -916,12 +916,26 @@ impl Inquirer for KillOverride {
 
 /// Operation: `close-window`
 fn close_window(env: &mut Environment) -> Option<Action> {
-    let action = if let Some(_) = env.close_window() {
+    if let Some(_) = env.close_window() {
         None
     } else {
         Action::as_echo("cannot close only window")
-    };
-    action
+    }
+}
+
+/// Operation: `close-other-windows`
+fn close_other_windows(env: &mut Environment) -> Option<Action> {
+    let active_id = env.get_active();
+    let other_ids = env
+        .view_map()
+        .keys()
+        .cloned()
+        .filter(|id| *id != active_id)
+        .collect::<Vec<_>>();
+    for id in other_ids {
+        env.close_window_for(id);
+    }
+    None
 }
 
 /// Operation: `top-window`
@@ -1170,7 +1184,7 @@ fn base_dir(editor: &EditorRef) -> PathBuf {
 }
 
 /// Predefined mapping of editing operations to editing functions.
-const OP_MAPPINGS: [(&'static str, OpFn); 52] = [
+const OP_MAPPINGS: [(&'static str, OpFn); 53] = [
     // --- exit and cancellation ---
     ("quit", quit),
     // --- help ---
@@ -1223,6 +1237,7 @@ const OP_MAPPINGS: [(&'static str, OpFn); 52] = [
     // --- window handling ---
     ("kill-window", kill_window),
     ("close-window", close_window),
+    ("close-other-windows", close_other_windows),
     ("top-window", top_window),
     ("bottom-window", bottom_window),
     ("prev-window", prev_window),

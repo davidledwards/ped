@@ -240,7 +240,7 @@ impl Configuration {
         bindings
     }
 
-    const DEFAULT_BINDINGS: [(&'static str, &'static str); 64] = [
+    const DEFAULT_BINDINGS: [(&'static str, &'static str); 65] = [
         // --- exit and cancellation ---
         ("C-q", "quit"),
         // --- help ---
@@ -302,7 +302,8 @@ impl Configuration {
         ("ESC:s", "save-file-as"),
         // --- window handling ---
         ("C-w", "kill-window"),
-        ("ESC:w:w", "close-window"),
+        ("ESC:w:0", "close-window"),
+        ("ESC:w:1", "close-other-windows"),
         ("ESC:w:t", "top-window"),
         ("ESC:w:b", "bottom-window"),
         ("ESC:w:p", "prev-window"),
