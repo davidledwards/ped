@@ -106,13 +106,13 @@ fn run_config(opts: &Options, config: Configuration) -> Result<()> {
     let keyboard = Keyboard::new();
     let bindings = Bindings::new(&config.bindings);
 
-    println!("{}", ansi::clear_screen());
+    print!("{}", ansi::clear_screen());
     let workspace = Workspace::new(config);
     let mut controller = Controller::new(keyboard, bindings, workspace);
     controller.open(&opts.files)?;
     term::init()?;
     let _restore = RestoreTerminal;
     controller.run();
-    println!("{}", ansi::clear_screen());
+    print!("{}", ansi::clear_screen());
     Ok(())
 }

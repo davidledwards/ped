@@ -240,7 +240,7 @@ impl Configuration {
         bindings
     }
 
-    const DEFAULT_BINDINGS: [(&'static str, &'static str); 65] = [
+    const DEFAULT_BINDINGS: [(&'static str, &'static str); 67] = [
         // --- exit and cancellation ---
         ("C-q", "quit"),
         // --- help ---
@@ -288,6 +288,8 @@ impl Configuration {
         ("del", "remove-left"),
         ("C-j", "remove-start"),
         ("C-k", "remove-end"),
+        ("C-u", "undo"),
+        ("C-r", "redo"),
         // --- selection actions ---
         ("C-c", "copy"),
         ("C-v", "paste"),

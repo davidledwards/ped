@@ -31,6 +31,12 @@ pub struct Editor {
     /// Buffer containing the contents of this editor.
     buffer: BufferRef,
 
+    /// A stack containing changes to the buffer that can be *undone*.
+    undo: Vec<Change>,
+
+    /// A stack containing changes to the buffer that can be *redone*.
+    redo: Vec<Change>,
+
     /// An indication that unsaved changes have been made to the buffer.
     dirty: bool,
 
@@ -72,6 +78,48 @@ pub struct Editor {
 }
 
 pub type EditorRef = Rc<RefCell<Editor>>;
+
+/// The distinct types of changes to a buffer recorded in the *undo* and *redo* stacks.
+enum Change {
+    /// Represents the insertion of text, where values are defined as:
+    /// - buffer position prior to insertion
+    /// - text inserted
+    Insert(usize, Vec<char>),
+
+    /// Represents the removal of text that comes before the cursor, where values are
+    /// defined as:
+    /// - buffer position prior to removal
+    /// - text removed
+    RemoveBefore(usize, Vec<char>),
+
+    /// Represents the removal of text that comes after the cursor, where values are
+    /// defined as:
+    /// - buffer position prior to removal
+    /// - text removed
+    RemoveAfter(usize, Vec<char>),
+
+    /// Represents the removal of selected text that comes before the cursor, where
+    /// values are defined as:
+    /// - buffer position prior to removal
+    /// - text removed
+    RemoveSelectionBefore(usize, Vec<char>, bool),
+
+    /// Represents the removal of selected text that comes after the cursor, where
+    /// values are defined as:
+    /// - buffer position prior to removal
+    /// - text removed
+    RemoveSelectionAfter(usize, Vec<char>, bool),
+}
+
+/// Indicates how a [`Change`] should be logged.
+enum Log {
+    /// Indicates that no selection was active when the change was made.
+    Normal,
+
+    /// Indicates that a selection was active when the change was made, where the
+    /// value is `true` if it was a *soft* mark and `false` if a *hard* mark.
+    Selection(bool),
+}
 
 /// Represents contextual information for a line on the display.
 ///
@@ -146,6 +194,45 @@ struct Render {
     col: u32,
     line: u32,
     line_wrapped: bool,
+}
+
+impl Change {
+    /// Returns a new change if `self` can be combined with `prior`, otherwise `None`.
+    ///
+    /// In general, this function is used to optimize changes that involve a single
+    /// character being inserted or removed. If the change described by `self` is
+    /// adjacent to `prior`, then both changes are combined into a single change.
+    fn possibly_combine(&self, prior: &Change) -> Option<Change> {
+        use Change::{Insert, RemoveAfter, RemoveBefore};
+
+        match self {
+            Insert(pos, text) if text.len() == 1 => match prior {
+                Insert(p_pos, p_text) if p_pos + p_text.len() == *pos => {
+                    let mut p_text = p_text.clone();
+                    p_text.push(text[0]);
+                    Some(Insert(*p_pos, p_text))
+                }
+                _ => None,
+            },
+            RemoveBefore(pos, text) if text.len() == 1 => match prior {
+                RemoveBefore(p_pos, p_text) if pos + p_text.len() == *p_pos => {
+                    let mut p_text = p_text.clone();
+                    p_text.insert(0, text[0]);
+                    Some(RemoveBefore(*p_pos, p_text))
+                }
+                _ => None,
+            },
+            RemoveAfter(pos, text) if text.len() == 1 => match prior {
+                RemoveAfter(p_pos, p_text) if *p_pos == *pos => {
+                    let mut p_text = p_text.clone();
+                    p_text.push(text[0]);
+                    Some(RemoveAfter(*p_pos, p_text))
+                }
+                _ => None,
+            },
+            _ => None,
+        }
+    }
 }
 
 impl Line {
@@ -400,6 +487,8 @@ impl Editor {
             path: path.to_string(),
             timestamp,
             buffer,
+            undo: Vec::new(),
+            redo: Vec::new(),
             dirty: false,
             cur_pos,
             top_line: Line::default(),
@@ -828,16 +917,25 @@ impl Editor {
 
     /// Inserts the character `c` at the current buffer position.
     pub fn insert_char(&mut self, c: char) {
-        self.insert(&[c])
+        self.insert_normal(&[c])
     }
 
     /// Inserts the string slice `str` at the current buffer position.
     pub fn insert_str(&mut self, text: &str) {
-        self.insert(&text.chars().collect::<Vec<_>>())
+        self.insert_normal(&text.chars().collect::<Vec<_>>())
     }
 
     /// Inserts the array of `text` at the current buffer position.
     pub fn insert(&mut self, text: &[char]) {
+        self.insert_normal(text);
+    }
+
+    fn insert_normal(&mut self, text: &[char]) {
+        self.insert_internal(text, Some(Log::Normal));
+    }
+
+    /// An internal workhorse to which all *insertion* functions delegate.
+    fn insert_internal(&mut self, text: &[char], log: Option<Log>) {
         if text.len() > 0 {
             // Most common use case is single-character insertions, so favor use of
             // more efficient buffer insertion in that case.
@@ -847,6 +945,11 @@ impl Editor {
             } else {
                 self.buffer_mut().insert(text)
             };
+
+            // Log change to buffer.
+            if let Some(_) = log {
+                self.log(Change::Insert(self.cur_pos, text.to_vec()));
+            }
 
             // Update current line since insertion will have changed critical
             // information for navigation. New cursor location follows inserted text,
@@ -897,8 +1000,8 @@ impl Editor {
 
     /// Removes and returns the text between the current buffer position and `mark`.
     pub fn remove_mark(&mut self, mark: Mark) -> Vec<char> {
-        let Mark(pos, _) = mark;
-        self.remove(pos)
+        let Mark(pos, soft) = mark;
+        self.remove_internal(pos, Some(Log::Selection(soft)))
     }
 
     /// Removes and returns the text of the line on which the current buffer position
@@ -933,6 +1036,11 @@ impl Editor {
     ///
     /// This function will return an empty vector if `pos` is equal to `cur_pos`.
     pub fn remove(&mut self, pos: usize) -> Vec<char> {
+        self.remove_internal(pos, Some(Log::Normal))
+    }
+
+    /// An internal workhorse to which all *removal* functions delegate.
+    fn remove_internal(&mut self, pos: usize, log: Option<Log>) -> Vec<char> {
         if pos == self.cur_pos {
             vec![]
         } else {
@@ -970,6 +1078,26 @@ impl Editor {
             } else {
                 self.buffer_mut().remove(len)
             };
+
+            // Log change to buffer.
+            if let Some(log) = log {
+                match log {
+                    Log::Normal => {
+                        self.log(if pos < self.cur_pos {
+                            Change::RemoveBefore(self.cur_pos, text.clone())
+                        } else {
+                            Change::RemoveAfter(self.cur_pos, text.clone())
+                        });
+                    }
+                    Log::Selection(soft) => {
+                        self.log(if pos < self.cur_pos {
+                            Change::RemoveSelectionBefore(self.cur_pos, text.clone(), soft)
+                        } else {
+                            Change::RemoveSelectionAfter(self.cur_pos, text.clone(), soft)
+                        });
+                    }
+                }
+            }
 
             // Removal of text requires current and top lines to be updated since may
             // have changed.
@@ -1056,6 +1184,124 @@ impl Editor {
     /// This function will return an empty vector if `from_pos` is equal to `to_pos`.
     pub fn copy(&self, from_pos: usize, to_pos: usize) -> Vec<char> {
         self.buffer().copy(from_pos, to_pos)
+    }
+
+    /// Reverts the last change to the buffer, if any, and makes that change eligible
+    /// to be reapplied via [`redo`](Editor::redo).
+    ///
+    /// Returns `true` if the change was reverted and `false` if the *undo* stack is
+    /// empty.
+    pub fn undo(&mut self) -> bool {
+        if let Some(change) = self.undo.pop() {
+            self.undo_change(&change);
+            self.redo.push(change);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Applies the last change to the buffer, if any, that was reverted via
+    /// [`undo`](Editor::undo).
+    ///
+    /// Returns `true` if the change was applies and `false` if the *redo* stack is
+    /// empty.
+    pub fn redo(&mut self) -> bool {
+        if let Some(change) = self.redo.pop() {
+            self.redo_change(&change);
+            self.undo.push(change);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Reverts `change`.
+    fn undo_change(&mut self, change: &Change) {
+        match change {
+            Change::Insert(pos, text) => {
+                self.clear_mark();
+                self.move_to(*pos, Align::Auto);
+                self.remove_internal(pos + text.len(), None);
+            }
+            Change::RemoveBefore(pos, text) => {
+                self.clear_mark();
+                self.move_to(pos - text.len(), Align::Auto);
+                self.insert_internal(text, None);
+            }
+            Change::RemoveAfter(pos, text) => {
+                self.clear_mark();
+                self.move_to(*pos, Align::Auto);
+                self.insert_internal(text, None);
+                self.move_to(*pos, Align::Auto);
+            }
+            Change::RemoveSelectionBefore(pos, text, soft) => {
+                self.move_to(pos - text.len(), Align::Auto);
+                if *soft {
+                    self.set_soft_mark();
+                } else {
+                    self.set_hard_mark();
+                }
+                self.insert_internal(text, None);
+            }
+            Change::RemoveSelectionAfter(pos, text, soft) => {
+                self.move_to(*pos, Align::Auto);
+                self.insert_internal(text, None);
+                if *soft {
+                    self.set_soft_mark();
+                } else {
+                    self.set_hard_mark();
+                }
+                self.move_to(*pos, Align::Auto);
+            }
+        }
+    }
+
+    /// Applies `change`.
+    fn redo_change(&mut self, change: &Change) {
+        match change {
+            Change::Insert(pos, text) => {
+                self.clear_mark();
+                self.move_to(*pos, Align::Auto);
+                self.insert_internal(text, None);
+            }
+            Change::RemoveBefore(pos, text) => {
+                self.clear_mark();
+                self.move_to(*pos, Align::Auto);
+                self.remove_internal(pos - text.len(), None);
+            }
+            Change::RemoveAfter(pos, text) => {
+                self.clear_mark();
+                self.move_to(*pos, Align::Auto);
+                self.remove_internal(pos + text.len(), None);
+            }
+            Change::RemoveSelectionBefore(pos, text, _) => {
+                self.clear_mark();
+                self.move_to(*pos, Align::Auto);
+                self.remove_internal(pos - text.len(), None);
+            }
+            Change::RemoveSelectionAfter(pos, text, _) => {
+                self.clear_mark();
+                self.move_to(*pos, Align::Auto);
+                self.remove_internal(pos + text.len(), None);
+            }
+        }
+    }
+
+    /// Logs `change` by pushing it onto the *undo* stack and clearing the *redo*
+    /// stack.
+    fn log(&mut self, change: Change) {
+        if let Some(top) = self.undo.pop() {
+            if let Some(combined) = change.possibly_combine(&top) {
+                self.undo.push(combined);
+            } else {
+                self.undo.push(top);
+                self.undo.push(change);
+            }
+        } else {
+            self.undo.push(change);
+        }
+        self.redo.clear();
     }
 
     fn set_top_line(&mut self, try_rows: u32) -> u32 {

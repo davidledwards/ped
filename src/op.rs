@@ -531,6 +531,26 @@ fn remove_end(env: &mut Environment) -> Option<Action> {
     None
 }
 
+/// Operation: `undo`
+fn undo(env: &mut Environment) -> Option<Action> {
+    let mut editor = env.get_active_editor().borrow_mut();
+    if editor.undo() {
+        None
+    } else {
+        Action::as_echo("nothing to undo")
+    }
+}
+
+/// Operation: `redo`
+fn redo(env: &mut Environment) -> Option<Action> {
+    let mut editor = env.get_active_editor().borrow_mut();
+    if editor.redo() {
+        None
+    } else {
+        Action::as_echo("nothing to redo")
+    }
+}
+
 /// Operation: `copy`
 fn copy(env: &mut Environment) -> Option<Action> {
     let maybe_mark = env.get_active_editor().borrow_mut().clear_mark();
@@ -1209,7 +1229,7 @@ fn base_dir(editor: &EditorRef) -> PathBuf {
 }
 
 /// Predefined mapping of editing operations to editing functions.
-const OP_MAPPINGS: [(&'static str, OpFn); 53] = [
+const OP_MAPPINGS: [(&'static str, OpFn); 55] = [
     // --- exit and cancellation ---
     ("quit", quit),
     // --- help ---
@@ -1247,6 +1267,8 @@ const OP_MAPPINGS: [(&'static str, OpFn); 53] = [
     ("remove-right", remove_right),
     ("remove-start", remove_start),
     ("remove-end", remove_end),
+    ("undo", undo),
+    ("redo", redo),
     // --- selection actions ---
     ("copy", copy),
     ("paste", paste),
