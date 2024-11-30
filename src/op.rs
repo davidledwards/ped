@@ -228,6 +228,7 @@ fn move_left(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
     editor.clear_soft_mark();
     editor.move_left(1);
+    editor.render();
     None
 }
 
@@ -236,6 +237,7 @@ fn move_left_select(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
     editor.set_soft_mark();
     editor.move_left(1);
+    editor.render();
     None
 }
 
@@ -244,6 +246,7 @@ fn move_right(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
     editor.clear_soft_mark();
     editor.move_right(1);
+    editor.render();
     None
 }
 
@@ -252,6 +255,7 @@ fn move_right_select(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
     editor.set_soft_mark();
     editor.move_right(1);
+    editor.render();
     None
 }
 
@@ -260,6 +264,7 @@ fn move_up(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
     editor.clear_soft_mark();
     editor.move_up(1, false);
+    editor.render();
     None
 }
 
@@ -268,6 +273,7 @@ fn move_up_select(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
     editor.set_soft_mark();
     editor.move_up(1, false);
+    editor.render();
     None
 }
 
@@ -276,6 +282,7 @@ fn move_down(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
     editor.clear_soft_mark();
     editor.move_down(1, false);
+    editor.render();
     None
 }
 
@@ -284,6 +291,7 @@ fn move_down_select(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
     editor.set_soft_mark();
     editor.move_down(1, false);
+    editor.render();
     None
 }
 
@@ -293,6 +301,7 @@ fn move_up_page(env: &mut Environment) -> Option<Action> {
     editor.clear_soft_mark();
     let rows = editor.rows();
     editor.move_up(rows, true);
+    editor.render();
     None
 }
 
@@ -302,6 +311,7 @@ fn move_up_page_select(env: &mut Environment) -> Option<Action> {
     editor.set_soft_mark();
     let rows = editor.rows();
     editor.move_up(rows, true);
+    editor.render();
     None
 }
 
@@ -311,6 +321,7 @@ fn move_down_page(env: &mut Environment) -> Option<Action> {
     editor.clear_soft_mark();
     let rows = editor.rows();
     editor.move_down(rows, true);
+    editor.render();
     None
 }
 
@@ -320,6 +331,7 @@ fn move_down_page_select(env: &mut Environment) -> Option<Action> {
     editor.set_soft_mark();
     let rows = editor.rows();
     editor.move_down(rows, true);
+    editor.render();
     None
 }
 
@@ -328,6 +340,7 @@ fn move_start(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
     editor.clear_soft_mark();
     editor.move_start();
+    editor.render();
     None
 }
 
@@ -336,6 +349,7 @@ fn move_start_select(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
     editor.set_soft_mark();
     editor.move_start();
+    editor.render();
     None
 }
 
@@ -344,6 +358,7 @@ fn move_end(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
     editor.clear_soft_mark();
     editor.move_end();
+    editor.render();
     None
 }
 
@@ -352,6 +367,7 @@ fn move_end_select(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
     editor.set_soft_mark();
     editor.move_end();
+    editor.render();
     None
 }
 
@@ -360,6 +376,7 @@ fn move_top(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
     editor.clear_soft_mark();
     editor.move_top();
+    editor.render();
     None
 }
 
@@ -368,6 +385,7 @@ fn move_top_select(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
     editor.set_soft_mark();
     editor.move_top();
+    editor.render();
     None
 }
 
@@ -376,6 +394,7 @@ fn move_bottom(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
     editor.clear_soft_mark();
     editor.move_bottom();
+    editor.render();
     None
 }
 
@@ -384,18 +403,23 @@ fn move_bottom_select(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
     editor.set_soft_mark();
     editor.move_bottom();
+    editor.render();
     None
 }
 
 /// Operation: `scroll-up`
 fn scroll_up(env: &mut Environment) -> Option<Action> {
-    env.get_active_editor().borrow_mut().scroll_up(1);
+    let mut editor = env.get_active_editor().borrow_mut();
+    editor.scroll_up(1);
+    editor.render();
     None
 }
 
 /// Operation: `scroll-down`
 fn scroll_down(env: &mut Environment) -> Option<Action> {
-    env.get_active_editor().borrow_mut().scroll_down(1);
+    let mut editor = env.get_active_editor().borrow_mut();
+    editor.scroll_down(1);
+    editor.render();
     None
 }
 
@@ -419,6 +443,7 @@ fn scroll_center(env: &mut Environment) -> Option<Action> {
         Align::Center
     };
     editor.align_cursor(align);
+    editor.render();
     None
 }
 
@@ -482,6 +507,7 @@ fn insert_line(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
     editor.clear_mark();
     editor.insert_char('\n');
+    editor.render();
     None
 }
 
@@ -492,17 +518,26 @@ fn insert_tab(env: &mut Environment) -> Option<Action> {
     editor.clear_mark();
     let n = tab_size - (editor.location().col as usize % tab_size);
     editor.insert_str(&" ".repeat(n));
+    editor.render();
     None
 }
 
 /// Operation: `remove-left`
 fn remove_left(env: &mut Environment) -> Option<Action> {
-    let maybe_mark = env.get_active_editor().borrow_mut().clear_mark();
-    if let Some(mark) = maybe_mark {
-        let text = env.get_active_editor().borrow_mut().remove_mark(mark);
+    let text = {
+        let mut editor = env.get_active_editor().borrow_mut();
+        let maybe_mark = editor.clear_mark();
+        if let Some(mark) = maybe_mark {
+            let text = editor.remove_mark(mark);
+            Some(text)
+        } else {
+            editor.remove_left();
+            None
+        }
+    };
+    env.get_active_editor().borrow_mut().render();
+    if let Some(text) = text {
         env.set_clipboard(text);
-    } else {
-        let _ = env.get_active_editor().borrow_mut().remove_left();
     }
     None
 }
@@ -511,7 +546,8 @@ fn remove_left(env: &mut Environment) -> Option<Action> {
 fn remove_right(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
     editor.clear_mark();
-    let _ = editor.remove_right();
+    editor.remove_right();
+    editor.render();
     None
 }
 
@@ -519,7 +555,8 @@ fn remove_right(env: &mut Environment) -> Option<Action> {
 fn remove_start(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
     editor.clear_mark();
-    let _ = editor.remove_start();
+    editor.remove_start();
+    editor.render();
     None
 }
 
@@ -527,7 +564,8 @@ fn remove_start(env: &mut Environment) -> Option<Action> {
 fn remove_end(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
     editor.clear_mark();
-    let _ = editor.remove_end();
+    editor.remove_end();
+    editor.render();
     None
 }
 
@@ -535,6 +573,7 @@ fn remove_end(env: &mut Environment) -> Option<Action> {
 fn undo(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
     if editor.undo() {
+        editor.render();
         None
     } else {
         Action::as_echo("nothing to undo")
@@ -545,6 +584,7 @@ fn undo(env: &mut Environment) -> Option<Action> {
 fn redo(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
     if editor.redo() {
+        editor.render();
         None
     } else {
         Action::as_echo("nothing to redo")
@@ -553,14 +593,17 @@ fn redo(env: &mut Environment) -> Option<Action> {
 
 /// Operation: `copy`
 fn copy(env: &mut Environment) -> Option<Action> {
-    let maybe_mark = env.get_active_editor().borrow_mut().clear_mark();
-    let text = if let Some(mark) = maybe_mark {
-        env.get_active_editor().borrow_mut().copy_mark(mark)
-    } else {
-        env.get_active_editor().borrow_mut().copy_line()
+    let text = {
+        let mut editor = env.get_active_editor().borrow_mut();
+        let maybe_mark = editor.clear_mark();
+        if let Some(mark) = maybe_mark {
+            editor.copy_mark(mark)
+        } else {
+            editor.copy_line()
+        }
     };
-    env.set_clipboard(text);
     env.get_active_editor().borrow_mut().render();
+    env.set_clipboard(text);
     None
 }
 
@@ -568,19 +611,25 @@ fn copy(env: &mut Environment) -> Option<Action> {
 fn paste(env: &mut Environment) -> Option<Action> {
     let maybe_text = env.get_clipboard();
     if let Some(text) = maybe_text {
-        env.get_active_editor().borrow_mut().insert(text);
+        let mut editor = env.get_active_editor().borrow_mut();
+        editor.insert(text);
+        editor.render();
     }
     None
 }
 
 /// Operation: `cut`
 fn cut(env: &mut Environment) -> Option<Action> {
-    let maybe_mark = env.get_active_editor().borrow_mut().clear_mark();
-    let text = if let Some(mark) = maybe_mark {
-        env.get_active_editor().borrow_mut().remove_mark(mark)
-    } else {
-        env.get_active_editor().borrow_mut().remove_line()
+    let text = {
+        let mut editor = env.get_active_editor().borrow_mut();
+        let maybe_mark = editor.clear_mark();
+        if let Some(mark) = maybe_mark {
+            editor.remove_mark(mark)
+        } else {
+            editor.remove_line()
+        }
     };
+    env.get_active_editor().borrow_mut().render();
     env.set_clipboard(text);
     None
 }

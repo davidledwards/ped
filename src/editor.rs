@@ -618,6 +618,7 @@ impl Editor {
 
         if !is_zombie {
             self.align_cursor(align);
+            self.draw();
         }
     }
 
@@ -644,7 +645,6 @@ impl Editor {
         let col = self.cur_line.col_of(self.cur_pos);
         self.snap_col = None;
         self.cursor = Point::new(row, col);
-        self.draw();
     }
 
     pub fn draw(&mut self) {
@@ -723,7 +723,6 @@ impl Editor {
             let col = self.cur_line.snap_col(try_col, self.cols);
             self.cur_pos = self.cur_line.pos_of(col);
             self.cursor = Point::new(row, col);
-            self.render();
         }
     }
 
@@ -756,7 +755,6 @@ impl Editor {
             let col = self.cur_line.snap_col(try_col, self.cols);
             self.cur_pos = self.cur_line.pos_of(col);
             self.cursor = Point::new(row, col);
-            self.render();
         }
     }
 
@@ -765,7 +763,6 @@ impl Editor {
         if self.cursor.col > 0 {
             self.cur_pos = self.cur_line.row_pos;
             self.cursor.col = 0;
-            self.render();
         }
         self.snap_col = None;
     }
@@ -776,7 +773,6 @@ impl Editor {
         if self.cursor.col < end_col {
             self.cur_pos = self.cur_line.pos_of(end_col);
             self.cursor.col = end_col;
-            self.render();
         }
         self.snap_col = None;
     }
@@ -863,7 +859,6 @@ impl Editor {
         let col = self.cur_line.col_of(self.cur_pos);
         self.snap_col = None;
         self.cursor = Point::new(row, col);
-        self.render();
     }
 
     /// Tries scrolling *up* the contents of the display by the specified number of
@@ -886,7 +881,6 @@ impl Editor {
                 (self.cursor.row - rows, self.cursor.col)
             };
             self.cursor = Point::new(row, col);
-            self.render();
         }
     }
 
@@ -911,7 +905,6 @@ impl Editor {
                 (self.rows - 1 as u32, col)
             };
             self.cursor = Point::new(row, col);
-            self.render();
         }
     }
 
@@ -970,7 +963,6 @@ impl Editor {
             self.snap_col = None;
             self.cursor = Point::new(row, col);
             self.dirty = true;
-            self.render();
         }
     }
 
@@ -1108,7 +1100,6 @@ impl Editor {
             self.snap_col = None;
             self.cursor = Point::new(row, col);
             self.dirty = true;
-            self.render();
             text
         }
     }

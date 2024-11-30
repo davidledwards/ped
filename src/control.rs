@@ -144,13 +144,13 @@ impl Controller {
 
     fn process_normal(&mut self, key: Key) -> Step {
         if let Some(c) = self.possible_char(&key) {
-            // Inserting text is statistically most prevalent scenario, so this
-            // short circuits detection and bypasses normal indirection of key
-            // binding.
+            // Inserting text is statistically most prevalent scenario, so this short
+            // circuits detection and bypasses normal indirection of key binding.
             self.clear_echo();
             let mut editor = self.env.get_active_editor().borrow_mut();
             editor.clear_mark();
             editor.insert_char(c);
+            editor.render();
         } else if key == CTRL_G {
             self.clear_echo();
             if !self.clear_keys() {

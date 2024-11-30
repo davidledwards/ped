@@ -31,6 +31,8 @@ Editing
   C-d    Remove character right of cursor
   C-j    Remove characters from start of line to cursor
   C-k    Remove characters from cursor to end of line
+  C-u    Undo last change
+  C-r    Redo last undo
 
 Selection
   C-SPACE    Set mark
