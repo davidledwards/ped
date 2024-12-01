@@ -101,7 +101,7 @@ impl Quit {
                 if let Err(e) = save_editor(editor) {
                     Action::as_echo(&e)
                 } else {
-                    Quit::next(&self.dirty)
+                    Self::next(&self.dirty)
                 }
             }
             Err(e) => Action::as_echo(&e),
@@ -146,8 +146,8 @@ impl Inquirer for Quit {
         match value {
             Some(yes_no) if yes_no == "y" => self.save_first(),
             Some(yes_no) if yes_no == "a" => self.save_all(),
-            Some(yes_no) if yes_no == "n" => Quit::next(&self.dirty),
-            Some(_) => Quit::start(env),
+            Some(yes_no) if yes_no == "n" => Self::next(&self.dirty),
+            Some(_) => Self::start(env),
             None => None,
         }
     }
@@ -155,6 +155,7 @@ impl Inquirer for Quit {
 
 /// An inquirer spawned from [`Quit`] that orchestrates the saving of an editor whose
 /// corresponding file in storage is newer than its timestamp.
+#[derive(Clone)]
 struct QuitOverride {
     /// List of dirty editors, where the first entry is pertinent to this flow.
     dirty: Vec<EditorRef>,
@@ -163,6 +164,10 @@ struct QuitOverride {
 impl QuitOverride {
     fn question(dirty: Vec<EditorRef>) -> Option<Action> {
         Action::as_question(QuitOverride { dirty }.to_box())
+    }
+
+    fn again(&self) -> Option<Action> {
+        Action::as_question(self.clone().to_box())
     }
 
     fn to_box(self) -> Box<dyn Inquirer> {
@@ -192,7 +197,7 @@ impl Inquirer for QuitOverride {
         match value {
             Some(yes_no) if yes_no == "y" => self.save(),
             Some(yes_no) if yes_no == "n" => Quit::next(&self.dirty),
-            Some(_) => QuitOverride::question(self.dirty.clone()),
+            Some(_) => self.again(),
             None => None,
         }
     }
@@ -764,7 +769,7 @@ impl Inquirer for Open {
 /// Operation: `save-file`
 fn save_file(env: &mut Environment) -> Option<Action> {
     let editor = env.get_active_editor();
-    if editor.borrow().is_persistent() {
+    if is_persistent(editor) {
         match stale_editor(editor) {
             Ok(true) => SaveOverride::question(editor.clone()),
             Ok(false) => Save::save(editor),
@@ -795,7 +800,7 @@ impl Save {
     }
 
     fn save_as(editor: &EditorRef, env: &mut Environment, path: &str) -> Option<Action> {
-        if editor.borrow().is_persistent() {
+        if is_persistent(editor) {
             Self::save_persistent(editor, path)
         } else {
             Self::save_transient(editor, env, path)
@@ -811,19 +816,12 @@ impl Save {
     }
 
     fn save_transient(editor: &EditorRef, env: &mut Environment, path: &str) -> Option<Action> {
-        let time = write_editor(editor, path);
-        match time {
-            Ok(time) => {
-                // Clone transient editor into persistent editor, ensuring that cursor
-                // position in buffer and cursor location are preserved.
-                let mut buffer = editor.borrow().buffer().clone();
-                let cur_pos = editor.borrow().cursor_pos();
-                buffer.set_pos(cur_pos);
-                let Point { row, col: _ } = editor.borrow().cursor();
-                let dup_editor = Editor::persistent(path, Some(time), Some(buffer)).to_ref();
-
-                // Replace transient editor in current window with new editor.
-                env.set_editor(dup_editor, Align::Row(row));
+        let timestamp = write_editor(editor, path);
+        match timestamp {
+            Ok(timestamp) => {
+                let cloned_editor = editor.borrow().clone_persistent(path, Some(timestamp));
+                let row = cloned_editor.cursor().row;
+                env.set_editor(cloned_editor.to_ref(), Align::Row(row));
                 Action::as_echo(&Self::echo_saved(path))
             }
             Err(e) => Action::as_echo(&e),
@@ -869,6 +867,7 @@ impl Inquirer for Save {
 
 /// An inquirer spawned from [`Save`] that orchestrates the saving of an editor whose
 /// path provided by the user conflicts with an existing file in storage.
+#[derive(Clone)]
 struct SaveExists {
     editor: EditorRef,
     path: String,
@@ -877,6 +876,10 @@ struct SaveExists {
 impl SaveExists {
     fn question(editor: EditorRef, path: String) -> Option<Action> {
         Action::as_question(SaveExists { editor, path }.to_box())
+    }
+
+    fn again(&self) -> Option<Action> {
+        Action::as_question(self.clone().to_box())
     }
 
     fn to_box(self) -> Box<dyn Inquirer> {
@@ -898,7 +901,7 @@ impl Inquirer for SaveExists {
         match value {
             Some(yes_no) if yes_no == "y" => Save::save_as(&self.editor, env, &self.path),
             Some(yes_no) if yes_no == "n" => None,
-            Some(_) => SaveExists::question(self.editor.clone(), self.path.clone()),
+            Some(_) => self.again(),
             None => None,
         }
     }
@@ -906,6 +909,7 @@ impl Inquirer for SaveExists {
 
 /// An inquirer spawned from [`Save`] that orchestrates the saving of an editor whose
 /// corresponding file in storage is newer than its timestamp.
+#[derive(Clone)]
 struct SaveOverride {
     editor: EditorRef,
 }
@@ -913,6 +917,10 @@ struct SaveOverride {
 impl SaveOverride {
     fn question(editor: EditorRef) -> Option<Action> {
         Action::as_question(SaveOverride { editor }.to_box())
+    }
+
+    fn again(&self) -> Option<Action> {
+        Action::as_question(self.clone().to_box())
     }
 
     fn to_box(self) -> Box<dyn Inquirer> {
@@ -934,7 +942,7 @@ impl Inquirer for SaveOverride {
         match value {
             Some(yes_no) if yes_no == "y" => Save::save(&self.editor),
             Some(yes_no) if yes_no == "n" => None,
-            Some(_) => SaveOverride::question(self.editor.clone()),
+            Some(_) => self.again(),
             None => None,
         }
     }
@@ -944,37 +952,71 @@ impl Inquirer for SaveOverride {
 fn kill_window(env: &mut Environment) -> Option<Action> {
     if env.view_map().len() > 1 {
         let editor = env.get_active_editor();
-        if editor.borrow().is_persistent() && editor.borrow().dirty() {
-            Kill::question(editor.clone())
+        if is_dirty_persistent(editor) {
+            Kill::question(editor.clone(), None)
         } else {
             env.kill_window();
             None
         }
     } else {
-        Action::as_echo("cannot close only window")
+        if let Some((switch_id, _)) = next_unattached_editor(env) {
+            let editor_id = env.get_active_editor_id();
+            let editor = env.get_active_editor();
+            if is_dirty_persistent(editor) {
+                Kill::question(editor.clone(), Some((editor_id, switch_id)))
+            } else {
+                env.switch_editor(switch_id, Align::Auto);
+                env.close_editor(editor_id);
+                None
+            }
+        } else {
+            Action::as_echo("cannot close only window")
+        }
     }
 }
 
 /// An inquirer that orchestrates the process of killing a window with a dirty editor
 /// attached.
+#[derive(Clone)]
 struct Kill {
     editor: EditorRef,
+    close_and_switch: Option<(u32, u32)>,
 }
 
 impl Kill {
-    fn question(editor: EditorRef) -> Option<Action> {
-        Action::as_question(Kill { editor }.to_box())
+    fn question(editor: EditorRef, close_and_switch: Option<(u32, u32)>) -> Option<Action> {
+        Action::as_question(
+            Kill {
+                editor,
+                close_and_switch,
+            }
+            .to_box(),
+        )
+    }
+
+    fn again(&self) -> Option<Action> {
+        Action::as_question(self.clone().to_box())
     }
 
     fn to_box(self) -> Box<dyn Inquirer> {
         Box::new(self)
     }
 
-    fn kill(env: &mut Environment, editor: &EditorRef) -> Option<Action> {
-        Save::save(editor).and_then(|action| {
-            env.kill_window();
+    fn kill(&mut self, env: &mut Environment) -> Option<Action> {
+        Save::save(&self.editor).and_then(|action| {
+            self.kill_only(env);
             Some(action)
         })
+    }
+
+    fn kill_only(&mut self, env: &mut Environment) -> Option<Action> {
+        if let Some((editor_id, switch_id)) = self.close_and_switch {
+            env.switch_editor(switch_id, Align::Auto);
+            env.close_editor(editor_id);
+        } else {
+            env.kill_window();
+        }
+        None
     }
 }
 
@@ -991,18 +1033,12 @@ impl Inquirer for Kill {
     fn respond(&mut self, env: &mut Environment, value: Option<&str>) -> Option<Action> {
         match value {
             Some(yes_no) if yes_no == "y" => match stale_editor(&self.editor) {
-                Ok(true) => KillOverride::question(self.editor.clone()),
-                Ok(false) => Kill::kill(env, &self.editor),
+                Ok(true) => KillOverride::question(self.editor.clone(), self.close_and_switch),
+                Ok(false) => self.kill(env),
                 Err(e) => Action::as_echo(&e),
             },
-            Some(yes_no) if yes_no == "n" => {
-                if let Some(_) = env.kill_window() {
-                    None
-                } else {
-                    Action::as_echo("cannot close only window")
-                }
-            }
-            Some(_) => Kill::question(self.editor.clone()),
+            Some(yes_no) if yes_no == "n" => self.kill_only(env),
+            Some(_) => self.again(),
             None => None,
         }
     }
@@ -1010,17 +1046,41 @@ impl Inquirer for Kill {
 
 /// An inquirer spawned from [`Kill`] that orchestrates the saving of an editor whose
 /// corresponding file in storage is newer than its timestamp.
+#[derive(Clone)]
 struct KillOverride {
     editor: EditorRef,
+    close_and_switch: Option<(u32, u32)>,
 }
 
 impl KillOverride {
-    fn question(editor: EditorRef) -> Option<Action> {
-        Action::as_question(KillOverride { editor }.to_box())
+    fn question(editor: EditorRef, close_and_switch: Option<(u32, u32)>) -> Option<Action> {
+        Action::as_question(
+            KillOverride {
+                editor,
+                close_and_switch,
+            }
+            .to_box(),
+        )
+    }
+
+    fn again(&self) -> Option<Action> {
+        Action::as_question(self.clone().to_box())
     }
 
     fn to_box(self) -> Box<dyn Inquirer> {
         Box::new(self)
+    }
+
+    fn kill(&mut self, env: &mut Environment) -> Option<Action> {
+        Save::save(&self.editor).and_then(|action| {
+            if let Some((editor_id, switch_id)) = self.close_and_switch {
+                env.switch_editor(switch_id, Align::Auto);
+                env.close_editor(editor_id);
+            } else {
+                env.kill_window();
+            }
+            Some(action)
+        })
     }
 }
 
@@ -1036,9 +1096,9 @@ impl Inquirer for KillOverride {
 
     fn respond(&mut self, env: &mut Environment, value: Option<&str>) -> Option<Action> {
         match value {
-            Some(yes_no) if yes_no == "y" => Kill::kill(env, &self.editor),
+            Some(yes_no) if yes_no == "y" => self.kill(env),
             Some(yes_no) if yes_no == "n" => None,
-            Some(_) => KillOverride::question(self.editor.clone()),
+            Some(_) => self.again(),
             None => None,
         }
     }
@@ -1094,15 +1154,7 @@ fn next_window(env: &mut Environment) -> Option<Action> {
 
 /// Operation: `prev-editor`
 fn prev_editor(env: &mut Environment) -> Option<Action> {
-    let editors = unattached_editors(env);
-    if editors.len() > 0 {
-        let editor_id = env.get_active_editor_id();
-        let index = editors
-            .iter()
-            .rev()
-            .position(|(id, _)| *id < editor_id)
-            .unwrap_or(0);
-        let (prev_id, _) = editors[editors.len() - index - 1];
+    if let Some((prev_id, _)) = prev_unattached_editor(env) {
         env.switch_editor(prev_id, Align::Auto);
     }
     None
@@ -1110,14 +1162,7 @@ fn prev_editor(env: &mut Environment) -> Option<Action> {
 
 /// Operation: `next-editor`
 fn next_editor(env: &mut Environment) -> Option<Action> {
-    let editors = unattached_editors(env);
-    if editors.len() > 0 {
-        let editor_id = env.get_active_editor_id();
-        let index = editors
-            .iter()
-            .position(|(id, _)| *id > editor_id)
-            .unwrap_or(0);
-        let (next_id, _) = editors[index];
+    if let Some((next_id, _)) = next_unattached_editor(env) {
         env.switch_editor(next_id, Align::Auto);
     }
     None
@@ -1157,11 +1202,7 @@ impl Inquirer for SelectEditor {
     }
 
     fn completer(&self) -> Box<dyn Completer> {
-        let accepted = self
-            .editors
-            .iter()
-            .map(|(_, e)| e.borrow().name())
-            .collect();
+        let accepted = self.editors.iter().map(|(_, e)| name_of(e)).collect();
         user::list_completer(accepted)
     }
 
@@ -1170,7 +1211,7 @@ impl Inquirer for SelectEditor {
             let editor = self
                 .editors
                 .iter()
-                .find(|(_, e)| e.borrow().name() == value)
+                .find(|(_, e)| name_of(e) == value)
                 .map(|(id, _)| *id);
             if let Some(editor_id) = editor {
                 env.switch_editor(editor_id, Align::Auto);
@@ -1260,13 +1301,13 @@ fn stale_editor(editor: &EditorRef) -> Result<bool> {
 fn dirty_editors(env: &Environment) -> Vec<EditorRef> {
     env.editor_map()
         .iter()
-        .filter(|(_, e)| e.borrow().is_persistent() && e.borrow().dirty())
+        .filter(|(_, e)| is_dirty_persistent(e))
         .map(|(_, e)| e.clone())
         .collect()
 }
 
-/// Returns an ordered collection of editor ids and editors for those that are not
-/// attached to a window.
+/// Returns an ordered collection of editor ids and editors for those editors that are
+/// not attached to a window.
 fn unattached_editors(env: &Environment) -> Vec<(u32, EditorRef)> {
     let attached = env.view_map().values().cloned().collect::<Vec<_>>();
     env.editor_map()
@@ -1274,6 +1315,39 @@ fn unattached_editors(env: &Environment) -> Vec<(u32, EditorRef)> {
         .filter(|(id, _)| !attached.contains(id))
         .map(|(id, e)| (*id, e.clone()))
         .collect()
+}
+
+/// Returns the editor id and editor of the previous unattached editor relative to the
+/// editor in the current window, or `None` if all editors are attached.
+fn prev_unattached_editor(env: &Environment) -> Option<(u32, EditorRef)> {
+    let editors = unattached_editors(env);
+    if editors.len() > 0 {
+        let editor_id = env.get_active_editor_id();
+        let index = editors
+            .iter()
+            .rev()
+            .position(|(id, _)| *id < editor_id)
+            .unwrap_or(0);
+        Some(editors[editors.len() - index - 1].clone())
+    } else {
+        None
+    }
+}
+
+/// Returns the editor id and editor of the next unattached editor relative to the
+/// editor in the current window, or `None` if all editors are attached.
+fn next_unattached_editor(env: &Environment) -> Option<(u32, EditorRef)> {
+    let editors = unattached_editors(env);
+    if editors.len() > 0 {
+        let editor_id = env.get_active_editor_id();
+        let index = editors
+            .iter()
+            .position(|(id, _)| *id > editor_id)
+            .unwrap_or(0);
+        Some(editors[index].clone())
+    } else {
+        None
+    }
 }
 
 /// Returns the path associated with `editor`.
@@ -1284,6 +1358,17 @@ fn path_of(editor: &EditorRef) -> PathBuf {
 /// Returns the name of `editor`.
 fn name_of(editor: &EditorRef) -> String {
     editor.borrow().name()
+}
+
+/// Returns `true` if `editor` is persistent.
+fn is_persistent(editor: &EditorRef) -> bool {
+    editor.borrow().is_persistent()
+}
+
+/// Returns `true` if `editor` is both persistent and dirty.
+fn is_dirty_persistent(editor: &EditorRef) -> bool {
+    let editor = editor.borrow();
+    editor.is_persistent() && editor.is_dirty()
 }
 
 /// Returns the base directory of the active editor.
@@ -1306,8 +1391,8 @@ fn derive_dir_from(editor: &EditorRef) -> PathBuf {
 /// `None` is returned if the base directory cannot be determined, possibly from a
 /// failure to get the current working directory.
 fn base_dir(editor: &EditorRef) -> PathBuf {
-    if editor.borrow().is_persistent() {
-        sys::base_dir(editor.borrow().path())
+    if is_persistent(editor) {
+        sys::base_dir(path_of(editor))
     } else {
         sys::working_dir()
     }

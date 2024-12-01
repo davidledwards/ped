@@ -510,14 +510,30 @@ impl Editor {
         Rc::new(RefCell::new(self))
     }
 
+    /// Returns `true` if this editor is *persistent*.
     pub fn is_persistent(&self) -> bool {
         self.persistent
     }
 
+    /// Makes this editor *persistent* with `path` and an optional `timestamp`.
     pub fn make_persistent(&mut self, path: &str, timestamp: Option<SystemTime>) {
         self.persistent = true;
         self.path = path.to_string();
         self.timestamp = timestamp;
+    }
+
+    /// Returns a partial clone of this editor as a *persistent* editor with `path` and
+    /// an optional `timestamp`.
+    ///
+    /// Specifically, the buffer is cloned as well as the current buffer position and
+    /// cursor values. All other attributes are initialized as if a new editor were
+    /// being created.
+    pub fn clone_persistent(&self, path: &str, timestamp: Option<SystemTime>) -> Editor {
+        let mut buffer = self.buffer().clone();
+        buffer.set_pos(self.cur_pos);
+        let mut editor = Self::persistent(path, timestamp, Some(buffer));
+        editor.cursor = self.cursor;
+        editor
     }
 
     pub fn path(&self) -> PathBuf {
@@ -555,7 +571,7 @@ impl Editor {
         self.buffer.borrow_mut()
     }
 
-    pub fn dirty(&self) -> bool {
+    pub fn is_dirty(&self) -> bool {
         self.dirty
     }
 
@@ -570,13 +586,6 @@ impl Editor {
     /// [`rows`](Self::rows) and [`cols`](Self::cols), respectively.
     pub fn cursor(&self) -> Point {
         self.cursor
-    }
-
-    /// Returns the cursor position in the buffer, which is not necessarily the same
-    /// as [`Buffer::get_pos`] since changes to the buffer position are deferred until
-    /// mutations are applied.
-    pub fn cursor_pos(&self) -> usize {
-        self.cur_pos
     }
 
     /// Returns the location of the cursor position in the buffer in terms of *line*
@@ -692,15 +701,7 @@ impl Editor {
     /// Tries to move the cursor *backward* by one word from the current buffer
     /// position.
     pub fn move_backward_word(&mut self) {
-        let pos = self
-            .buffer()
-            .backward(self.cur_pos)
-            .index()
-            .skip_while(|(_, c)| c.is_whitespace())
-            .skip_while(|(_, c)| !c.is_whitespace())
-            .next()
-            .map(|(pos, _)| pos + 1)
-            .unwrap_or(0);
+        let pos = self.find_word_before(self.cur_pos);
         if pos < self.cur_pos {
             self.move_to(pos, Align::Auto);
         }
@@ -709,18 +710,34 @@ impl Editor {
     /// Tries to move the cursor *forward* by one word from the current buffer
     /// position.
     pub fn move_forward_word(&mut self) {
-        let pos = self
-            .buffer()
-            .forward(self.cur_pos)
+        let pos = self.find_word_after(self.cur_pos);
+        if pos > self.cur_pos {
+            self.move_to(pos, Align::Auto);
+        }
+    }
+
+    /// Returns the position of the word that comes before `pos`.
+    fn find_word_before(&self, pos: usize) -> usize {
+        self.buffer()
+            .backward(pos)
+            .index()
+            .skip_while(|(_, c)| c.is_whitespace())
+            .skip_while(|(_, c)| !c.is_whitespace())
+            .next()
+            .map(|(pos, _)| pos + 1)
+            .unwrap_or(0)
+    }
+
+    /// Returns the position of the word that follows after `pos`.
+    fn find_word_after(&self, pos: usize) -> usize {
+        self.buffer()
+            .forward(pos)
             .index()
             .skip_while(|(_, c)| !c.is_whitespace())
             .skip_while(|(_, c)| c.is_whitespace())
             .next()
             .map(|(pos, _)| pos)
-            .unwrap_or(self.buffer().size());
-        if pos > self.cur_pos {
-            self.move_to(pos, Align::Auto);
-        }
+            .unwrap_or(self.buffer().size())
     }
 
     /// Tries to move the cursor *up* by the specified number of `try_rows`.

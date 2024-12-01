@@ -7,6 +7,7 @@ use crate::error::Result;
 use crate::input::{Directive, InputEditor};
 use crate::key::{Key, Keyboard, CTRL_G};
 use crate::op::{self, Action};
+use crate::sys::{self, AsString};
 use crate::term;
 use crate::user::Inquirer;
 use crate::workspace::{Placement, Workspace};
@@ -93,7 +94,8 @@ impl Controller {
     pub fn open(&mut self, files: &Vec<String>) -> Result<()> {
         let view_id = self.env.get_active_view_id();
         for (i, path) in files.iter().enumerate() {
-            let editor = op::open_editor(path)?;
+            let path = sys::canonicalize(sys::working_dir().join(path)).as_string();
+            let editor = op::open_editor(&path)?;
             if i == 0 {
                 self.env.set_editor(editor, Align::Auto);
             } else {

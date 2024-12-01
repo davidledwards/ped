@@ -237,6 +237,21 @@ impl Environment {
         self.kill_window_for(self.active_view_id)
     }
 
+    /// Closes the editor of `editor_id`, but only if the editor is not attached to a
+    /// window and not a builtin, returning `editor_id` if closed and `None` otherwise.
+    pub fn close_editor(&mut self, editor_id: u32) -> Option<u32> {
+        if let Some(_) = self.find_editor_view_id(editor_id) {
+            None
+        } else {
+            if self.is_builtin(editor_id) {
+                None
+            } else {
+                self.remove_editor_unchecked(editor_id);
+                Some(editor_id)
+            }
+        }
+    }
+
     pub fn set_clipboard(&mut self, text: Vec<char>) {
         self.clipboard = Some(text);
     }
