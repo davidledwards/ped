@@ -223,38 +223,74 @@ fn help(env: &mut Environment) -> Option<Action> {
     }
 }
 
-/// Operation: `move-left`
-fn move_left(env: &mut Environment) -> Option<Action> {
+/// Operation: `move-backward`
+fn move_backward(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
     editor.clear_soft_mark();
-    editor.move_left(1);
+    editor.move_backward(1);
     editor.render();
     None
 }
 
-/// Operation: `move-left-select`
-fn move_left_select(env: &mut Environment) -> Option<Action> {
-    let mut editor = env.get_active_editor().borrow_mut();
-    editor.set_soft_mark();
-    editor.move_left(1);
-    editor.render();
-    None
-}
-
-/// Operation: `move-right`
-fn move_right(env: &mut Environment) -> Option<Action> {
+/// Operation: `move-backward-word`
+fn move_backward_word(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
     editor.clear_soft_mark();
-    editor.move_right(1);
+    editor.move_backward_word();
     editor.render();
     None
 }
 
-/// Operation: `move-right-select`
-fn move_right_select(env: &mut Environment) -> Option<Action> {
+/// Operation: `move-backward-select`
+fn move_backward_select(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
     editor.set_soft_mark();
-    editor.move_right(1);
+    editor.move_backward(1);
+    editor.render();
+    None
+}
+
+/// Operation: `move-backward-word-select`
+fn move_backward_word_select(env: &mut Environment) -> Option<Action> {
+    let mut editor = env.get_active_editor().borrow_mut();
+    editor.set_soft_mark();
+    editor.move_backward_word();
+    editor.render();
+    None
+}
+
+/// Operation: `move-forward`
+fn move_forward(env: &mut Environment) -> Option<Action> {
+    let mut editor = env.get_active_editor().borrow_mut();
+    editor.clear_soft_mark();
+    editor.move_forward(1);
+    editor.render();
+    None
+}
+
+/// Operation: `move-forward-word`
+fn move_forward_word(env: &mut Environment) -> Option<Action> {
+    let mut editor = env.get_active_editor().borrow_mut();
+    editor.clear_soft_mark();
+    editor.move_forward_word();
+    editor.render();
+    None
+}
+
+/// Operation: `move-forward-select`
+fn move_forward_select(env: &mut Environment) -> Option<Action> {
+    let mut editor = env.get_active_editor().borrow_mut();
+    editor.set_soft_mark();
+    editor.move_forward(1);
+    editor.render();
+    None
+}
+
+/// Operation: `move-forward-word-select`
+fn move_forward_word_select(env: &mut Environment) -> Option<Action> {
+    let mut editor = env.get_active_editor().borrow_mut();
+    editor.set_soft_mark();
+    editor.move_forward_word();
     editor.render();
     None
 }
@@ -522,8 +558,8 @@ fn insert_tab(env: &mut Environment) -> Option<Action> {
     None
 }
 
-/// Operation: `remove-left`
-fn remove_left(env: &mut Environment) -> Option<Action> {
+/// Operation: `remove-before`
+fn remove_before(env: &mut Environment) -> Option<Action> {
     let text = {
         let mut editor = env.get_active_editor().borrow_mut();
         let maybe_mark = editor.clear_mark();
@@ -531,7 +567,7 @@ fn remove_left(env: &mut Environment) -> Option<Action> {
             let text = editor.remove_mark(mark);
             Some(text)
         } else {
-            editor.remove_left();
+            editor.remove_before();
             None
         }
     };
@@ -542,11 +578,11 @@ fn remove_left(env: &mut Environment) -> Option<Action> {
     None
 }
 
-/// Operation: `remove-right`
-fn remove_right(env: &mut Environment) -> Option<Action> {
+/// Operation: `remove-after`
+fn remove_after(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
     editor.clear_mark();
-    editor.remove_right();
+    editor.remove_after();
     editor.render();
     None
 }
@@ -1278,16 +1314,20 @@ fn base_dir(editor: &EditorRef) -> PathBuf {
 }
 
 /// Predefined mapping of editing operations to editing functions.
-const OP_MAPPINGS: [(&'static str, OpFn); 55] = [
+const OP_MAPPINGS: [(&'static str, OpFn); 59] = [
     // --- exit and cancellation ---
     ("quit", quit),
     // --- help ---
     ("help", help),
     // --- navigation and selection ---
-    ("move-left", move_left),
-    ("move-left-select", move_left_select),
-    ("move-right", move_right),
-    ("move-right-select", move_right_select),
+    ("move-backward", move_backward),
+    ("move-backward-word", move_backward_word),
+    ("move-backward-select", move_backward_select),
+    ("move-backward-word-select", move_backward_word_select),
+    ("move-forward", move_forward),
+    ("move-forward-word", move_forward_word),
+    ("move-forward-select", move_forward_select),
+    ("move-forward-word-select", move_forward_word_select),
     ("move-up", move_up),
     ("move-up-select", move_up_select),
     ("move-down", move_down),
@@ -1312,8 +1352,8 @@ const OP_MAPPINGS: [(&'static str, OpFn); 55] = [
     // --- insertion and removal ---
     ("insert-line", insert_line),
     ("insert-tab", insert_tab),
-    ("remove-left", remove_left),
-    ("remove-right", remove_right),
+    ("remove-before", remove_before),
+    ("remove-after", remove_after),
     ("remove-start", remove_start),
     ("remove-end", remove_end),
     ("undo", undo),

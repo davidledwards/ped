@@ -240,18 +240,24 @@ impl Configuration {
         bindings
     }
 
-    const DEFAULT_BINDINGS: [(&'static str, &'static str); 67] = [
+    const DEFAULT_BINDINGS: [(&'static str, &'static str); 73] = [
         // --- exit and cancellation ---
         ("C-q", "quit"),
         // --- help ---
         ("C-h", "help"),
         // --- navigation and selection ---
-        ("C-b", "move-left"),
-        ("left", "move-left"),
-        ("S-left", "move-left-select"),
-        ("C-f", "move-right"),
-        ("right", "move-right"),
-        ("S-right", "move-right-select"),
+        ("C-b", "move-backward"),
+        ("left", "move-backward"),
+        ("ESC:b", "move-backward-word"),
+        ("ESC:left", "move-backward-word"),
+        ("S-left", "move-backward-select"),
+        ("ESC:B", "move-backward-word-select"),
+        ("C-f", "move-forward"),
+        ("right", "move-forward"),
+        ("ESC:f", "move-forward-word"),
+        ("ESC:right", "move-forward-word"),
+        ("S-right", "move-forward-select"),
+        ("ESC:F", "move-forward-word-select"),
         ("C-p", "move-up"),
         ("up", "move-up"),
         ("S-up", "move-up-select"),
@@ -284,8 +290,8 @@ impl Configuration {
         // --- insertion and removal ---
         ("ret", "insert-line"),
         ("tab", "insert-tab"),
-        ("C-d", "remove-right"),
-        ("del", "remove-left"),
+        ("C-d", "remove-after"),
+        ("del", "remove-before"),
         ("C-j", "remove-start"),
         ("C-k", "remove-end"),
         ("C-u", "undo"),

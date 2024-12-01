@@ -671,19 +671,53 @@ impl Editor {
             .draw();
     }
 
-    /// Tries to move the cursor *left* of the current buffer position by `len`
+    /// Tries to move the cursor *backward* from the current buffer position by `len`
     /// characters.
-    pub fn move_left(&mut self, len: usize) {
+    pub fn move_backward(&mut self, len: usize) {
         let pos = self.cur_pos - cmp::min(len, self.cur_pos);
         if pos < self.cur_pos {
             self.move_to(pos, Align::Auto);
         }
     }
 
-    /// Tries to move the cursor *right* of the current buffer position by `len`
+    /// Tries to move the cursor *forward* from the current buffer position by `len`
     /// characters.
-    pub fn move_right(&mut self, len: usize) {
+    pub fn move_forward(&mut self, len: usize) {
         let pos = cmp::min(self.cur_pos + len, self.buffer().size());
+        if pos > self.cur_pos {
+            self.move_to(pos, Align::Auto);
+        }
+    }
+
+    /// Tries to move the cursor *backward* by one word from the current buffer
+    /// position.
+    pub fn move_backward_word(&mut self) {
+        let pos = self
+            .buffer()
+            .backward(self.cur_pos)
+            .index()
+            .skip_while(|(_, c)| c.is_whitespace())
+            .skip_while(|(_, c)| !c.is_whitespace())
+            .next()
+            .map(|(pos, _)| pos + 1)
+            .unwrap_or(0);
+        if pos < self.cur_pos {
+            self.move_to(pos, Align::Auto);
+        }
+    }
+
+    /// Tries to move the cursor *forward* by one word from the current buffer
+    /// position.
+    pub fn move_forward_word(&mut self) {
+        let pos = self
+            .buffer()
+            .forward(self.cur_pos)
+            .index()
+            .skip_while(|(_, c)| !c.is_whitespace())
+            .skip_while(|(_, c)| c.is_whitespace())
+            .next()
+            .map(|(pos, _)| pos)
+            .unwrap_or(self.buffer().size());
         if pos > self.cur_pos {
             self.move_to(pos, Align::Auto);
         }
@@ -966,11 +1000,11 @@ impl Editor {
         }
     }
 
-    /// Removes and returns the character left of the current buffer position.
+    /// Removes and returns the character before the current buffer position.
     ///
     /// An empty vector is returned if the current position is already at the top
     /// of the buffer.
-    pub fn remove_left(&mut self) -> Vec<char> {
+    pub fn remove_before(&mut self) -> Vec<char> {
         if self.cur_pos > 0 {
             self.remove(self.cur_pos - 1)
         } else {
@@ -978,11 +1012,11 @@ impl Editor {
         }
     }
 
-    /// Removes and returns the character right of the current buffer position.
+    /// Removes and returns the character after the current buffer position.
     ///
     /// An empty vector is returned if the current position is already at the
     /// bottom of the buffer.
-    pub fn remove_right(&mut self) -> Vec<char> {
+    pub fn remove_after(&mut self) -> Vec<char> {
         if self.cur_pos < self.buffer().size() {
             self.remove(self.cur_pos + 1)
         } else {
@@ -1008,7 +1042,7 @@ impl Editor {
     /// current buffer position.
     pub fn remove_start(&mut self) -> Vec<char> {
         if self.cur_pos == self.cur_line.line_pos {
-            self.remove_left()
+            self.remove_before()
         } else {
             self.remove(self.cur_line.line_pos)
         }

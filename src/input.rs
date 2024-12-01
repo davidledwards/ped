@@ -135,7 +135,7 @@ impl InputEditor {
                 self.draw_input();
             }
             DELETE => {
-                // Delete character left of cursor.
+                // Delete character before cursor.
                 if self.pos > 0 {
                     self.len -= 1;
                     self.pos -= 1;
@@ -146,7 +146,7 @@ impl InputEditor {
                 }
             }
             CTRL_D => {
-                // Delete character right of cursor.
+                // Delete character after cursor.
                 if self.pos < self.len {
                     self.input.remove(self.pos);
                     self.len -= 1;
@@ -155,7 +155,7 @@ impl InputEditor {
                 }
             }
             CTRL_J => {
-                // Delete characters left of cursor to start of line.
+                // Delete characters from cursor to start of line.
                 if self.pos > 0 {
                     self.input.drain(0..self.pos);
                     self.len -= self.pos;
@@ -166,7 +166,7 @@ impl InputEditor {
                 }
             }
             CTRL_K => {
-                // Delete characters right of cursor to end of line.
+                // Delete characters from cursor to end of line.
                 if self.pos < self.len {
                     self.input.drain(self.pos..self.len);
                     self.len = self.pos;
@@ -175,7 +175,7 @@ impl InputEditor {
                 }
             }
             CTRL_F | RIGHT => {
-                // Move cursor right.
+                // Move cursor forward.
                 if self.pos < self.len {
                     self.pos += 1;
                     self.cursor = cmp::min(self.cursor + 1, self.input_cols - 1);
@@ -183,7 +183,7 @@ impl InputEditor {
                 }
             }
             CTRL_B | LEFT => {
-                // Move cursor left.
+                // Move cursor backward.
                 if self.pos > 0 {
                     self.pos -= 1;
                     self.cursor = self.cursor.saturating_sub(1);
