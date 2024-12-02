@@ -63,22 +63,22 @@ impl Bindings {
     }
 
     /// Converts the key sequence `key_seq` to a vector of [`Key']s.
-    fn to_keys(&self, names: &str) -> Result<Vec<Key>> {
-        names
+    fn to_keys(&self, key_seq: &str) -> Result<Vec<Key>> {
+        key_seq
             .split(':')
-            .map(|name| {
+            .map(|key| {
                 self.key_map
-                    .get(name)
+                    .get(key)
                     .cloned()
                     .or_else(|| {
-                        let mut chars = name.chars();
+                        let mut chars = key.chars();
                         if let (Some(c), None) = (chars.next(), chars.next()) {
                             Some(Key::Char(c))
                         } else {
                             None
                         }
                     })
-                    .ok_or_else(|| Error::invalid_key(name))
+                    .ok_or_else(|| Error::invalid_key(key))
             })
             .collect()
     }

@@ -371,7 +371,7 @@ impl Keyboard {
 ///
 /// Note that [`Key::Char`] is absent from these mappings because of the impracticality
 /// of mapping all possible characters.
-const KEY_MAPPINGS: [(&'static str, Key); 90] = [
+pub const KEY_MAPPINGS: [(&'static str, Key); 90] = [
     ("C-@", Key::Control(0)),
     ("C-a", Key::Control(1)),
     ("C-b", Key::Control(2)),

@@ -1,14 +1,14 @@
->>> Commands
-Key binding notation
-  C-<c>    CONTROL + <c>
-  S-<c>    SHIFT + <c>
-  S-C-<c>  SHIFT + CONTROL + <c>
-  M-<c>    ESCAPE (or META) + <c>
+--- Commands ---
+Notation
+  C-<key>    is       CONTROL + <key>
+  S-<key>    is       SHIFT + <key>
+  S-C-<key>  is       SHIFT + CONTROL + <key>
+  M-<key>    is       ESCAPE (or META) + <ckey>
 
 General
   C-q                 Quit ped
   C-g                 Cancel command
-  C-l                 Redraw window and center cursor
+  C-h                 Toggle @help window
 
 Navigation
   C-b  ←              Move backward one character
@@ -55,6 +55,7 @@ Files
   M-s                 Save file as another name
 
 Windows
+  C-l                 Redraw window and center cursor
   C-w                 Close window and editor
   M-w 0               Close window
   M-w 1               Close all other windows
@@ -65,3 +66,8 @@ Windows
   M-,                 Switch to previous editor in current window
   M-.                 Switch to next editor in current window
   C-y                 Select editor in current window
+
+Help
+  C-h                 Toggle @help window (general help)
+  M-h k               Toggle @keys window (available keys)
+  M-h b               Toggle @bindings window (key bindings)

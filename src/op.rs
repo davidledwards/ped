@@ -204,7 +204,7 @@ impl Inquirer for QuitOverride {
 
 /// Operation: `help`
 fn help(env: &mut Environment) -> Option<Action> {
-    if let Some(editor_id) = env.find_editor_id(help::EDITOR_NAME) {
+    if let Some(editor_id) = env.find_editor_id(help::HELP_EDITOR_NAME) {
         if let Some(view_id) = env.find_editor_view_id(editor_id) {
             env.kill_window_for(view_id);
             None
@@ -217,7 +217,57 @@ fn help(env: &mut Environment) -> Option<Action> {
             }
         }
     } else {
-        let editor = Editor::transient(help::EDITOR_NAME, Some(help::help())).to_ref();
+        let editor = help::help_editor();
+        if let Some((view_id, _)) = env.open_editor(editor, Placement::Bottom, Align::Auto) {
+            env.set_active(Focus::To(view_id));
+            None
+        } else {
+            Action::as_echo("unable to create window")
+        }
+    }
+}
+
+/// Operation: `help-keys`
+fn help_keys(env: &mut Environment) -> Option<Action> {
+    if let Some(editor_id) = env.find_editor_id(help::KEYS_EDITOR_NAME) {
+        if let Some(view_id) = env.find_editor_view_id(editor_id) {
+            env.kill_window_for(view_id);
+            None
+        } else {
+            if let Some(view_id) = env.open_window(editor_id, Placement::Bottom, Align::Auto) {
+                env.set_active(Focus::To(view_id));
+                None
+            } else {
+                Action::as_echo("unable to create window")
+            }
+        }
+    } else {
+        let editor = help::keys_editor();
+        if let Some((view_id, _)) = env.open_editor(editor, Placement::Bottom, Align::Auto) {
+            env.set_active(Focus::To(view_id));
+            None
+        } else {
+            Action::as_echo("unable to create window")
+        }
+    }
+}
+
+/// Operation: `help-bindings`
+fn help_bindings(env: &mut Environment) -> Option<Action> {
+    if let Some(editor_id) = env.find_editor_id(help::BINDINGS_EDITOR_NAME) {
+        if let Some(view_id) = env.find_editor_view_id(editor_id) {
+            env.kill_window_for(view_id);
+            None
+        } else {
+            if let Some(view_id) = env.open_window(editor_id, Placement::Bottom, Align::Auto) {
+                env.set_active(Focus::To(view_id));
+                None
+            } else {
+                Action::as_echo("unable to create window")
+            }
+        }
+    } else {
+        let editor = help::bindings_editor(&env.workspace().config().bindings);
         if let Some((view_id, _)) = env.open_editor(editor, Placement::Bottom, Align::Auto) {
             env.set_active(Focus::To(view_id));
             None
@@ -1398,11 +1448,13 @@ fn base_dir(editor: &EditorRef) -> PathBuf {
 }
 
 /// Predefined mapping of editing operations to editing functions.
-const OP_MAPPINGS: [(&'static str, OpFn); 59] = [
+const OP_MAPPINGS: [(&'static str, OpFn); 61] = [
     // --- exit and cancellation ---
     ("quit", quit),
     // --- help ---
     ("help", help),
+    ("help-keys", help_keys),
+    ("help-bindings", help_bindings),
     // --- navigation and selection ---
     ("move-backward", move_backward),
     ("move-backward-word", move_backward_word),

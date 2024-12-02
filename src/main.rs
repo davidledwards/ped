@@ -85,6 +85,9 @@ fn run() -> Result<()> {
     } else if opts.version {
         println!("{PACKAGE_NAME} {PACKAGE_VERSION} ({BUILD_HASH} {BUILD_DATE})");
         Ok(())
+    } else if opts.print_keys {
+        print!("{}", help::keys_content());
+        Ok(())
     } else {
         run_opts(&opts)
     }
@@ -97,7 +100,12 @@ fn run_opts(opts: &Options) -> Result<()> {
         Configuration::load()?
     };
     config.apply_opts(opts);
-    run_config(opts, config)
+    if opts.print_bindings {
+        print!("{}", help::bindings_content(&config.bindings));
+        Ok(())
+    } else {
+        run_config(opts, config)
+    }
 }
 
 fn run_config(opts: &Options, config: Configuration) -> Result<()> {

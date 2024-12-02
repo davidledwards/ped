@@ -258,11 +258,13 @@ impl Configuration {
         bindings
     }
 
-    const DEFAULT_BINDINGS: [(&'static str, &'static str); 73] = [
+    const DEFAULT_BINDINGS: [(&'static str, &'static str); 75] = [
         // --- exit and cancellation ---
         ("C-q", "quit"),
         // --- help ---
         ("C-h", "help"),
+        ("ESC:h:k", "help-keys"),
+        ("ESC:h:b", "help-bindings"),
         // --- navigation and selection ---
         ("C-b", "move-backward"),
         ("left", "move-backward"),

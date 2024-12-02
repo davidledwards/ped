@@ -1,6 +1,5 @@
 usage: ped OPTIONS [file...]
        ped --help
-       ped --version
 
   The pedestrian text editor.
 
@@ -9,4 +8,17 @@ usage: ped OPTIONS [file...]
     --show-lines      : show line numbers in left margin
     --show-eol        : make \n obvious with special character
     --tab-size N      : use N spaces for tab (default: 3)
+    --print-keys      : echo available keys to stdout
+    --print-bindings  : echo key bindings to stdout
     --config FILE     : load configuration from FILE
+    --version         : print version information
+
+  CONFIGURATION
+    An optional configuration file is loaded if present in one of the following
+    locations in order of precedence:
+        - $HOME/.pedrc
+        - $HOME/.config/ped/pedrc
+
+    Alternatively, a configuration file can be specified using --config, which
+    ignores searching in the standard locations above. Any options given on the
+    command line will override settings from a configuraton file.

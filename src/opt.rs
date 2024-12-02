@@ -11,6 +11,8 @@ pub struct Options {
     pub show_lines: Option<bool>,
     pub show_eol: Option<bool>,
     pub tab_size: Option<usize>,
+    pub print_keys: bool,
+    pub print_bindings: bool,
     pub config_path: Option<String>,
     pub files: Vec<String>,
 }
@@ -24,6 +26,8 @@ impl Default for Options {
             show_lines: None,
             show_eol: None,
             tab_size: None,
+            print_keys: false,
+            print_bindings: false,
             config_path: None,
             files: vec![],
         }
@@ -45,6 +49,8 @@ impl Options {
                 "--show-lines" => opts.show_lines = Some(true),
                 "--show-eol" => opts.show_eol = Some(true),
                 "--tab-size" => opts.tab_size = Some(parse_arg(&arg, it.next())?),
+                "--print-keys" => opts.print_keys = true,
+                "--print-bindings" => opts.print_bindings = true,
                 "--config" => opts.config_path = Some(expect_value(&arg, it.next())?),
                 arg if arg.starts_with("--") => return Err(Error::unexpected_arg(arg)),
                 _ => opts.files.push(arg),
