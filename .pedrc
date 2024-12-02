@@ -1,0 +1,58 @@
+# Sample ped configuration file.
+
+# This section contains settings that are usually offered as command-line
+# options.
+#
+[settings]
+# Enables highlighting of the cursor row.
+# Default = false
+show-spotlight = true
+
+# Shows line numbers in the left margin.
+# Default = false
+show-lines = true
+
+# Makes \n characters visible using a special character.
+# Default = false
+show-eol = true
+
+# Sets the tab stop size.
+# Default = 3
+tab-size = 4
+
+# This section allows the configuration of alternative color themes.
+#
+# Colors are a combination of foreground and background expressed as an array,
+# and whose values must be in the range of [0, 255]. Colors follow the 8-bit
+# ANSI standard at <https://en.wikipedia.org/wiki/ANSI_escape_code#8-bit>.
+#
+# Note that colors handling is not very robust at this point in time, so expect
+# this section to evolve.
+#
+[colors]
+text = [252, 232]
+select = [252, 21]
+banner = [232, 28]
+echo = [214, 232]
+prompt = [34, 232]
+spotlight = [252, 234]
+line = [34, 234]
+eol = [34, 232]
+
+# This section allows keys and key sequences to be rebound to editing
+# operations.
+#
+# An entry in this section follows the given format:
+# "key" = "operation"
+#
+# The list of available keys and operations can be discovered using the command
+# line options --print-keys and --print-ops, respectively.
+#
+# The current key bindings can be discovered using --print-bindings.
+#
+# Even though support for runtime binding exists, it is recommended not to
+# rebind keys at this point in time, as critical guardrails restricting what
+# can be rebound are not in place.
+#
+[bindings]
+"C-^" = "set-mark"

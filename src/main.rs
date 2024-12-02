@@ -88,6 +88,9 @@ fn run() -> Result<()> {
     } else if opts.print_keys {
         print!("{}", help::keys_content());
         Ok(())
+    } else if opts.print_ops {
+        print!("{}", help::ops_content());
+        Ok(())
     } else {
         run_opts(&opts)
     }

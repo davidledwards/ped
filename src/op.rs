@@ -204,57 +204,32 @@ impl Inquirer for QuitOverride {
 
 /// Operation: `help`
 fn help(env: &mut Environment) -> Option<Action> {
-    if let Some(editor_id) = env.find_editor_id(help::HELP_EDITOR_NAME) {
-        if let Some(view_id) = env.find_editor_view_id(editor_id) {
-            env.kill_window_for(view_id);
-            None
-        } else {
-            if let Some(view_id) = env.open_window(editor_id, Placement::Bottom, Align::Auto) {
-                env.set_active(Focus::To(view_id));
-                None
-            } else {
-                Action::as_echo("unable to create window")
-            }
-        }
-    } else {
-        let editor = help::help_editor();
-        if let Some((view_id, _)) = env.open_editor(editor, Placement::Bottom, Align::Auto) {
-            env.set_active(Focus::To(view_id));
-            None
-        } else {
-            Action::as_echo("unable to create window")
-        }
-    }
+    toggle_help(env, help::HELP_EDITOR_NAME, || help::help_editor())
 }
 
 /// Operation: `help-keys`
 fn help_keys(env: &mut Environment) -> Option<Action> {
-    if let Some(editor_id) = env.find_editor_id(help::KEYS_EDITOR_NAME) {
-        if let Some(view_id) = env.find_editor_view_id(editor_id) {
-            env.kill_window_for(view_id);
-            None
-        } else {
-            if let Some(view_id) = env.open_window(editor_id, Placement::Bottom, Align::Auto) {
-                env.set_active(Focus::To(view_id));
-                None
-            } else {
-                Action::as_echo("unable to create window")
-            }
-        }
-    } else {
-        let editor = help::keys_editor();
-        if let Some((view_id, _)) = env.open_editor(editor, Placement::Bottom, Align::Auto) {
-            env.set_active(Focus::To(view_id));
-            None
-        } else {
-            Action::as_echo("unable to create window")
-        }
-    }
+    toggle_help(env, help::KEYS_EDITOR_NAME, || help::keys_editor())
+}
+
+/// Operation: `help-ops`
+fn help_ops(env: &mut Environment) -> Option<Action> {
+    toggle_help(env, help::OPS_EDITOR_NAME, || help::ops_editor())
 }
 
 /// Operation: `help-bindings`
 fn help_bindings(env: &mut Environment) -> Option<Action> {
-    if let Some(editor_id) = env.find_editor_id(help::BINDINGS_EDITOR_NAME) {
+    let bindings = env.workspace().config().bindings.clone();
+    toggle_help(env, help::BINDINGS_EDITOR_NAME, || {
+        help::bindings_editor(&bindings)
+    })
+}
+
+fn toggle_help<F>(env: &mut Environment, editor_name: &str, editor_fn: F) -> Option<Action>
+where
+    F: Fn() -> EditorRef,
+{
+    if let Some(editor_id) = env.find_editor_id(editor_name) {
         if let Some(view_id) = env.find_editor_view_id(editor_id) {
             env.kill_window_for(view_id);
             None
@@ -267,8 +242,7 @@ fn help_bindings(env: &mut Environment) -> Option<Action> {
             }
         }
     } else {
-        let editor = help::bindings_editor(&env.workspace().config().bindings);
-        if let Some((view_id, _)) = env.open_editor(editor, Placement::Bottom, Align::Auto) {
+        if let Some((view_id, _)) = env.open_editor(editor_fn(), Placement::Bottom, Align::Auto) {
             env.set_active(Focus::To(view_id));
             None
         } else {
@@ -1448,12 +1422,13 @@ fn base_dir(editor: &EditorRef) -> PathBuf {
 }
 
 /// Predefined mapping of editing operations to editing functions.
-const OP_MAPPINGS: [(&'static str, OpFn); 61] = [
+pub const OP_MAPPINGS: [(&'static str, OpFn); 62] = [
     // --- exit and cancellation ---
     ("quit", quit),
     // --- help ---
     ("help", help),
     ("help-keys", help_keys),
+    ("help-ops", help_ops),
     ("help-bindings", help_bindings),
     // --- navigation and selection ---
     ("move-backward", move_backward),

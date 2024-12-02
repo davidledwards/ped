@@ -5,12 +5,14 @@
 use crate::buffer::Buffer;
 use crate::editor::{Editor, EditorRef};
 use crate::key::KEY_MAPPINGS;
+use crate::op::OP_MAPPINGS;
 use crate::{BUILD_DATE, BUILD_HASH, PACKAGE_NAME, PACKAGE_VERSION};
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write;
 
 pub const HELP_EDITOR_NAME: &str = "@help";
 pub const KEYS_EDITOR_NAME: &str = "@keys";
+pub const OPS_EDITOR_NAME: &str = "@operations";
 pub const BINDINGS_EDITOR_NAME: &str = "@bindings";
 
 pub fn help_editor() -> EditorRef {
@@ -61,6 +63,41 @@ fn prepare_keys() -> Vec<String> {
         .collect::<Vec<_>>();
     keys.sort();
     keys
+}
+
+pub fn ops_editor() -> EditorRef {
+    Editor::transient(OPS_EDITOR_NAME, Some(ops_buffer())).to_ref()
+}
+
+pub fn ops_content() -> String {
+    let ops = prepare_ops();
+    let mut out = String::new();
+    for op in ops {
+        writeln!(out, "{op}");
+    }
+    out
+}
+
+fn ops_buffer() -> Buffer {
+    const HEADER: &str = "Operations";
+
+    let ops = prepare_ops();
+    let mut out = String::new();
+    writeln!(out, "{HEADER}");
+    writeln!(out, "{:-<1$}", "", HEADER.len());
+    for op in ops {
+        writeln!(out, "{op}");
+    }
+    make_buffer(&out)
+}
+
+fn prepare_ops() -> Vec<String> {
+    let mut ops = OP_MAPPINGS
+        .iter()
+        .map(|(op, _)| op.to_string())
+        .collect::<Vec<_>>();
+    ops.sort();
+    ops
 }
 
 pub fn bindings_editor(bindings: &HashMap<String, String>) -> EditorRef {

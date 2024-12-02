@@ -6,10 +6,11 @@ usage: ped OPTIONS [file...]
   OPTIONS
     --show-spotlight  : highlight cursor row
     --show-lines      : show line numbers in left margin
-    --show-eol        : make \n obvious with special character
+    --show-eol        : make \n visible with special character
     --tab-size N      : use N spaces for tab (default: 3)
-    --print-keys      : echo available keys to stdout
-    --print-bindings  : echo key bindings to stdout
+    --print-keys      : print available keys to stdout
+    --print-ops       : print available operations to stdout
+    --print-bindings  : print key bindings to stdout
     --config FILE     : load configuration from FILE
     --version         : print version information
 
@@ -22,3 +23,7 @@ usage: ped OPTIONS [file...]
     Alternatively, a configuration file can be specified using --config, which
     ignores searching in the standard locations above. Any options given on the
     command line will override settings from a configuraton file.
+
+    Configuration files are formatted using the TOML syntax, details of which
+    can be found at <https://toml.io>. Configuration optiosn specific to ped
+    are documented at <https://github.com/davidledwards/ped>.
