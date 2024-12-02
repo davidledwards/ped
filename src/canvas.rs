@@ -1,10 +1,24 @@
-//! Canvas.
+//! An abstraction over the terminal display that represents the visible area as a
+//! grid of cells.
+//!
+//! A canvas is comprised of a *front* and *back* grid, where the front faithfully
+//! represents what is visible on the display and the back contains pending updates
+//! not yet visible.
+//!
+//! Updates to the canvas are always written to the *back* grid first, then reconciled
+//! with the *front* grid to essentially produce an intermediate diff, which is then
+//! used to generate the terminal output.
+
 use crate::grid::{Cell, Grid};
 use crate::size::{Point, Size};
 use crate::writer::Writer;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+/// An abstraction over the terminal display.
+///
+/// A canvas is defined by its *origin*, which is relative to the top-left corner of
+/// the display, and its *size*, which is the number of rows and columns.
 pub struct Canvas {
     size: Size,
     back: Grid,

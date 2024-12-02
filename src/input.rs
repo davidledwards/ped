@@ -1,4 +1,12 @@
-//! Input editor.
+//! An editor for soliciting input.
+//!
+//! An input editor uses the shared region of the workspace as its canvas, and can be
+//! described as a simplified editing experience aimed at capturing input from the
+//! user.
+//!
+//! A key design element is the integration of a [`Completer`], which allows the
+//! creation of arbitrarily sophisticated input mechanisms, such as file completion.
+
 use crate::canvas::Canvas;
 use crate::grid::Cell;
 use crate::key::*;

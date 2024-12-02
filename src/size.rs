@@ -1,4 +1,5 @@
 //! Basic types representing size and point information.
+
 use std::fmt::{self, Display, Formatter};
 use std::ops::{Add, Sub};
 

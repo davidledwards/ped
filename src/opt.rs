@@ -1,4 +1,5 @@
 //! Options parser.
+
 use std::str::FromStr;
 
 use crate::error::{Error, Result};

@@ -1,4 +1,8 @@
-//! Window management.
+//! A representation of a window.
+//!
+//! A window contains a *canvas*, which is the area comprised of editor text, and a
+//! *banner* for displaying other relevant bits of information.
+
 use crate::canvas::{Canvas, CanvasRef};
 use crate::config::{Configuration, ConfigurationRef};
 use crate::size::{Point, Size};

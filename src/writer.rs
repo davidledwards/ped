@@ -1,14 +1,11 @@
-//! Writes display instructions to the terminal.
+//! A buffered abstraction over standard output that sends content to the terminal
+//! in a structured way.
+
 use crate::ansi;
 use crate::color::Color;
 use crate::size::Point;
 use std::io::{self, Write};
 
-/// A buffered abstraction over standard output that sends content to the terminal
-/// in a structured way.
-///
-/// Cursor operations are relative to an [origin](`Point`) that is provided during
-/// instantiation of the writer.
 pub struct Writer {
     origin: Point,
     out: String,

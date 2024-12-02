@@ -1,4 +1,9 @@
-//! Editor.
+//! Provides a core set of editing functions over a buffer and an attachable window.
+//!
+//! An editor coordinates changes to and movement within a buffer and renders those
+//! effects on the display of an attached window. A majority of the work in this module
+//! is focused on display rendering.
+
 use crate::buffer::{Buffer, BufferRef};
 use crate::canvas::{Canvas, CanvasRef};
 use crate::config::{Configuration, ConfigurationRef};
@@ -1333,6 +1338,9 @@ impl Editor {
     /// Logs `change` by pushing it onto the *undo* stack and clearing the *redo*
     /// stack.
     fn log(&mut self, change: Change) {
+        const UNDO_SOFT_LIMIT: usize = 1024;
+        const UNDO_HARD_LIMIT: usize = 1280;
+
         if let Some(top) = self.undo.pop() {
             if let Some(combined) = change.possibly_combine(&top) {
                 self.undo.push(combined);
@@ -1344,6 +1352,13 @@ impl Editor {
             self.undo.push(change);
         }
         self.redo.clear();
+
+        // Trim undo stack to soft limit once size exceeds hard limit, as this avoids
+        // repeatedly trimming with every change.
+        if self.undo.len() > UNDO_HARD_LIMIT {
+            let n = self.undo.len() - UNDO_SOFT_LIMIT;
+            self.undo.drain(0..n);
+        }
     }
 
     fn set_top_line(&mut self, try_rows: u32) -> u32 {

@@ -1,4 +1,5 @@
-//! Error types.
+//! A complete collection of errors.
+
 use std::error;
 use std::fmt::{self, Display, Formatter};
 use std::io;
@@ -11,63 +12,61 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// The set of possible errors.
 #[derive(Debug)]
 pub enum Error {
-    OS {
-        cause: io::Error,
-    },
-    IO {
-        device: Option<String>,
-        cause: io::Error,
-    },
-    UTF8 {
+    /// An I/O error reported by the operating system.
+    Os { cause: io::Error },
+
+    /// An I/O error resulting from an operation on a file referenced by `path`.
+    Io { path: String, cause: io::Error },
+
+    /// A UTF-8 encoding/decoding error with the offending sequence of `bytes`.
+    Utf8 {
         bytes: Vec<u8>,
         cause: str::Utf8Error,
     },
-    UnexpectedArg {
-        arg: String,
-    },
-    ExpectedValue {
-        arg: String,
-    },
-    InvalidValue {
-        arg: String,
-        value: String,
-    },
-    InvalidKey {
-        key: String,
-    },
-    BindOp {
-        op: String,
-    },
-    Configuration {
-        path: String,
-        cause: String,
-    },
+
+    /// An unexpected command-line argument `arg`.
+    UnexpectedArg { arg: String },
+
+    /// A value is expected for a command-line argument `arg`.
+    ExpectedValue { arg: String },
+
+    /// A `value` given for a command-line argument `arg` is not valid.
+    InvalidValue { arg: String, value: String },
+
+    /// A `key` name given in a key binding is not valid.
+    InvalidKey { key: String },
+
+    /// An operation `op` given in a key binding is not valid.
+    InvalidOp { op: String },
+
+    /// An error occurred while parsing a configuration file referenced by `path`.
+    Configuration { path: String, cause: String },
 }
 
 impl error::Error for Error {}
 
 impl Error {
     pub fn os() -> Error {
-        Error::OS {
+        Error::Os {
             cause: io::Error::last_os_error(),
         }
     }
 
     pub fn os_cloning(e: &io::Error) -> Error {
-        Error::OS {
+        Error::Os {
             cause: io::Error::new(e.kind(), e.to_string()),
         }
     }
 
-    pub fn io(device: Option<&str>, cause: io::Error) -> Error {
-        Error::IO {
-            device: device.map(|d| d.to_string()),
+    pub fn io(path: &str, cause: io::Error) -> Error {
+        Error::Io {
+            path: path.to_string(),
             cause,
         }
     }
 
     pub fn utf8(bytes: &[u8], cause: str::Utf8Error) -> Error {
-        Error::UTF8 {
+        Error::Utf8 {
             bytes: bytes.to_vec(),
             cause,
         }
@@ -98,8 +97,8 @@ impl Error {
         }
     }
 
-    pub fn bind_op(op: &str) -> Error {
-        Error::BindOp { op: op.to_string() }
+    pub fn invalid_op(op: &str) -> Error {
+        Error::InvalidOp { op: op.to_string() }
     }
 
     pub fn configuration(path: &str, e: &de::Error) -> Error {
@@ -113,19 +112,16 @@ impl Error {
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Error::OS { cause } => write!(f, "OS error: {cause}"),
-            Error::IO { device, cause } => match device {
-                Some(d) => write!(f, "{d}: {cause}"),
-                None => write!(f, "{cause}"),
-            },
-            Error::UTF8 { bytes, cause } => write!(f, "{bytes:?}: {cause}"),
+            Error::Os { cause } => write!(f, "I/O error: {cause}"),
+            Error::Io { path, cause } => write!(f, "{path}: {cause}"),
+            Error::Utf8 { bytes, cause } => write!(f, "{bytes:?}: {cause}"),
             Error::UnexpectedArg { arg } => write!(f, "{arg}: unexpected argument"),
             Error::ExpectedValue { arg } => write!(f, "{arg}: expecting value to follow"),
             Error::InvalidValue { arg, value } => {
                 write!(f, "{value}: invalid value following {arg}")
             }
             Error::InvalidKey { key } => write!(f, "{key}: invalid key"),
-            Error::BindOp { op } => write!(f, "{op}: bind operation not found"),
+            Error::InvalidOp { op } => write!(f, "{op}: invalid operation"),
             Error::Configuration { path, cause } => {
                 write!(f, "{path}: configuration error: {cause}")
             }

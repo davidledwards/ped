@@ -1,4 +1,5 @@
-//! Keyboard reader.
+//! An abstraction over terminal input.
+
 use crate::error::{Error, Result};
 use std::collections::HashMap;
 use std::fmt;
@@ -151,7 +152,7 @@ impl Keyboard {
             self.stdin
                 .next()
                 .transpose()
-                .map_err(|e| Error::io(Some("/dev/stdin"), e))
+                .map_err(|e| Error::io("/dev/stdin", e))
         }
     }
 

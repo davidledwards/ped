@@ -1,4 +1,5 @@
-//! # User interaction
+//! A collection of types and implementations for interfacing with users.
+
 use crate::env::Environment;
 use crate::op::Action;
 use crate::sys::{self, AsString};

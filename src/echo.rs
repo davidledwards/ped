@@ -1,4 +1,5 @@
 //! Echo messages to the shared region of a workspace.
+
 use crate::workspace::WorkspaceRef;
 use crate::writer::Writer;
 

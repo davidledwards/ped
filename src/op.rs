@@ -1,5 +1,3 @@
-//! # Editing operations
-//!
 //! A collection of functions intended to be associated with names of editing
 //! operations. These functions serve as the glue between [`Key`](crate::key::Key)s and
 //! respective actions in the context of the editing experience.
@@ -10,6 +8,7 @@
 //!
 //! See [`Bindings`](crate::bind::Bindings) for further details on binding keys
 //! at runtime.
+
 use crate::buffer::Buffer;
 use crate::editor::{Align, Editor, EditorRef};
 use crate::env::{Environment, Focus};
@@ -1235,7 +1234,7 @@ pub fn open_editor(path: &str) -> Result<EditorRef> {
             // in checking before subsequent write operation.
             io::get_time(path).ok()
         }
-        Err(Error::IO { device: _, cause }) if cause.kind() == ErrorKind::NotFound => {
+        Err(Error::Io { path: _, cause }) if cause.kind() == ErrorKind::NotFound => {
             // File was not found, but still treat this error condition as successful,
             // though note that last modification time is absent to indicate new file.
             None

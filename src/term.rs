@@ -1,4 +1,9 @@
-//! Terminal handling.
+//! Terminal initialization and interrogation.
+//!
+//! This module provides functions to initialize the terminal in raw mode such that
+//! keystrokes can be read without blocking. It also provides a means of detecting
+//! terminal size changes via signal handlers.
+
 use crate::error::{Error, Result};
 use libc::{c_int, c_void, sigaction, sighandler_t, siginfo_t, termios, winsize};
 use libc::{SA_SIGINFO, SIGWINCH, STDIN_FILENO, STDOUT_FILENO, TCSADRAIN, TIOCGWINSZ, VMIN, VTIME};
@@ -13,10 +18,6 @@ use std::sync::OnceLock;
 /// buffering. Raw mode is configured such that reads do not block indefinitely when no
 /// bytes are available. In this case, the underlying driver waits `1/10` second before
 /// returning with nothing.
-///
-/// # Errors
-///
-/// Returns [`Err`] if an I/O error occurs while configuring raw mode.
 pub fn init() -> Result<()> {
     default_term().and_then(|mut term| unsafe {
         libc::cfmakeraw(&mut term);
@@ -27,10 +28,6 @@ pub fn init() -> Result<()> {
 }
 
 /// Restores the terminal to its original configuration.
-///
-/// # Errors
-///
-/// Returns [`Err`] if an I/O error occurs while restoring the terminal configuration.
 pub fn restore() -> Result<()> {
     default_term()
         .and_then(|term| unsafe { check_err(libc::tcsetattr(STDIN_FILENO, TCSADRAIN, &term)) })
@@ -38,12 +35,8 @@ pub fn restore() -> Result<()> {
 
 /// Returns the size of the terminal as (rows, cols).
 ///
-/// Calls to this function always query the underlying driver, as the terminal size may have
-/// changed since the prior request.
-///
-/// # Errors
-///
-/// Returns [`Err`] if an I/O error occurred.
+/// Calls to this function always query the underlying driver, as the terminal size may
+/// have changed since the prior request.
 pub fn size() -> Result<(u32, u32)> {
     let win = unsafe {
         let mut win = MaybeUninit::<winsize>::uninit();
@@ -55,8 +48,8 @@ pub fn size() -> Result<(u32, u32)> {
 
 /// Returns `true` if the terminal size changed.
 ///
-/// If this function returns `true`, all subsequent calls will return `false` until the terminal
-/// size once again changes.
+/// If this function returns `true`, all subsequent calls will return `false` until the
+/// terminal size once again changes.
 pub fn size_changed() -> bool {
     WINSIZE_CHANGED.swap(false, Ordering::Relaxed)
 }
@@ -86,7 +79,7 @@ fn default_term() -> Result<termios> {
     });
     match def_term {
         Ok(term) => Ok(term.clone()),
-        Err(Error::OS { cause }) => Err(Error::os_cloning(cause)),
+        Err(Error::Os { cause }) => Err(Error::os_cloning(cause)),
         Err(e) => panic!("unexpected error: {e}"),
     }
 }

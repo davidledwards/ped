@@ -1,4 +1,23 @@
-//! Configuration of editor settings.
+//! Contains everything related to configuration.
+//!
+//! All default values for configurable aspects of the editor are defined in this
+//! module, including but not necessarily exclusive to *settings*, *colors*, and
+//! *key bindings*.
+//!
+//! At a minimum, [`Configuration::default()`] is sufficient for initializing the
+//! editor. However, the normal process is to apply multiple tiers of configuration,
+//! all optional, resulting in a final blended configuration.
+//!
+//! External configuration files are expected to be formatted according to the
+//! [TOML specification](https://toml.io).
+//!
+//! The default method of loading an external configuration file via
+//! [`Configuration::load()`] will try to locate files in the following locations in
+//! order of precedence:
+//!
+//! * `$HOME/.pedrc`
+//! * `$HOME/.config/ped/pedrc`
+
 use crate::color::Color;
 use crate::error::{Error, Result};
 use crate::opt::Options;
@@ -226,8 +245,7 @@ impl Configuration {
     }
 
     fn read_file(path: &Path) -> Result<ExternalConfiguration> {
-        let content =
-            fs::read_to_string(path).map_err(|e| Error::io(Some(&path.as_string()), e))?;
+        let content = fs::read_to_string(path).map_err(|e| Error::io(&path.as_string(), e))?;
         toml::from_str::<ExternalConfiguration>(&content)
             .map_err(|e| Error::configuration(&path.as_string(), &e))
     }

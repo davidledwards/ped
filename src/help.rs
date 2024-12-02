@@ -1,4 +1,5 @@
-//! # Help system
+//! A collection of functions related to help.
+
 use crate::buffer::Buffer;
 use crate::{BUILD_DATE, BUILD_HASH, PACKAGE_NAME, PACKAGE_VERSION};
 

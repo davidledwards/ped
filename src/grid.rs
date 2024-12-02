@@ -1,4 +1,5 @@
-//! Grid of cells for arranging characters.
+//! A grid of cells representing characters on a display.
+
 use crate::color::Color;
 use crate::size::{Point, Size};
 

@@ -1,4 +1,10 @@
-//! ANSI escape sequences.
+//! A collection of functions that produce ANSI control sequences used in the
+//! rendering of terminal output.
+//!
+//! Of particular note, ANSI sequences related to cursor positioning are `1`-based,
+//! so functions in this module that accept *row* and *column* are presumed to be
+//! `0`-based and silently add `1` to values.
+
 use crate::color::Color;
 use crate::size::Point;
 
@@ -15,7 +21,6 @@ pub fn hide_cursor() -> &'static str {
 }
 
 pub fn set_cursor(p: Point) -> String {
-    // Note that row and col are 0-based even though ANSI sequence itself is 1-based.
     format!("\x1b[{};{}H", p.row + 1, p.col + 1)
 }
 

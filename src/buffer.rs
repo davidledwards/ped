@@ -1,4 +1,9 @@
-//! Gap buffer.
+//! An implementation of a gap buffer, which is the primary data structure for
+//! representing and manipulating text.
+//!
+//! Details on the gap buffer data structure can be found at
+//! <https://en.wikipedia.org/wiki/Gap_buffer>.
+
 use core::slice;
 use std::alloc::{self, Layout};
 use std::cell::RefCell;

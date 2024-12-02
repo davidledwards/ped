@@ -1,4 +1,9 @@
-//! Editing environment.
+//! A restricted environment available to editing functions.
+//!
+//! All editing functions, which are bound to key sequences at runtime, are external
+//! to the core [`Editor`]. A restricted set of functions is necessary not only to
+//! simplify operations, but more importantly, to enforce certain invariants.
+
 use crate::editor::{Align, Editor, EditorRef};
 use crate::window::WindowRef;
 use crate::workspace::{Placement, Workspace, WorkspaceRef};

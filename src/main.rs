@@ -1,5 +1,3 @@
-//! # ped
-//!
 //! The *ped*estrian text editor.
 //!
 //! Copyright 2024 David Edwards

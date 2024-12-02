@@ -1,4 +1,10 @@
-//! Key bindings.
+//! Binds key sequences to editing operations.
+//!
+//! The recognized set of keys that can be used in the formation of sequences is
+//! defined authoritatively in the map produced by [`init_key_map`](key::init_key_map),
+//! and similarly, the recognized set of editing operations is defined in the map
+//! produced by [`init_op_map`](op::init_op_map).
+
 use crate::error::{Error, Result};
 use crate::key::{self, Key, KeyMap};
 use crate::op::{self, OpFn, OpMap};
@@ -39,8 +45,6 @@ impl Bindings {
     /// A successful bind will override an existing binding with an identical key
     /// sequence.
     ///
-    /// # Errors
-    ///
     /// Returns an [`Err`] if either of `key_seq` or `op` do not match the name of
     /// known keys or editing operations, respectively.
     pub fn bind(&mut self, key_seq: &str, op: &str) -> Result<()> {
@@ -54,7 +58,7 @@ impl Bindings {
                         self.bind_prefixes.insert(prefix.to_vec());
                     }
                 })
-                .ok_or_else(|| Error::bind_op(op))
+                .ok_or_else(|| Error::invalid_op(op))
         })
     }
 

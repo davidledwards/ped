@@ -1,4 +1,12 @@
-//! Main controller.
+//! Implements the main controller for the entire editing experience.
+//!
+//! In general, the controller manages the workspace, reads key sequences from the
+//! terminal, calls editing functions bound to those keys, and orchestrates the process
+//! of soliciting input from the user. It also detects changes in the terminal size and
+//! resizes the workspace accordingly.
+//!
+//! The controller is essentially a loop that runs until a *quit* directive is given.
+
 use crate::bind::Bindings;
 use crate::echo::Echo;
 use crate::editor::Align;

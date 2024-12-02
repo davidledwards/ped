@@ -1,4 +1,5 @@
-//! Workspace management.
+//! An organization of the terminal display as a collection of views.
+
 use crate::config::{Configuration, ConfigurationRef};
 use crate::size::{Point, Size};
 use crate::term;

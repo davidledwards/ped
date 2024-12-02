@@ -1,8 +1,9 @@
-//! # System functions
-//!
 //! A collection of functions that make common system-level operations easier to
-//! perform. In most cases, these are convenience wrappers that reduce verbosity
-//! and take an opinionated stance on how to interpret errors.
+//! perform.
+//!
+//! In most cases, these are convenience wrappers that reduce verbosity and take an
+//! opinionated stance on how to interpret errors.
+
 use std::env;
 use std::path::{Path, PathBuf};
 
