@@ -151,14 +151,14 @@ impl Colors {
 impl Default for Colors {
     fn default() -> Colors {
         Colors {
-            text: Color::new(250, 233),
-            select: Color::new(250, 21),
+            text: Color::new(252, 232),
+            select: Color::new(252, 21),
             banner: Color::new(232, 28),
-            echo: Color::new(245, 233),
-            prompt: Color::new(243, 233),
-            spotlight: Color::new(250, 235),
-            line: Color::new(34, 235),
-            eol: Color::new(34, 233),
+            echo: Color::new(214, 232),
+            prompt: Color::new(34, 232),
+            spotlight: Color::new(252, 234),
+            line: Color::new(34, 234),
+            eol: Color::new(34, 232),
         }
     }
 }
