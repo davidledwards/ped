@@ -2,6 +2,8 @@
 
 The *ped*estrian text editor.
 
+![](content/ped-snapshot.png)
+
 ## Background
 
 The genesis of this project stemmed from a desire to learn the [Rust](https://www.rust-lang.org/) programming language while also building something useful and nontrivial.
@@ -33,19 +35,20 @@ gh release download --repo https://github.com/davidledwards/ped v0.1.0
 
 Run `ped --help` to print a description of all available options.
 
+`ped` will try to locate and read a configuration file at the following paths in order of precedence.
+
+- `$HOME/.pedrc`
+- `$HOME/.config/ped/pedrc`
+
+Alternatively, a configuration file can be specified on the command line using the `--config` option.
+
+See [.pedrc] for a detailed explanation of configuration settings. In the absence of a configuration file, `ped` will rely on default values.
+
+## Design
+
 ## Release
 
-Releases containing binary artifacts are published on GitHub. The `release.sh` script automates the release process, which assumes that [GitHub CLI](https://cli.github.com/) has been installed.
-
-The version of the release is derived from the package version in `Cargo.toml`. A new release on GitHub generates a corresponding tag, so the assumption is that the version number has been appropriately incremented. Otherwise, the release creation process will fail.
-
-If the release process is successful, a new tag of the format `v<version>` is automatically created. For example, if the package version in `Cargo.toml` is `0.1.0`, then the corresponding tag is `v0.1.0`.
-
-If the release process was problematic in any way, it can be deleted using the following command.
-
-```shell
-gh release delete --cleanup-tag --yes <tag>
-```
+Instructions for building and releasing can be found [here](RELEASE.md).
 
 ## Contributing
 
