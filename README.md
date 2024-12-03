@@ -35,6 +35,18 @@ gh release download --repo https://github.com/davidledwards/ped v0.1.0
 
 Run `ped --help` to print a description of all available options.
 
+Edit a file.
+
+```shell
+ped foo.rs
+```
+
+Edit multiple files, opened in separate windows.
+
+```she
+ped foo.rs bar.rs
+```
+
 `ped` will try to locate and read a configuration file at the following paths in order of precedence.
 
 - `$HOME/.pedrc`
@@ -42,9 +54,25 @@ Run `ped --help` to print a description of all available options.
 
 Alternatively, a configuration file can be specified on the command line using the `--config` option.
 
-See [.pedrc] for a detailed explanation of configuration settings. In the absence of a configuration file, `ped` will rely on default values.
+See [.pedrc](.pedrc) for a detailed explanation of configuration settings. In the absence of a configuration file, `ped` will rely on default values.
 
 ## Design
+
+The core data structure for managing text is a [gap buffer](https://en.wikipedia.org/wiki/Gap_buffer), which turns out to be very efficient for insertion and removal operations. This is the only module that contains _unsafe_ Rust, primarily because the data structure requires something similar to a `Vec`, which could have been used but would have been too restrictive and less efficient. The simple idea behind the gap buffer that makes insertion and removal so efficient, O(1), is that as the cursor moves so does the text before and after the gap. In essence, the cursor points to the start of the gap, making insertion and removal a constant-time operation. This implementation has been slightly modified to defer any movement of text until a mutating change occurs.
+
+The only other module that contains _unsafe_ Rust is `term.rs`, which makes calls to the C runtime library to interact with the terminal.
+
+The rendering of text on the terminal is ultimately done using ANSI control sequences, but there are intermediate steps in the process that optimize the amount of data sent to the terminal. A key component of the rendering architecture is a _canvas_ that is essentially an abstraction over _stdout_. Central to the design of the canvas is the combination of a _front_ and _back_ grid, a two-dimensional data structure. The front grid is a faithful representation of what the user sees, whereas the back grid is a cache of pending updates. The idea is that a series of writes are applied to the back grid, and then a subsequent rendering request will generate a minimal set of ANSI commands based on the differences between the front and back grids.
+
+A _keyboard_ abstraction encapsulates the terminal, which is switched to _raw_ mode as part of initialization. The job of the keyboard is to interpret ANSI control sequences read as bytes from _stdin_ and turn those into _keys_. A key or a sequence of keys is bound to some editing operation, whether it be the simple insertion of a character or something more complex such as pasting text from the clipboard. In order to make the association between _key sequence_ and _editing operation_ more flexible, this binding process happens at runtime using a finite set of key names and editing operations. While `ped` does provide default bindings, these can be altered through configuration files.
+
+An _editor_ is perhaps one of the more complicated data structures that combines a _buffer_ and a _window_. The purpose of the editor is to implement editing primitives that modify the underlying buffer and then determine how those changes are rendered in the window. The editing operations, which are bound to keys at runtime, are actually defined outside of the _editor_ in `op.rs`. The idea is that all current and future operations can be built using the editor primitives.
+
+The entire editing experience is facilitated by a central _controller_, which in a simplified sense, reads keys and dispatches to their corresponding editing operations. The controller also manages the workspace, which contains a collection of windows, and provides a restricted _environment_ to functions that implement editing operations. It also coordinates interaction with the user in the form of _questions_, such as opening a file or asking to save a dirty buffer.
+
+The concept of a _question_ is implemented using an _inquirer_ combined with a _completer_, both of which are abstractions that allow the controller to deal only with the general problem. This design allows the development of arbitrarily complex interactions, such as the _open file_ dialog that provides file completion assistance.
+
+The _workspace_ supports multiple windows that split vertically with equal allocation of screen real estate. This was an early decision to keep the windowing system simple, at least for now. The workspace also manages resizing of windows when a change in the terminal size is detected.
 
 ## Release
 
