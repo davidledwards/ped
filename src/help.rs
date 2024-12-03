@@ -1,10 +1,12 @@
 //! A collection of functions related to help.
 
+// Necessary to disable warnings from infallible uses of write!() that do not
+// check return values.
 #![allow(unused_must_use)]
 
 use crate::buffer::Buffer;
 use crate::editor::{Editor, EditorRef};
-use crate::key::KEY_MAPPINGS;
+use crate::key::{Key, KEY_MAPPINGS};
 use crate::op::OP_MAPPINGS;
 use crate::{BUILD_DATE, BUILD_HASH, PACKAGE_NAME, PACKAGE_VERSION};
 use std::collections::{BTreeMap, HashMap};
@@ -15,6 +17,7 @@ pub const KEYS_EDITOR_NAME: &str = "@keys";
 pub const OPS_EDITOR_NAME: &str = "@operations";
 pub const BINDINGS_EDITOR_NAME: &str = "@bindings";
 
+/// Returns a transient editor, named `@help`, containing general help content.
 pub fn help_editor() -> EditorRef {
     Editor::transient(HELP_EDITOR_NAME, Some(help_buffer())).to_ref()
 }
@@ -30,10 +33,12 @@ fn help_buffer() -> Buffer {
     make_buffer(&out)
 }
 
+/// Returns a transient editor, named `@keys`, containing a list of available keys.
 pub fn keys_editor() -> EditorRef {
     Editor::transient(KEYS_EDITOR_NAME, Some(keys_buffer())).to_ref()
 }
 
+/// Returns a formatted list of available keys.
 pub fn keys_content() -> String {
     let keys = prepare_keys();
     let mut out = String::new();
@@ -65,10 +70,13 @@ fn prepare_keys() -> Vec<String> {
     keys
 }
 
+/// Returns a transient editor, named `@operations`, containing a list of available
+/// editing operations.
 pub fn ops_editor() -> EditorRef {
     Editor::transient(OPS_EDITOR_NAME, Some(ops_buffer())).to_ref()
 }
 
+/// Returns a formatted list of available editing operations.
 pub fn ops_content() -> String {
     let ops = prepare_ops();
     let mut out = String::new();
@@ -100,11 +108,13 @@ fn prepare_ops() -> Vec<String> {
     ops
 }
 
-pub fn bindings_editor(bindings: &HashMap<String, String>) -> EditorRef {
+/// Returns a transient editor, named `@bindings`, containing a list of key bindings.
+pub fn bindings_editor(bindings: &HashMap<Vec<Key>, String>) -> EditorRef {
     Editor::transient(BINDINGS_EDITOR_NAME, Some(bindings_buffer(bindings))).to_ref()
 }
 
-pub fn bindings_content(bindings: &HashMap<String, String>) -> String {
+/// Returns a formatted list of key bindings.
+pub fn bindings_content(bindings: &HashMap<Vec<Key>, String>) -> String {
     let bindings = prepare_bindings(&bindings);
     let mut out = String::new();
     for (key_seq, op) in bindings {
@@ -113,7 +123,7 @@ pub fn bindings_content(bindings: &HashMap<String, String>) -> String {
     out
 }
 
-fn bindings_buffer(bindings: &HashMap<String, String>) -> Buffer {
+fn bindings_buffer(bindings: &HashMap<Vec<Key>, String>) -> Buffer {
     const HEADER_KEY_SEQ: &str = "Key Sequence";
     const HEADER_OP: &str = "Operation";
 
@@ -144,22 +154,18 @@ fn bindings_buffer(bindings: &HashMap<String, String>) -> Buffer {
     make_buffer(&out)
 }
 
-fn prepare_bindings(bindings: &HashMap<String, String>) -> BTreeMap<String, String> {
+fn prepare_bindings(bindings: &HashMap<Vec<Key>, String>) -> BTreeMap<String, String> {
     bindings
         .iter()
-        .map(|(key_seq, op)| (pretty_keys(key_seq).join(" "), op.to_string()))
+        .map(|(keys, op)| (pretty_keys(keys).join(" "), op.to_string()))
         .collect::<BTreeMap<_, _>>()
 }
 
-/// Returns a vector of individual key names extracted from `key_seq`.
+/// Returns a vector of individual key names extracted from `keys`.
 ///
 /// A sequence beginning with `ESC` `<key>` is replaced with `M-<key>`.
-fn pretty_keys(key_seq: &str) -> Vec<String> {
-    let keys = key_seq
-        .split(':')
-        .map(|s| s.to_string())
-        .collect::<Vec<_>>();
-
+fn pretty_keys(keys: &Vec<Key>) -> Vec<String> {
+    let keys = keys.iter().map(|key| key.to_string()).collect::<Vec<_>>();
     match keys.get(0) {
         Some(key) if key == "ESC" => {
             if let Some(next_key) = keys.get(1) {

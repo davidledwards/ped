@@ -1,4 +1,4 @@
-# Sample ped configuration file.
+# A sample ped configuration file, which adheres to the TOML specification.
 
 # This section contains settings that are usually offered as command-line
 # options.
@@ -39,20 +39,30 @@ spotlight = [252, 234]
 line = [34, 234]
 eol = [34, 232]
 
-# This section allows keys and key sequences to be rebound to editing
-# operations.
+# This section allows key sequences to be rebound to editing operations.
 #
-# An entry in this section follows the given format:
-# "key" = "operation"
+# An entry in this section follows the given format, where a sequence of keys
+# can be chained together using a ":" delimiter:
+#
+#   "key[:key]..." = "operation"
 #
 # The list of available keys and operations can be discovered using the command
-# line options --print-keys and --print-ops, respectively.
+# line options --print-keys and --print-ops, respectively, and current key
+# bindings can be discovered using --print-bindings.
 #
-# The current key bindings can be discovered using --print-bindings.
+# A handful of keys are prohibited from being rebound, which are noted below
+# with an explanation as to why:
 #
-# Even though support for runtime binding exists, it is recommended not to
-# rebind keys at this point in time, as critical guardrails restricting what
-# can be rebound are not in place.
+#   C-q : to ensure the user is able to quit ped
+#   C-g : to ensure the user is able to cancel any operation
+#   ESC : this key is a prefix of many other keys
+#   tab : has a ubiquitous meaning
+#   ret : has a ubiquitous meaning
+#   del : has a ubiquitous meaning
 #
 [bindings]
+# A binding to a single key.
 "C-^" = "set-mark"
+
+# A binding to a sequence of keys.
+"ESC:x:y:z" = "move-top"

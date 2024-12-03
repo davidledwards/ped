@@ -219,9 +219,9 @@ fn help_ops(env: &mut Environment) -> Option<Action> {
 
 /// Operation: `help-bindings`
 fn help_bindings(env: &mut Environment) -> Option<Action> {
-    let bindings = env.workspace().config().bindings.clone();
+    let config = env.workspace().config().clone();
     toggle_help(env, help::BINDINGS_EDITOR_NAME, || {
-        help::bindings_editor(&bindings)
+        help::bindings_editor(config.bindings.bindings())
     })
 }
 

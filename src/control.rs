@@ -7,7 +7,7 @@
 //!
 //! The controller is essentially a loop that runs until a *quit* directive is given.
 
-use crate::bind::Bindings;
+use crate::config::ConfigurationRef;
 use crate::echo::Echo;
 use crate::editor::Align;
 use crate::env::{Environment, Focus};
@@ -25,11 +25,11 @@ use std::time::Instant;
 
 /// The primary control point for coordinating user interaction and editing operations.
 pub struct Controller {
+    /// A reference to the editor configuration.
+    config: ConfigurationRef,
+
     /// A keyboard for reading [keys](Key).
     keyboard: Keyboard,
-
-    /// The key sequences bound to editing functions.
-    bindings: Bindings,
 
     /// The editing environment made accessible to editing functions.
     env: Environment,
@@ -78,15 +78,16 @@ impl Controller {
     /// change.
     const TERM_CHANGE_DELAY: u128 = 100;
 
-    pub fn new(keyboard: Keyboard, bindings: Bindings, workspace: Workspace) -> Controller {
+    pub fn new(keyboard: Keyboard, workspace: Workspace) -> Controller {
+        let config = workspace.config().clone();
         let workspace = workspace.to_ref();
         let env = Environment::new(workspace.clone());
         let echo = Echo::new(workspace.clone());
         let input = InputEditor::new(workspace.clone());
 
         Controller {
+            config,
             keyboard,
-            bindings,
             env,
             key_seq: Vec::new(),
             echo,
@@ -171,7 +172,7 @@ impl Controller {
             }
         } else {
             self.key_seq.push(key.clone());
-            if let Some(op_fn) = self.bindings.find(&self.key_seq) {
+            if let Some(op_fn) = self.config.bindings.find(&self.key_seq) {
                 match op_fn(&mut self.env) {
                     Some(Action::Quit) => return Step::Quit,
                     Some(Action::Echo(text)) => {
@@ -186,7 +187,7 @@ impl Controller {
                     }
                 }
                 self.clear_keys();
-            } else if self.bindings.is_prefix(&self.key_seq) {
+            } else if self.config.bindings.is_prefix(&self.key_seq) {
                 // Current keys form a prefix of at least one sequence bound to an
                 // editing function.
                 self.show_keys();

@@ -10,49 +10,53 @@ use crate::key::{self, Key, KeyMap};
 use crate::op::{self, OpFn, OpMap};
 use std::collections::{HashMap, HashSet};
 
-/// Map of [`Key`] sequences to editing operations.
-type BindMap = HashMap<Vec<Key>, &'static str>;
-
-/// Set of [`Key`] sequence prefixes.
-type Prefixes = HashSet<Vec<Key>>;
-
 /// A mapping of [`Key`] sequences to editing functions.
 pub struct Bindings {
     key_map: KeyMap,
     op_map: OpMap,
-    bind_map: BindMap,
-    bind_prefixes: Prefixes,
+    bind_map: HashMap<Vec<Key>, String>,
+    bind_prefixes: HashSet<Vec<Key>>,
+    restricted_keys: HashSet<Vec<Key>>,
 }
 
 impl Bindings {
     /// Creates the default key bindings.
-    pub fn new(bindings: &HashMap<String, String>) -> Bindings {
+    ///
+    /// The restricted keys are not enforced in this function, in contrast to
+    /// [`bind()`](Self::bind), as initialization of default bindinds needs to
+    /// bind these keys.
+    pub fn new(bindings: &HashMap<String, String>) -> Result<Bindings> {
         let mut this = Bindings {
             key_map: key::init_key_map(),
             op_map: op::init_op_map(),
-            bind_map: BindMap::new(),
-            bind_prefixes: Prefixes::new(),
+            bind_map: HashMap::new(),
+            bind_prefixes: HashSet::new(),
+            restricted_keys: Self::init_restricted_keys(),
         };
 
         for (key_seq, op) in bindings {
-            this.bind(key_seq, op).unwrap_or_else(|e| panic!("{e}"));
+            this.bind_internal(key_seq, op, false)?;
         }
-        this
+        Ok(this)
     }
 
-    /// Binds the key sequence `key_seq` to the editing operation `op`.
+    /// Binds the key sequence `key_seq` to the editing operation `op`, which will
+    /// override an existing binding with an identical key sequence.
     ///
-    /// A successful bind will override an existing binding with an identical key
-    /// sequence.
-    ///
-    /// Returns an [`Err`] if either of `key_seq` or `op` do not match the name of
-    /// known keys or editing operations, respectively.
+    /// Attempting to bind to any of the restricted key sequences will result in an
+    /// error.
     pub fn bind(&mut self, key_seq: &str, op: &str) -> Result<()> {
-        self.to_keys(key_seq).and_then(|keys| {
+        self.bind_internal(key_seq, op, true)
+    }
+
+    /// Internal binding function that prohibits binding to restricted key sequences
+    /// when `strict` is `true`.
+    fn bind_internal(&mut self, key_seq: &str, op: &str, strict: bool) -> Result<()> {
+        self.to_keys(key_seq, strict).and_then(|keys| {
             self.op_map
                 .get_key_value(op)
                 .map(|(op, _)| {
-                    self.bind_map.insert(keys.clone(), op);
+                    self.bind_map.insert(keys.clone(), op.to_string());
                     for n in 1..keys.len() {
                         let prefix = &keys[0..n];
                         self.bind_prefixes.insert(prefix.to_vec());
@@ -63,8 +67,8 @@ impl Bindings {
     }
 
     /// Converts the key sequence `key_seq` to a vector of [`Key']s.
-    fn to_keys(&self, key_seq: &str) -> Result<Vec<Key>> {
-        key_seq
+    fn to_keys(&self, key_seq: &str, strict: bool) -> Result<Vec<Key>> {
+        let keys = key_seq
             .split(':')
             .map(|key| {
                 self.key_map
@@ -80,7 +84,24 @@ impl Bindings {
                     })
                     .ok_or_else(|| Error::invalid_key(key))
             })
-            .collect()
+            .collect::<Result<Vec<Key>>>();
+
+        if strict {
+            keys.and_then(|keys| {
+                if self.restricted_keys.contains(&keys) {
+                    Err(Error::restricted_key(key_seq))
+                } else {
+                    Ok(keys)
+                }
+            })
+        } else {
+            keys
+        }
+    }
+
+    /// Returns a reference to the current bindings.
+    pub fn bindings(&self) -> &HashMap<Vec<Key>, String> {
+        &self.bind_map
     }
 
     /// Returns the function pointer bound to `keys`, otherwise `None`.
@@ -95,4 +116,23 @@ impl Bindings {
     pub fn is_prefix(&self, keys: &Vec<Key>) -> bool {
         self.bind_prefixes.contains(keys)
     }
+
+    /// Returns the set of restricted keys.
+    fn init_restricted_keys() -> HashSet<Vec<Key>> {
+        let mut keys = HashSet::new();
+        for key_seq in Self::RESTRICTED_KEYS {
+            keys.insert(key_seq.to_vec());
+        }
+        keys
+    }
+
+    /// A collection of key sequences that are restricted from being rebound.
+    const RESTRICTED_KEYS: [&[Key]; 6] = [
+        &[Key::Control(7)],   // C-g
+        &[Key::Control(9)],   // C-i (tab)
+        &[Key::Control(13)],  // C-m (ret)
+        &[Key::Control(17)],  // C-q
+        &[Key::Control(27)],  // C-[ (ESC)
+        &[Key::Control(127)], // C-? (del)
+    ];
 }

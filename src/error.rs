@@ -3,7 +3,7 @@
 use std::error;
 use std::fmt::{self, Display, Formatter};
 use std::io;
-use std::str;
+use std::str::Utf8Error;
 use toml::de;
 
 /// A convenient `Result` type whose error type is [`Error`].
@@ -19,10 +19,7 @@ pub enum Error {
     Io { path: String, cause: io::Error },
 
     /// A UTF-8 encoding/decoding error with the offending sequence of `bytes`.
-    Utf8 {
-        bytes: Vec<u8>,
-        cause: str::Utf8Error,
-    },
+    Utf8 { bytes: Vec<u8>, cause: Utf8Error },
 
     /// An unexpected command-line argument `arg`.
     UnexpectedArg { arg: String },
@@ -38,6 +35,9 @@ pub enum Error {
 
     /// An operation `op` given in a key binding is not valid.
     InvalidOp { op: String },
+
+    /// A `key_seq` is restricted from being rebound.
+    RestrictedKey { key_seq: String },
 
     /// An error occurred while parsing a configuration file referenced by `path`.
     Configuration { path: String, cause: String },
@@ -65,7 +65,7 @@ impl Error {
         }
     }
 
-    pub fn utf8(bytes: &[u8], cause: str::Utf8Error) -> Error {
+    pub fn utf8(bytes: &[u8], cause: Utf8Error) -> Error {
         Error::Utf8 {
             bytes: bytes.to_vec(),
             cause,
@@ -101,6 +101,12 @@ impl Error {
         Error::InvalidOp { op: op.to_string() }
     }
 
+    pub fn restricted_key(key_seq: &str) -> Error {
+        Error::RestrictedKey {
+            key_seq: key_seq.to_string(),
+        }
+    }
+
     pub fn configuration(path: &str, e: &de::Error) -> Error {
         Error::Configuration {
             path: path.to_string(),
@@ -122,6 +128,9 @@ impl Display for Error {
             }
             Error::InvalidKey { key } => write!(f, "{key}: invalid key"),
             Error::InvalidOp { op } => write!(f, "{op}: invalid operation"),
+            Error::RestrictedKey { key_seq } => {
+                write!(f, "{key_seq}: key sequence cannot be rebound")
+            }
             Error::Configuration { path, cause } => {
                 write!(f, "{path}: configuration error: {cause}")
             }

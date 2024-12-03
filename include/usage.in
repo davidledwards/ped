@@ -25,5 +25,5 @@ usage: ped OPTIONS [file...]
     command line will override settings from a configuraton file.
 
     Configuration files are formatted using the TOML syntax, details of which
-    can be found at <https://toml.io>. Configuration optiosn specific to ped
+    can be found at <https://toml.io>. Configuration options specific to ped
     are documented at <https://github.com/davidledwards/ped>.

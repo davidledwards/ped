@@ -39,7 +39,6 @@ mod window;
 mod workspace;
 mod writer;
 
-use crate::bind::Bindings;
 use crate::config::Configuration;
 use crate::control::Controller;
 use crate::error::Result;
@@ -97,31 +96,38 @@ fn run() -> Result<()> {
 }
 
 fn run_opts(opts: &Options) -> Result<()> {
+    // Load optional configuration from either standard location or path specified on
+    // command line, and apply command line options afterwards since these override
+    // all other settings.
     let mut config = if let Some(ref config_path) = opts.config_path {
         Configuration::load_file(config_path)?
     } else {
         Configuration::load()?
     };
     config.apply_opts(opts);
+
     if opts.print_bindings {
-        print!("{}", help::bindings_content(&config.bindings));
+        print!("{}", help::bindings_content(config.bindings.bindings()));
         Ok(())
     } else {
-        run_config(opts, config)
+        print!("{}", ansi::clear_screen());
+        run_config(opts, config)?;
+        print!("{}", ansi::clear_screen());
+        Ok(())
     }
 }
 
 fn run_config(opts: &Options, config: Configuration) -> Result<()> {
-    let keyboard = Keyboard::new();
-    let bindings = Bindings::new(&config.bindings);
-
-    print!("{}", ansi::clear_screen());
-    let workspace = Workspace::new(config);
-    let mut controller = Controller::new(keyboard, bindings, workspace);
+    // Initialize main controller and open files specified on command line.
+    let mut controller = Controller::new(Keyboard::new(), Workspace::new(config));
     controller.open(&opts.files)?;
+
+    // Puts terminal into raw mode prior to running main controller loop, but also
+    // ensures terminal settings are restored upon exit.
     term::init()?;
-    let _restore = RestoreTerminal;
-    controller.run();
-    print!("{}", ansi::clear_screen());
+    {
+        let _restore = RestoreTerminal;
+        controller.run();
+    }
     Ok(())
 }

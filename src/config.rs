@@ -18,6 +18,7 @@
 //! * `$HOME/.pedrc`
 //! * `$HOME/.config/ped/pedrc`
 
+use crate::bind::Bindings;
 use crate::color::Color;
 use crate::error::{Error, Result};
 use crate::opt::Options;
@@ -41,7 +42,7 @@ pub struct Configuration {
     pub colors: Colors,
 
     /// A map of key sequences to editing operations.
-    pub bindings: HashMap<String, String>,
+    pub bindings: Bindings,
 }
 
 pub type ConfigurationRef = Rc<Configuration>;
@@ -208,7 +209,7 @@ impl Configuration {
             let path = root_path.join(try_path);
             if path.exists() {
                 let ext = Self::read_file(&path)?;
-                config.apply(ext);
+                config.apply(ext)?;
                 break;
             }
         }
@@ -219,7 +220,7 @@ impl Configuration {
     pub fn load_file<P: AsRef<Path>>(path: P) -> Result<Configuration> {
         let mut config = Configuration::default();
         let ext = Self::read_file(path.as_ref())?;
-        config.apply(ext);
+        config.apply(ext)?;
         Ok(config)
     }
 
@@ -234,14 +235,15 @@ impl Configuration {
     }
 
     /// Applies the external configuration `ext` on top of `self`.
-    fn apply(&mut self, ext: ExternalConfiguration) {
+    fn apply(&mut self, ext: ExternalConfiguration) -> Result<()> {
         self.settings.apply(ext.settings);
         self.colors.apply(ext.colors);
         if let Some(bindings) = ext.bindings {
             for (key_seq, op) in bindings {
-                self.bindings.insert(key_seq, op);
+                self.bindings.bind(&key_seq, &op)?;
             }
         }
+        Ok(())
     }
 
     fn read_file(path: &Path) -> Result<ExternalConfiguration> {
@@ -250,12 +252,12 @@ impl Configuration {
             .map_err(|e| Error::configuration(&path.as_string(), &e))
     }
 
-    fn default_bindings() -> HashMap<String, String> {
+    fn init_bindings() -> Bindings {
         let mut bindings = HashMap::new();
         for (key_seq, op) in Self::DEFAULT_BINDINGS {
             bindings.insert(key_seq.to_string(), op.to_string());
         }
-        bindings
+        Bindings::new(&bindings).unwrap_or_else(|e| panic!("{e}: default bindings failed"))
     }
 
     const DEFAULT_BINDINGS: [(&'static str, &'static str); 76] = [
@@ -350,7 +352,7 @@ impl Default for Configuration {
         Configuration {
             settings: Settings::default(),
             colors: Colors::default(),
-            bindings: Self::default_bindings(),
+            bindings: Self::init_bindings(),
         }
     }
 }
