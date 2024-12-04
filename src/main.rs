@@ -49,7 +49,7 @@ use std::ops::Drop;
 use std::process::ExitCode;
 
 /// Usage documentation for display to terminal.
-const USAGE: &str = include_str!("../include/usage.in");
+const USAGE: &str = include_str!("include/usage.in");
 
 // Version and build information.
 const PACKAGE_NAME: &str = env!("CARGO_PKG_NAME");

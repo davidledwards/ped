@@ -24,12 +24,12 @@ pub fn help_editor() -> EditorRef {
 
 fn help_buffer() -> Buffer {
     let mut out = String::new();
-    write!(out, include_str!("../include/help-header.in"));
+    write!(out, include_str!("include/help-header.in"));
     writeln!(
         out,
         "\nBuild: {PACKAGE_NAME} {PACKAGE_VERSION} ({BUILD_HASH} {BUILD_DATE})\n"
     );
-    write!(out, include_str!("../include/help-keys.in"));
+    write!(out, include_str!("include/help-keys.in"));
     make_buffer(&out)
 }
 
