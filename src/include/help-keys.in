@@ -45,6 +45,10 @@ Selection
   As an alternative to setting a mark using C-SPACE, pressing SHIFT while
   navigating will select a region of text.
 
+Search
+  C-\                 Search for term or pattern
+  M-\                 Search for next match
+
 Files
   C-o                 Open file in current window
   M-o t               Open file in new window at top of workspace

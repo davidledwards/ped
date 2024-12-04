@@ -698,6 +698,58 @@ fn cut(env: &mut Environment) -> Option<Action> {
     None
 }
 
+/// Operation: `search`
+fn search(env: &mut Environment) -> Option<Action> {
+    Search::question(env.get_active_editor().clone())
+}
+
+/// Operation: `search-next`
+fn search_next(env: &mut Environment) -> Option<Action> {
+    if let Some(term) = env.get_search() {
+        // todo: search here
+        Action::as_echo("coming soon")
+    } else {
+        Search::question(env.get_active_editor().clone())
+    }
+}
+
+struct Search {
+    editor: EditorRef,
+}
+
+impl Search {
+    const PROMPT: &str = "search:";
+
+    fn question(editor: EditorRef) -> Option<Action> {
+        Action::as_question(Search { editor }.to_box())
+    }
+
+    fn to_box(self) -> Box<dyn Inquirer> {
+        Box::new(self)
+    }
+}
+
+impl Inquirer for Search {
+    fn prompt(&self) -> String {
+        Self::PROMPT.to_string()
+    }
+
+    fn completer(&self) -> Box<dyn Completer> {
+        // todo: new completer that toggles between term and regex
+        user::null_completer()
+    }
+
+    fn respond(&mut self, env: &mut Environment, value: Option<&str>) -> Option<Action> {
+        if let Some(term) = value {
+            // todo: search here
+            env.set_search(term.to_string());
+            None
+        } else {
+            None
+        }
+    }
+}
+
 /// Operation: `open-file`
 fn open_file(env: &mut Environment) -> Option<Action> {
     Open::question(derive_dir(env), None)
@@ -1422,7 +1474,7 @@ fn base_dir(editor: &EditorRef) -> PathBuf {
 }
 
 /// Predefined mapping of editing operations to editing functions.
-pub const OP_MAPPINGS: [(&'static str, OpFn); 62] = [
+pub const OP_MAPPINGS: [(&'static str, OpFn); 64] = [
     // --- exit and cancellation ---
     ("quit", quit),
     // --- help ---
@@ -1473,6 +1525,9 @@ pub const OP_MAPPINGS: [(&'static str, OpFn); 62] = [
     ("copy", copy),
     ("paste", paste),
     ("cut", cut),
+    // --- search ---
+    ("search", search),
+    ("search-next", search_next),
     // --- file handling ---
     ("open-file", open_file),
     ("open-file-top", open_file_top),

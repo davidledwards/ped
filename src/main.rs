@@ -31,6 +31,7 @@ mod io;
 mod key;
 mod op;
 mod opt;
+mod search;
 mod size;
 mod sys;
 mod term;

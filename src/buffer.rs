@@ -9,7 +9,7 @@ use std::alloc::{self, Layout};
 use std::cell::RefCell;
 use std::cmp;
 use std::io::{BufRead, Write};
-use std::ops::ControlFlow;
+use std::ops::{ControlFlow, Index};
 use std::ptr::NonNull;
 use std::rc::Rc;
 
@@ -93,13 +93,13 @@ impl Buffer {
     #[allow(dead_code)]
     pub fn get_char(&self, pos: usize) -> Option<char> {
         if pos < self.size {
-            Some(self.get_char_unchecked(pos))
+            Some(*self.get_char_unchecked(pos))
         } else {
             None
         }
     }
 
-    fn get_char_unchecked(&self, pos: usize) -> char {
+    fn get_char_unchecked(&self, pos: usize) -> &char {
         self.read_char(self.index_of(pos))
     }
 
@@ -134,7 +134,7 @@ impl Buffer {
 
     pub fn remove_char(&mut self) -> Option<char> {
         if self.gap < self.size {
-            let c = self.read_char(self.gap + self.gap_len);
+            let c = *self.read_char(self.gap + self.gap_len);
             self.gap_len += 1;
             self.size -= 1;
             Some(c)
@@ -336,8 +336,8 @@ impl Buffer {
     }
 
     #[inline(always)]
-    fn read_char(&self, n: usize) -> char {
-        unsafe { self.ptr_at(n).read() }
+    fn read_char(&self, n: usize) -> &char {
+        unsafe { self.ptr_at(n).as_ref() }
     }
 
     #[inline(always)]
@@ -402,6 +402,14 @@ impl Buffer {
     }
 }
 
+impl Index<usize> for Buffer {
+    type Output = char;
+
+    fn index(&self, pos: usize) -> &char {
+        self.get_char_unchecked(pos)
+    }
+}
+
 impl Drop for Buffer {
     fn drop(&mut self) {
         Buffer::dealloc(self.buf, self.capacity);
@@ -436,7 +444,7 @@ impl Iterator for Forward<'_> {
         if self.pos < self.buffer.size {
             let c = self.buffer.get_char_unchecked(self.pos);
             self.pos += 1;
-            Some(c)
+            Some(*c)
         } else {
             None
         }
@@ -473,7 +481,7 @@ impl Iterator for Backward<'_> {
         if self.pos > 0 {
             self.pos -= 1;
             let c = self.buffer.get_char_unchecked(self.pos);
-            Some(c)
+            Some(*c)
         } else {
             None
         }

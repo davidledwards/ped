@@ -23,6 +23,7 @@ pub struct Environment {
     view_map: ViewMap,
     active_view_id: u32,
     clipboard: Option<Vec<char>>,
+    search: Option<String>,
 }
 
 pub enum Focus {
@@ -68,6 +69,7 @@ impl Environment {
             view_map,
             active_view_id,
             clipboard: None,
+            search: None,
         }
     }
 
@@ -263,6 +265,14 @@ impl Environment {
 
     pub fn get_clipboard(&self) -> Option<&Vec<char>> {
         self.clipboard.as_ref()
+    }
+
+    pub fn set_search(&mut self, term: String) {
+        self.search = Some(term.to_string());
+    }
+
+    pub fn get_search(&self) -> Option<&String> {
+        self.search.as_ref()
     }
 
     pub fn resize(&mut self) {
