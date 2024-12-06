@@ -23,8 +23,8 @@ Navigation
   M-n  <page down>    Move down one page
   M-a  C-<home>       Move to top of editor
   M-e  C-<end>        Move to bottom of editor
-  S-C-<up>            Scroll up one line
-  S-C-<down>          Scroll down one line
+  S-C-↑               Scroll up one line
+  S-C-↓               Scroll down one line
   C-/                 Go to line number
 
 Editing

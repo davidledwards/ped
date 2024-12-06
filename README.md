@@ -56,6 +56,109 @@ Alternatively, a configuration file can be specified on the command line using t
 
 See [.pedrc](.pedrc) for a detailed explanation of configuration settings. In the absence of a configuration file, `ped` will rely on default values.
 
+## Tour
+
+The following notation is used below when refering to keys.
+
+* `C-<key>` means `CONTROL` + `<key>`
+* `S-<key>` means `SHIFT` + `<key>`
+* `S-C-<key>` means `SHIFT` + `CONTROL` + `<key>`
+* `M-<key>` means `ESCAPE` (or `META`) + `<key>`
+
+### General
+
+| Key   | Command             |
+| ----- | ------------------- |
+| `C-q` | Quit ped            |
+| `C-g` | Cancel command      |
+| `C-h` | Toggle @help window |
+
+### Navigation
+
+| Key               | Command                     |
+| ----------------- | --------------------------- |
+| `C-b`  `←`        | Move backward one character |
+| `C-f`  `→`        | Move forward one character  |
+| `M-b`  `M-←`      | Move backward one word      |
+| `M-f`  `M-→`      | Move forward one word       |
+| `C-p`  `↑`        | Move up one line            |
+| `C-n`  `↓`        | Move down one line          |
+| `C-a`  `HOME`     | Move to start of line       |
+| `C-e`  `END`      | Move to end of line         |
+| `M-p`  `PAGEUP`   | Move up one page            |
+| `M-n`  `PAGEDOWN` | Move down one page          |
+| `M-a`  `C-HOME`   | Move to top of editor       |
+| `M-e`  `C-END`    | Move to end of editor       |
+| `S-C-↑`           | Scroll up one line          |
+| `S-C-↓`           | Scroll down one line        |
+| `C-/`             | Go to line number           |
+
+### Editing
+
+| Key   | Command                                        |
+| ----- | ---------------------------------------------- |
+| `RET` | Insert line break                              |
+| `DEL` | Remove character before cursor                 |
+| `C-d` | Remove character after cursor                  |
+| `C-j` | Remove characters from start of line to cursor |
+| `C-k` | Remove characters from cursor to end of line   |
+| `C-u` | Undo last change                               |
+| `C-r` | Redo last change                               |
+
+### Selection
+
+| Key       | Command                                     |
+| --------- | ------------------------------------------- |
+| `C-SPACE` | Set mark                                    |
+| `C-c`     | Copy selection or line to clipboard         |
+| `C-x`     | Cut selection or line and copy to clipboard |
+| `C-v`     | Paste contents of clipboard                 |
+
+### Search
+
+| Key   | Command                         |
+| ----- | ------------------------------- |
+| `C-\` | Search using string             |
+| `M-\` | Search using regular expression |
+| `C-]` | Search for next match           |
+
+### Files
+
+| Key     | Command                                        |
+| ------- | ---------------------------------------------- |
+| `C-o`   | Open file in current window                    |
+| `M-o t` | Open file in new window at top of workspace    |
+| `M-o b` | Open file in new window at bottom of workspace |
+| `M-o p` | Open file in new window above current window   |
+| `M-o n` | Open file in new window below current window   |
+| `C-s`   | Save file                                      |
+| `M-s`   | Save file as another name                      |
+
+### Windows
+
+| Key            | Command                                     |
+| -------------- | ------------------------------------------- |
+| `C-l`          | Redraw window and center cursor             |
+| `C-w`          | Close window and editor                     |
+| `M-w 0`        | Close window                                |
+| `M-w 1`        | Close all other windows                     |
+| `M-w t`        | Move to window at top of workspace          |
+| `M-w b`        | Move to window at bottom of workspace       |
+| `M-w p`  `M-<` | Move to window above current window         |
+| `M-w n`  `M->` | Move to window below current window         |
+| `M-,`          | Switch to previous editor in current window |
+| `M-.`          | Switch to next editor in current window     |
+| `C-y`          | Select editor in current window             |
+
+### Help
+
+| Key     | Command                                          |
+| ------- | ------------------------------------------------ |
+| `C-h`   | Toggle @help window (general help)               |
+| `M-h k` | Toggle @keys window (available keys)             |
+| `M-h o` | Toggle @operations window (available operations) |
+| `M-h b` | Toggle @bindings window (key bindings)           |
+
 ## Design
 
 The core data structure for managing text is a [gap buffer](https://en.wikipedia.org/wiki/Gap_buffer) defined in `buffer.rs`, which turns out to be very efficient for insertion and removal operations. This is the only module that contains _unsafe_ Rust by design, primarily because the data structure requires something similar to a `Vec`, which could have been used but would have been too restrictive and less efficient. The simple idea behind the gap buffer that makes insertion and removal so efficient, _O(1)_, is that as the cursor moves so does the text before and after the gap. In essence, the cursor always points to the start of the gap, making insertion and removal a constant-time operation. This implementation has been slightly modified to defer any movement of text until a mutating change occurs.
