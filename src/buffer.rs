@@ -4,7 +4,6 @@
 //! Details on the gap buffer data structure can be found at
 //! <https://en.wikipedia.org/wiki/Gap_buffer>.
 
-use core::slice;
 use std::alloc::{self, Layout};
 use std::cell::RefCell;
 use std::cmp;
@@ -12,6 +11,7 @@ use std::io::{BufRead, Write};
 use std::ops::{ControlFlow, Index};
 use std::ptr::NonNull;
 use std::rc::Rc;
+use std::slice;
 
 #[derive(Debug)]
 pub struct Buffer {
@@ -321,6 +321,10 @@ impl Buffer {
         }
     }
 
+    pub fn iter(&self) -> Forward<'_> {
+        self.forward(0)
+    }
+
     #[inline(always)]
     fn ptr_at(&self, n: usize) -> NonNull<char> {
         unsafe { self.buf.add(n) }
@@ -497,6 +501,15 @@ impl Iterator for BackwardIndex<'_> {
 
     fn next(&mut self) -> Option<(usize, char)> {
         self.it.next().map(|c| (self.it.pos, c))
+    }
+}
+
+impl<'a> IntoIterator for &'a Buffer {
+    type Item = char;
+    type IntoIter = Forward<'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.forward(0)
     }
 }
 

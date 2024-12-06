@@ -612,6 +612,10 @@ impl Editor {
         (self.rows, self.cols).into()
     }
 
+    pub fn pos(&self) -> usize {
+        self.cur_pos
+    }
+
     /// Attaches the `window` to this editor.
     pub fn attach(&mut self, window: WindowRef, align: Align) {
         let is_zombie = window.borrow().is_zombie();
@@ -1183,6 +1187,28 @@ impl Editor {
             }
         } else {
             self.mark = Some(Mark(self.cur_pos, true));
+            None
+        }
+    }
+
+    /// Sets a *soft* mark at buffer position `pos` unless a *soft* mark was previously
+    /// set.
+    ///
+    /// Note that if a *hard* mark was previously set, the *soft* mark will replace
+    /// it.
+    ///
+    /// Returns the previous *hard* mark if set, otherwise `None`.
+    pub fn set_soft_mark_at(&mut self, pos: usize) -> Option<Mark> {
+        let pos = cmp::min(pos, self.buffer().size());
+        if let Some(mark @ Mark(_, soft)) = self.mark {
+            if soft {
+                None
+            } else {
+                self.mark = Some(Mark(pos, true));
+                Some(mark)
+            }
+        } else {
+            self.mark = Some(Mark(pos, true));
             None
         }
     }

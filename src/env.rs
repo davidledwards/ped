@@ -5,6 +5,7 @@
 //! simplify operations, but more importantly, to enforce certain invariants.
 
 use crate::editor::{Align, Editor, EditorRef};
+use crate::search::Pattern;
 use crate::window::WindowRef;
 use crate::workspace::{Placement, Workspace, WorkspaceRef};
 use std::cell::{Ref, RefMut};
@@ -23,7 +24,7 @@ pub struct Environment {
     view_map: ViewMap,
     active_view_id: u32,
     clipboard: Option<Vec<char>>,
-    search: Option<String>,
+    last_match: Option<(usize, Box<dyn Pattern>)>,
 }
 
 pub enum Focus {
@@ -69,7 +70,7 @@ impl Environment {
             view_map,
             active_view_id,
             clipboard: None,
-            search: None,
+            last_match: None,
         }
     }
 
@@ -267,12 +268,12 @@ impl Environment {
         self.clipboard.as_ref()
     }
 
-    pub fn set_search(&mut self, term: String) {
-        self.search = Some(term.to_string());
+    pub fn set_last_match(&mut self, pos: usize, pattern: Box<dyn Pattern>) {
+        self.last_match = Some((pos, pattern));
     }
 
-    pub fn get_search(&self) -> Option<&String> {
-        self.search.as_ref()
+    pub fn take_last_match(&mut self) -> Option<(usize, Box<dyn Pattern>)> {
+        self.last_match.take()
     }
 
     pub fn resize(&mut self) {

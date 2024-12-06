@@ -46,8 +46,9 @@ Selection
   navigating will select a region of text.
 
 Search
-  C-\                 Search for term or pattern
-  M-\                 Search for next match
+  C-\                 Search using string
+  M-\                 Search using regular expression
+  C-]                 Search for next match
 
 Files
   C-o                 Open file in current window

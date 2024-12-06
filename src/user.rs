@@ -84,6 +84,17 @@ pub fn file_completer(dir: PathBuf) -> Box<dyn Completer> {
     Box::new(FileCompleter::new(dir))
 }
 
+/// Returns an implementation of [`Completer`] that selects case-sensitivity.
+///
+/// Values returned by this completer are adorned with the following character prefixes
+/// based on selected case-sensitivity:
+///
+/// - `'!'`: case-sensitive
+/// - `'~'`: case-insensitive
+pub fn case_completer() -> Box<dyn Completer> {
+    Box::new(CaseCompleter::new())
+}
+
 /// A completer that does nothing.
 struct NullCompleter;
 
@@ -467,5 +478,46 @@ impl Completer for FileCompleter {
 
     fn accept(&mut self, value: &str) -> Option<String> {
         Some(value.to_string())
+    }
+}
+
+/// A completer that selects case-sensitivity.
+struct CaseCompleter {
+    case_strict: bool,
+}
+
+impl CaseCompleter {
+    fn new() -> CaseCompleter {
+        CaseCompleter { case_strict: false }
+    }
+}
+
+impl Completer for CaseCompleter {
+    fn prepare(&mut self) -> Option<String> {
+        None
+    }
+
+    fn evaluate(&mut self, _: &str) -> Option<String> {
+        None
+    }
+
+    fn suggest(&mut self, _: &str) -> (Option<String>, Option<String>) {
+        self.case_strict = !self.case_strict;
+        let hint = if self.case_strict {
+            " (case-sensitive)"
+        } else {
+            " (case-insensitive)"
+        };
+        (None, Some(hint.to_string()))
+    }
+
+    fn accept(&mut self, value: &str) -> Option<String> {
+        let value = if value.len() > 0 {
+            let prefix = if self.case_strict { "!" } else { "~" };
+            prefix.to_string() + value
+        } else {
+            value.to_string()
+        };
+        Some(value)
     }
 }
