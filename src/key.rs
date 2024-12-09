@@ -1,6 +1,7 @@
 //! An abstraction over terminal input.
 
 use crate::error::{Error, Result};
+use std::cmp;
 use std::collections::HashMap;
 use std::fmt;
 use std::io::{self, Bytes, Read, Stdin};
@@ -22,6 +23,12 @@ pub enum Key {
     PageUp(Shift, Ctrl),
     PageDown(Shift, Ctrl),
     Function(u8),
+    ScrollUp(Shift),
+    ScrollDown(Shift),
+    ScrollLeft(Shift),
+    ScrollRight(Shift),
+    ButtonPress(u32, u32),
+    ButtonRelease(u32, u32),
 }
 
 /// Represents the state of the _SHIFT_ key for certain kinds of [`Key`]s.
@@ -80,9 +87,15 @@ impl fmt::Display for Key {
             Key::Right(shift, ctrl) => format!("{shift}{ctrl}right"),
             Key::Home(shift, ctrl) => format!("{shift}{ctrl}home"),
             Key::End(shift, ctrl) => format!("{shift}{ctrl}end"),
-            Key::PageUp(shift, ctrl) => format!("{shift}{ctrl}pageup"),
-            Key::PageDown(shift, ctrl) => format!("{shift}{ctrl}pagedown"),
+            Key::PageUp(shift, ctrl) => format!("{shift}{ctrl}pg_up"),
+            Key::PageDown(shift, ctrl) => format!("{shift}{ctrl}pg_down"),
             Key::Function(n) => format!("F{n}"),
+            Key::ScrollUp(shift) => format!("{shift}sc_up"),
+            Key::ScrollDown(shift) => format!("{shift}sc_down"),
+            Key::ScrollLeft(shift) => format!("{shift}sc_left"),
+            Key::ScrollRight(shift) => format!("{shift}sc_right"),
+            Key::ButtonPress(x, y) => format!("bn_press({x}, {y})"),
+            Key::ButtonRelease(x, y) => format!("bn_release({x}, {y})"),
         };
         write!(f, "{s}")
     }
@@ -145,17 +158,6 @@ impl Keyboard {
         }
     }
 
-    fn next(&mut self) -> Result<Option<u8>> {
-        if let Some(b) = self.stdin_waiting.take() {
-            Ok(Some(b))
-        } else {
-            self.stdin
-                .next()
-                .transpose()
-                .map_err(|e| Error::io("/dev/stdin", e))
-        }
-    }
-
     /// Reads the next key.
     ///
     /// Reads one or more bytes from the underlying terminal and returns the
@@ -170,11 +172,6 @@ impl Keyboard {
     /// A keyboard assumes that characters from standard input are encoded as `UTF-8`.
     /// Any other encoding will yield unpredictable results in the form of keys that may
     /// not be expected.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Err`] if an I/O error occurred while reading bytes from the underlying
-    /// terminal.
     pub fn read(&mut self) -> Result<Key> {
         let key = match self.next()? {
             Some(27) => self.read_escape()?,
@@ -195,18 +192,24 @@ impl Keyboard {
     fn read_escape(&mut self) -> Result<Key> {
         let key = match self.next()? {
             Some(b'[') => self.read_ansi()?,
-            Some(b'O') => {
-                match self.next()? {
-                    // F1-F4
-                    Some(b @ b'P'..=b'S') => Key::Function(b - b'P' + 1),
-                    _ => Key::None,
-                }
-            }
+            Some(b'O') => self.read_fn()?,
             Some(b) => {
-                self.stdin_waiting = Some(b);
+                self.push_back(b);
                 Key::Control(27)
             }
             None => Key::Control(27),
+        };
+        Ok(key)
+    }
+
+    /// Reads a sequence of bytes prefixed with `ESC O`.
+    ///
+    /// Only the first four function keys are encoded in this manner.
+    fn read_fn(&mut self) -> Result<Key> {
+        let key = match self.next()? {
+            // F1-F4
+            Some(b @ b'P'..=b'S') => Key::Function(b - b'P' + 1),
+            _ => Key::None,
         };
         Ok(key)
     }
@@ -218,54 +221,90 @@ impl Keyboard {
     /// simply are not recognized. If the sequence is unrecognized or malformed, then
     /// [`Key::None`] is returned.
     fn read_ansi(&mut self) -> Result<Key> {
-        // Optional key code or key modifier depending on trailing byte, which
-        // indicates either VT or xterm sequence.
-        let (key_code, next_b) = match self.next()? {
-            Some(b @ b'0'..=b'9') => {
-                let (mut n, next_b) = self.read_number(b)?;
-                if n == 0 {
-                    n = 1;
-                }
-                (n, next_b)
-            }
-            b => (1, b),
-        };
-
-        // Optional key modifier, which is bitmask.
-        let (key_mod, next_b) = match next_b {
-            Some(b';') => match self.next()? {
-                Some(b @ b'0'..=b'9') => {
-                    let (mut n, next_b) = self.read_number(b)?;
-                    if n == 0 {
-                        n = 1;
-                    }
-                    (n, next_b)
-                }
-                b => (1, b),
-            },
-            b => (1, b),
-        };
-
-        let key = match next_b {
-            Some(b'~') => Self::map_vt(key_code, key_mod),
-            Some(b) => Self::map_xterm(b, key_mod),
+        let key = match self.next()? {
+            Some(b'<') => self.read_mouse()?,
+            Some(b) => self.push_back(b).read_key()?,
             None => Key::None,
         };
         Ok(key)
     }
 
-    /// Reads a number with a maximum of 2 digits whose first digit is `b`.
-    ///
-    /// Returns a tuple containing the number itself and the next byte read from the
-    /// terminal.
-    fn read_number(&mut self, b: u8) -> Result<(u8, Option<u8>)> {
-        let n = b - b'0';
-        let result = match self.next()? {
-            Some(b @ b'0'..=b'9') => (n * 10 + (b - b'0'), self.next()?),
-            None => (n, self.next()?),
-            b => (n, b),
+    /// Reads a VT or xterm key sequence prefixed with `ESC [`.
+    fn read_key(&mut self) -> Result<Key> {
+        // Optional key code or key modifier depending on trailing byte.
+        let key_code = match self.read_number()? {
+            Some(n) => cmp::max(1, n),
+            None => 1,
+        } as u8;
+
+        // Optional key modifier, which is bitmask.
+        let key_mod = if let Some(_) = self.read_literal(&[b';'])? {
+            match self.read_number()? {
+                Some(n) => cmp::max(1, n),
+                None => 1,
+            }
+        } else {
+            1
+        } as u8;
+
+        let key = match self.next()? {
+            Some(b'~') => map_vt(key_code, key_mod),
+            Some(b) => map_xterm(b, key_mod),
+            None => Key::None,
         };
-        Ok(result)
+        Ok(key)
+    }
+
+    /// Reads a mouse sequence prefixed with `ESC [<`.
+    fn read_mouse(&mut self) -> Result<Key> {
+        let button = match self.read_number()? {
+            Some(button) => button,
+            None => return Ok(Key::None),
+        };
+
+        let x = if let Some(_) = self.read_literal(&[b';'])? {
+            match self.read_number()? {
+                Some(x) => x,
+                None => return Ok(Key::None),
+            }
+        } else {
+            return Ok(Key::None);
+        };
+
+        let y = if let Some(_) = self.read_literal(&[b';'])? {
+            match self.read_number()? {
+                Some(y) => y,
+                None => return Ok(Key::None),
+            }
+        } else {
+            return Ok(Key::None);
+        };
+
+        let key = if let Some(b) = self.read_literal(&[b'M', b'm'])? {
+            if button & 64 == 0 {
+                if b == b'M' {
+                    Key::ButtonPress(x, y)
+                } else {
+                    Key::ButtonRelease(x, y)
+                }
+            } else {
+                let shift = if button & 4 == 0 {
+                    Shift::Off
+                } else {
+                    Shift::On
+                };
+                match button & 3 {
+                    0 => Key::ScrollUp(shift),
+                    1 => Key::ScrollDown(shift),
+                    2 => Key::ScrollRight(shift),
+                    3 => Key::ScrollLeft(shift),
+                    _ => Key::None,
+                }
+            }
+        } else {
+            Key::None
+        };
+        Ok(key)
     }
 
     /// Reads a `UTF-8` sequence of bytes where `b` if the first byte.
@@ -277,101 +316,161 @@ impl Keyboard {
         let key = if n < 2 || n > 4 {
             Key::None
         } else {
-            let mut buf = [0; 4];
-            buf[0] = b;
+            let mut buf = [b, 0, 0, 0];
             for i in 1..n {
                 if let Some(b) = self.next()? {
                     buf[i] = b;
                 } else {
-                    // Expected number of bytes not read, so assumed to be malformed.
                     return Ok(Key::None);
                 }
             }
-            match Self::to_utf8(&buf[..n])?.chars().next() {
-                Some(c) => Key::Char(c),
-                None => Key::None,
-            }
+            to_utf8(&buf[..n])?
+                .chars()
+                .next()
+                .map(|c| Key::Char(c))
+                .unwrap_or(Key::None)
         };
         Ok(key)
     }
 
-    /// Returns the key corresponding to the VT-style key code and key modifier, or
-    /// [`Key::None`] if unrecognized.
-    fn map_vt(key_code: u8, key_mod: u8) -> Key {
-        match (key_code, Self::modifiers(key_mod)) {
-            (1, (shift, ctrl)) => Key::Home(shift, ctrl),
-            (2, _) => {
-                // INS key, but for now, just ignore.
-                Key::None
+    /// Reads a number until a non-ASCII-digit character is encountered.
+    fn read_number(&mut self) -> Result<Option<u32>> {
+        let mut n: u32 = 0;
+        while let Some(digit) = self.read_digit()? {
+            n = n.saturating_mul(10).saturating_add(digit);
+        }
+        Ok(Some(n))
+    }
+
+    /// Reads the next byte and expects it to match one of the bytes in `lits`,
+    /// returning the matching byte, otherwise `None`.
+    fn read_literal(&mut self, lits: &[u8]) -> Result<Option<u8>> {
+        let c = self.next()?.and_then(|b| {
+            if lits.contains(&b) {
+                Some(b)
+            } else {
+                self.push_back(b);
+                None
             }
-            (3, _) => Key::Control(127),
-            (4, (shift, ctrl)) => Key::End(shift, ctrl),
-            (5, (shift, ctrl)) => Key::PageUp(shift, ctrl),
-            (6, (shift, ctrl)) => Key::PageDown(shift, ctrl),
-            (7, (shift, ctrl)) => Key::Home(shift, ctrl),
-            (8, (shift, ctrl)) => Key::End(shift, ctrl),
-            // F0-F5
-            (code @ 10..=15, _) => Key::Function(code - 10),
-            // F6-F10
-            (code @ 17..=21, _) => Key::Function(code - 11),
-            // F11-F14
-            (code @ 23..=26, _) => Key::Function(code - 12),
-            // F15-F16
-            (code @ 28..=29, _) => Key::Function(code - 13),
-            // F17-F20
-            (code @ 31..=34, _) => Key::Function(code - 14),
-            _ => Key::None,
+        });
+        Ok(c)
+    }
+
+    /// Returns the next byte if it matches an ASCII digit, otherwise `None`.
+    fn read_digit(&mut self) -> Result<Option<u32>> {
+        let digit = self.next()?.and_then(|b| {
+            if is_digit(b) {
+                Some((b - b'0') as u32)
+            } else {
+                self.push_back(b);
+                None
+            }
+        });
+        Ok(digit)
+    }
+
+    /// Reads the next byte from `stdin` or `None` if no bytes are available to read.
+    fn next(&mut self) -> Result<Option<u8>> {
+        if let Some(b) = self.stdin_waiting.take() {
+            Ok(Some(b))
+        } else {
+            self.stdin
+                .next()
+                .transpose()
+                .map_err(|e| Error::io("/dev/stdin", e))
         }
     }
 
-    /// Returns the key corresponding to the xterm-style key code and key modifier,
-    /// or [`Key::None`] if unrecognized.
-    fn map_xterm(key_code: u8, key_mod: u8) -> Key {
-        match (key_code, Self::modifiers(key_mod)) {
-            (b'A', (shift, ctrl)) => Key::Up(shift, ctrl),
-            (b'B', (shift, ctrl)) => Key::Down(shift, ctrl),
-            (b'C', (shift, ctrl)) => Key::Right(shift, ctrl),
-            (b'D', (shift, ctrl)) => Key::Left(shift, ctrl),
-            (b'F', (shift, ctrl)) => Key::End(shift, ctrl),
-            (b'H', (shift, ctrl)) => Key::Home(shift, ctrl),
-            (b'Z', _) => Key::ShiftTab,
-            // F1-F4
-            (code @ b'P'..=b'S', _) => Key::Function(code - b'P' + 1),
-            _ => Key::None,
-        }
-    }
-
-    /// Returns the state of _SHIFT_ and _CONTROL_ keys based on the given bitmask.
-    fn modifiers(key_mod: u8) -> (Shift, Ctrl) {
-        // Bitmasks for each type of recognized key modifier per ANSI standard. Note
-        // that for sake of simplicity, only SHIFT and CONTROL keys are recognized.
-        const MOD_SHIFT_MASK: u8 = 0x01;
-        const MOD_CONTROL_MASK: u8 = 0x04;
-        const MOD_ALL_MASK: u8 = MOD_SHIFT_MASK | MOD_CONTROL_MASK;
-
-        // Per ANSI standard, all key modifiers default to 1, hence the reason for
-        // substraction before applying the bitmask.
-        match (key_mod - 1) & MOD_ALL_MASK {
-            MOD_SHIFT_MASK => (Shift::On, Ctrl::Off),
-            MOD_CONTROL_MASK => (Shift::Off, Ctrl::On),
-            MOD_ALL_MASK => (Shift::On, Ctrl::On),
-            _ => (Shift::Off, Ctrl::Off),
-        }
-    }
-
-    /// Converts the UTF-8 sequence in `buf` to a valid string slice.
-    fn to_utf8(buf: &[u8]) -> Result<&str> {
-        str::from_utf8(buf).map_err(|e| Error::utf8(buf, e))
+    /// Push back `b` as if it were not read from `stdin`.
+    ///
+    /// A subsequent call to [`next()`](Self::next) will return `b`.
+    fn push_back(&mut self, b: u8) -> &mut Self {
+        self.stdin_waiting = Some(b);
+        self
     }
 }
 
+/// Returns `true` if `b` is an ASCII digit.
+#[inline(always)]
+fn is_digit(b: u8) -> bool {
+    b >= b'0' && b <= b'9'
+}
+
+/// Converts the UTF-8 sequence in `buf` to a valid string slice.
+fn to_utf8(buf: &[u8]) -> Result<&str> {
+    str::from_utf8(buf).map_err(|e| Error::utf8(buf, e))
+}
+
+/// Returns the key corresponding to the VT-style key code and key modifier, or
+/// [`Key::None`] if unrecognized.
+fn map_vt(key_code: u8, key_mod: u8) -> Key {
+    match (key_code, map_mods(key_mod)) {
+        (1, (shift, ctrl)) => Key::Home(shift, ctrl),
+        (2, _) => {
+            // INS key, but for now, just ignore.
+            Key::None
+        }
+        (3, _) => Key::Control(127),
+        (4, (shift, ctrl)) => Key::End(shift, ctrl),
+        (5, (shift, ctrl)) => Key::PageUp(shift, ctrl),
+        (6, (shift, ctrl)) => Key::PageDown(shift, ctrl),
+        (7, (shift, ctrl)) => Key::Home(shift, ctrl),
+        (8, (shift, ctrl)) => Key::End(shift, ctrl),
+        // F0-F5
+        (code @ 10..=15, _) => Key::Function(code - 10),
+        // F6-F10
+        (code @ 17..=21, _) => Key::Function(code - 11),
+        // F11-F14
+        (code @ 23..=26, _) => Key::Function(code - 12),
+        // F15-F16
+        (code @ 28..=29, _) => Key::Function(code - 13),
+        // F17-F20
+        (code @ 31..=34, _) => Key::Function(code - 14),
+        _ => Key::None,
+    }
+}
+
+/// Returns the key corresponding to the xterm-style key code and key modifier,
+/// or [`Key::None`] if unrecognized.
+fn map_xterm(key_code: u8, key_mod: u8) -> Key {
+    match (key_code, map_mods(key_mod)) {
+        (b'A', (shift, ctrl)) => Key::Up(shift, ctrl),
+        (b'B', (shift, ctrl)) => Key::Down(shift, ctrl),
+        (b'C', (shift, ctrl)) => Key::Right(shift, ctrl),
+        (b'D', (shift, ctrl)) => Key::Left(shift, ctrl),
+        (b'F', (shift, ctrl)) => Key::End(shift, ctrl),
+        (b'H', (shift, ctrl)) => Key::Home(shift, ctrl),
+        (b'Z', _) => Key::ShiftTab,
+        // F1-F4
+        (code @ b'P'..=b'S', _) => Key::Function(code - b'P' + 1),
+        _ => Key::None,
+    }
+}
+
+/// Returns the state of _SHIFT_ and _CONTROL_ keys based on the given bitmask.
+fn map_mods(key_mod: u8) -> (Shift, Ctrl) {
+    // Bitmasks for each type of recognized key modifier per ANSI standard. Note
+    // that for sake of simplicity, only SHIFT and CONTROL keys are recognized.
+    const MOD_SHIFT_MASK: u8 = 0x01;
+    const MOD_CONTROL_MASK: u8 = 0x04;
+    const MOD_ALL_MASK: u8 = MOD_SHIFT_MASK | MOD_CONTROL_MASK;
+
+    // Per ANSI standard, all key modifiers default to 1, hence the reason for
+    // substraction before applying the bitmask.
+    match (key_mod - 1) & MOD_ALL_MASK {
+        MOD_SHIFT_MASK => (Shift::On, Ctrl::Off),
+        MOD_CONTROL_MASK => (Shift::Off, Ctrl::On),
+        MOD_ALL_MASK => (Shift::On, Ctrl::On),
+        _ => (Shift::Off, Ctrl::Off),
+    }
+}
 /// Predefined mapping of key names to [`Key`]s.
 ///
 /// A few special keys are bound to multiple names as a convenience.
 ///
 /// Note that [`Key::Char`] is absent from these mappings because of the impracticality
 /// of mapping all possible characters.
-pub const KEY_MAPPINGS: [(&'static str, Key); 90] = [
+pub const KEY_MAPPINGS: [(&'static str, Key); 98] = [
     ("C-@", Key::Control(0)),
     ("C-a", Key::Control(1)),
     ("C-b", Key::Control(2)),
@@ -434,14 +533,14 @@ pub const KEY_MAPPINGS: [(&'static str, Key); 90] = [
     ("S-end", Key::End(Shift::On, Ctrl::Off)),
     ("C-end", Key::End(Shift::Off, Ctrl::On)),
     ("S-C-end", Key::End(Shift::On, Ctrl::On)),
-    ("pageup", Key::PageUp(Shift::Off, Ctrl::Off)),
-    ("S-pageup", Key::PageUp(Shift::On, Ctrl::Off)),
-    ("C-pageup", Key::PageUp(Shift::Off, Ctrl::On)),
-    ("S-C-pageup", Key::PageUp(Shift::On, Ctrl::On)),
-    ("pagedown", Key::PageDown(Shift::Off, Ctrl::Off)),
-    ("S-pagedown", Key::PageDown(Shift::On, Ctrl::Off)),
-    ("C-pagedown", Key::PageDown(Shift::Off, Ctrl::On)),
-    ("S-C-pagedown", Key::PageDown(Shift::On, Ctrl::On)),
+    ("pg_up", Key::PageUp(Shift::Off, Ctrl::Off)),
+    ("S-pg_up", Key::PageUp(Shift::On, Ctrl::Off)),
+    ("C-pg_up", Key::PageUp(Shift::Off, Ctrl::On)),
+    ("S-C-pg_up", Key::PageUp(Shift::On, Ctrl::On)),
+    ("pg_down", Key::PageDown(Shift::Off, Ctrl::Off)),
+    ("S-pg_down", Key::PageDown(Shift::On, Ctrl::Off)),
+    ("C-pg_down", Key::PageDown(Shift::Off, Ctrl::On)),
+    ("S-C-pg_down", Key::PageDown(Shift::On, Ctrl::On)),
     ("F1", Key::Function(1)),
     ("F2", Key::Function(2)),
     ("F3", Key::Function(3)),
@@ -462,6 +561,14 @@ pub const KEY_MAPPINGS: [(&'static str, Key); 90] = [
     ("F18", Key::Function(18)),
     ("F19", Key::Function(19)),
     ("F20", Key::Function(20)),
+    ("sc_up", Key::ScrollUp(Shift::Off)),
+    ("sc_down", Key::ScrollDown(Shift::Off)),
+    ("sc_left", Key::ScrollLeft(Shift::Off)),
+    ("sc_right", Key::ScrollRight(Shift::Off)),
+    ("S-sc_up", Key::ScrollUp(Shift::On)),
+    ("S-sc_down", Key::ScrollDown(Shift::On)),
+    ("S-sc_left", Key::ScrollLeft(Shift::On)),
+    ("S-sc_right", Key::ScrollRight(Shift::On)),
 ];
 
 /// Returns a mapping of key names to [`Key`]s.

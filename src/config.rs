@@ -260,7 +260,7 @@ impl Configuration {
         Bindings::new(&bindings).unwrap_or_else(|e| panic!("{e}: default bindings failed"))
     }
 
-    const DEFAULT_BINDINGS: [(&'static str, &'static str); 79] = [
+    const DEFAULT_BINDINGS: [(&'static str, &'static str); 87] = [
         // --- exit and cancellation ---
         ("C-q", "quit"),
         // --- help ---
@@ -271,28 +271,36 @@ impl Configuration {
         // --- navigation and selection ---
         ("C-b", "move-backward"),
         ("left", "move-backward"),
+        ("sc_left", "move-backward"),
         ("ESC:b", "move-backward-word"),
         ("ESC:left", "move-backward-word"),
         ("S-left", "move-backward-select"),
+        ("S-sc_left", "move-backward-select"),
         ("ESC:B", "move-backward-word-select"),
         ("C-f", "move-forward"),
         ("right", "move-forward"),
+        ("sc_right", "move-forward"),
         ("ESC:f", "move-forward-word"),
         ("ESC:right", "move-forward-word"),
         ("S-right", "move-forward-select"),
+        ("S-sc_right", "move-forward-select"),
         ("ESC:F", "move-forward-word-select"),
         ("C-p", "move-up"),
         ("up", "move-up"),
+        ("sc_up", "move-up"),
         ("S-up", "move-up-select"),
+        ("S-sc_up", "move-up-select"),
         ("C-n", "move-down"),
         ("down", "move-down"),
+        ("sc_down", "move-down"),
         ("S-down", "move-down-select"),
+        ("S-sc_down", "move-down-select"),
         ("ESC:p", "move-up-page"),
-        ("pageup", "move-up-page"),
-        ("S-pageup", "move-up-page-select"),
+        ("pg_up", "move-up-page"),
+        ("S-pg_up", "move-up-page-select"),
         ("ESC:n", "move-down-page"),
-        ("pagedown", "move-down-page"),
-        ("S-pagedown", "move-down-page-select"),
+        ("pg_down", "move-down-page"),
+        ("S-pg_down", "move-down-page-select"),
         ("C-a", "move-start"),
         ("home", "move-start"),
         ("S-home", "move-start-select"),

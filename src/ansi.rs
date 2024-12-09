@@ -8,6 +8,22 @@
 use crate::color::Color;
 use crate::size::Point;
 
+pub fn alt_screen(on: bool) -> &'static str {
+    if on {
+        "\x1b[?1049h"
+    } else {
+        "\x1b[?1049l"
+    }
+}
+
+pub fn track_mouse(on: bool) -> &'static str {
+    if on {
+        "\x1b[?1000h\x1b[?1006h"
+    } else {
+        "\x1b[?1000l\x1b[?1006l"
+    }
+}
+
 pub fn clear_screen() -> &'static str {
     "\x1b[2J\x1b[H"
 }

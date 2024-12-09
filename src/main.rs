@@ -111,9 +111,9 @@ fn run_opts(opts: &Options) -> Result<()> {
         print!("{}", help::bindings_content(config.bindings.bindings()));
         Ok(())
     } else {
-        print!("{}", ansi::clear_screen());
+        prepare_term();
         run_config(opts, config)?;
-        print!("{}", ansi::clear_screen());
+        restore_term();
         Ok(())
     }
 }
@@ -131,4 +131,22 @@ fn run_config(opts: &Options, config: Configuration) -> Result<()> {
         controller.run();
     }
     Ok(())
+}
+
+fn prepare_term() {
+    print!(
+        "{}{}{}",
+        ansi::alt_screen(true),
+        ansi::track_mouse(true),
+        ansi::clear_screen()
+    );
+}
+
+fn restore_term() {
+    print!(
+        "{}{}{}",
+        ansi::clear_screen(),
+        ansi::track_mouse(false),
+        ansi::alt_screen(false)
+    );
 }
