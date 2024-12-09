@@ -47,7 +47,7 @@ impl Sub<Size> for Size {
 }
 
 /// Represent a point in a 2-dimensional space expressed as `row` and `col`.
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct Point {
     pub row: u32,
     pub col: u32,
@@ -72,6 +72,14 @@ impl Add<Point> for Point {
 
     fn add(self, rhs: Point) -> Point {
         Point::new(self.row + rhs.row, self.col + rhs.col)
+    }
+}
+
+impl Sub<Point> for Point {
+    type Output = Point;
+
+    fn sub(self, rhs: Point) -> Point {
+        Point::new(self.row - rhs.row, self.col - rhs.col)
     }
 }
 

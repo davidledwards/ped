@@ -189,4 +189,23 @@ impl Window {
     pub fn draw(&mut self) {
         self.banner.borrow_mut().draw();
     }
+
+    /// Returns the point relative to the window canvas corresponding to `p`, which
+    /// is a point presumed to be relative to the top-left position of the terminal
+    /// display, or `None` if `p` is not contained within the canvas area.
+    pub fn point_on_canvas(&self, p: Point) -> Option<Point> {
+        let (origin, size) = {
+            let canvas = self.canvas.borrow();
+            (canvas.origin(), canvas.size())
+        };
+        if p.row >= origin.row
+            && p.row < origin.row + size.rows
+            && p.col >= origin.col
+            && p.col < origin.col + size.cols
+        {
+            Some(p - origin)
+        } else {
+            None
+        }
+    }
 }

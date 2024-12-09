@@ -169,6 +169,19 @@ impl Workspace {
         }
     }
 
+    /// Returns a tuple containing the view id and point relative to that view based
+    /// on the coordinates in `p`, which are presumed to be relative to the top-left
+    /// position of the terminal display, or `None` if `p` is not contained within the
+    /// area of view.
+    pub fn locate_view(&self, p: Point) -> Option<(u32, Point)> {
+        for view in &self.views {
+            if let Some(view_p) = view.window.borrow().point_on_canvas(p) {
+                return Some((view.id, view_p));
+            }
+        }
+        None
+    }
+
     /// Resizes the workspace if the terminal size has changed and returns a vector of
     /// view *ids* removed due to minimum size constraints of the workspace.
     ///

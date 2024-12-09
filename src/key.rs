@@ -262,18 +262,30 @@ impl Keyboard {
             None => return Ok(Key::None),
         };
 
-        let x = if let Some(_) = self.read_literal(&[b';'])? {
+        let col = if let Some(_) = self.read_literal(&[b';'])? {
             match self.read_number()? {
-                Some(x) => x,
+                Some(col) => {
+                    if col > 0 {
+                        col - 1
+                    } else {
+                        0
+                    }
+                }
                 None => return Ok(Key::None),
             }
         } else {
             return Ok(Key::None);
         };
 
-        let y = if let Some(_) = self.read_literal(&[b';'])? {
+        let row = if let Some(_) = self.read_literal(&[b';'])? {
             match self.read_number()? {
-                Some(y) => y,
+                Some(row) => {
+                    if row > 0 {
+                        row - 1
+                    } else {
+                        0
+                    }
+                }
                 None => return Ok(Key::None),
             }
         } else {
@@ -283,9 +295,9 @@ impl Keyboard {
         let key = if let Some(b) = self.read_literal(&[b'M', b'm'])? {
             if button & 64 == 0 {
                 if b == b'M' {
-                    Key::ButtonPress(x, y)
+                    Key::ButtonPress(row, col)
                 } else {
-                    Key::ButtonRelease(x, y)
+                    Key::ButtonRelease(row, col)
                 }
             } else {
                 let shift = if button & 4 == 0 {

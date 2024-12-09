@@ -608,12 +608,43 @@ impl Editor {
         self.rows
     }
 
+    /// Returns the size of the editor canvas.
     pub fn size(&self) -> Size {
         (self.rows, self.cols).into()
     }
 
+    /// Returns the buffer position corresponding to the [`cursor`](Self::cursor).
     pub fn pos(&self) -> usize {
         self.cur_pos
+    }
+
+    /// Sets the cursor location and corresponding buffer position to `cursor`, though
+    /// the final cursor location is constrained by end-of-line and end-of-buffer
+    /// boundaries.
+    ///
+    /// This function was designed for responding to *mouse click* events where the
+    /// position of the click is captured in `cursor`.
+    ///
+    /// The coordinates in `cursor` are presumed to be relative to the origin of the
+    /// editor canvas.
+    pub fn set_focus(&mut self, cursor: Point) {
+        // Ensure target cursor is bounded by effective area of canvas, which takes
+        // into account left margin if enabled.
+        let try_row = cmp::min(cursor.row, self.rows);
+        let try_col = if cursor.col < self.margin_cols {
+            0
+        } else {
+            cmp::min(cursor.col - self.margin_cols, self.cols)
+        };
+
+        // Find effective cursor location and buffer position by moving down from
+        // top line of display.
+        self.cur_line = self.top_line.clone();
+        let row = self.down_cur_line(try_row);
+        let col = self.cur_line.snap_col(try_col, self.cols);
+        self.snap_col = Some(col);
+        self.cur_pos = self.cur_line.pos_of(col);
+        self.cursor = Point::new(row, col);
     }
 
     /// Attaches the `window` to this editor.

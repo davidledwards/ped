@@ -15,6 +15,7 @@ use crate::error::Result;
 use crate::input::{Directive, InputEditor};
 use crate::key::{Key, Keyboard, CTRL_G};
 use crate::op::{self, Action};
+use crate::size::Point;
 use crate::sys::{self, AsString};
 use crate::term;
 use crate::user::Inquirer;
@@ -170,6 +171,11 @@ impl Controller {
                     editor.render();
                 }
             }
+        } else if let Key::ButtonPress(row, col) = key {
+            // Set active editor and cursor position using coordinate of button press.
+            op::set_focus(&mut self.env, Point::new(row, col));
+        } else if let Key::ButtonRelease(_, _) = key {
+            // Absorb button release since these events serve no purpose at this time.
         } else {
             self.key_seq.push(key.clone());
             if let Some(op_fn) = self.config.bindings.find(&self.key_seq) {

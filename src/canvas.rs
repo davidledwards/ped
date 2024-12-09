@@ -20,6 +20,7 @@ use std::rc::Rc;
 /// A canvas is defined by its *origin*, which is relative to the top-left corner of
 /// the display, and its *size*, which is the number of rows and columns.
 pub struct Canvas {
+    origin: Point,
     size: Size,
     back: Grid,
     front: Grid,
@@ -31,6 +32,7 @@ pub type CanvasRef = Rc<RefCell<Canvas>>;
 impl Canvas {
     pub fn new(origin: Point, size: Size) -> Canvas {
         Canvas {
+            origin,
             size,
             back: Grid::new(size),
             front: Grid::new(size),
@@ -40,6 +42,7 @@ impl Canvas {
 
     pub fn zero() -> Canvas {
         Canvas {
+            origin: Point::ORIGIN,
             size: Size::ZERO,
             back: Grid::zero(),
             front: Grid::zero(),
@@ -50,6 +53,10 @@ impl Canvas {
     /// Turns the canvas into a [`CanvasRef`].
     pub fn to_ref(self) -> CanvasRef {
         Rc::new(RefCell::new(self))
+    }
+
+    pub fn origin(&self) -> Point {
+        self.origin
     }
 
     pub fn size(&self) -> Size {

@@ -1374,6 +1374,19 @@ fn select_editor(env: &mut Environment) -> Option<Action> {
     }
 }
 
+/// Sets the active editor and cursor position within editor based on `click`, which
+/// represents a point whose origin is the top-left position of the terminal display.
+pub fn set_focus(env: &mut Environment, click: Point) {
+    let view = env.workspace().locate_view(click);
+    if let Some((view_id, cursor)) = view {
+        env.set_active(Focus::To(view_id));
+        let mut editor = env.get_active_editor().borrow_mut();
+        editor.clear_soft_mark();
+        editor.set_focus(cursor);
+        editor.render();
+    }
+}
+
 /// An iquirer that orchetrates the selection of an editor by name, replacing the editor
 /// in the active window.
 struct SelectEditor {
