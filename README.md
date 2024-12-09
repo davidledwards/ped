@@ -43,7 +43,7 @@ ped foo.rs
 
 Edit multiple files, opened in separate windows.
 
-```she
+```shell
 ped foo.rs bar.rs
 ```
 
@@ -60,10 +60,10 @@ See [.pedrc](.pedrc) for a detailed explanation of configuration settings. In th
 
 The following notation is used below when refering to keys.
 
-* `C-<key>` means `CONTROL` + `<key>`
-* `S-<key>` means `SHIFT` + `<key>`
-* `S-C-<key>` means `SHIFT` + `CONTROL` + `<key>`
-* `M-<key>` means `ESCAPE` (or `META`) + `<key>`
+- `C-<key>` means `CONTROL` + `<key>`
+- `S-<key>` means `SHIFT` + `<key>`
+- `S-C-<key>` means `SHIFT` + `CONTROL` + `<key>`
+- `M-<key>` means `ESCAPE` (or `META`) + `<key>`
 
 ### General
 
@@ -75,23 +75,23 @@ The following notation is used below when refering to keys.
 
 ### Navigation
 
-| Key               | Command                     |
-| ----------------- | --------------------------- |
-| `C-b`  `←`        | Move backward one character |
-| `C-f`  `→`        | Move forward one character  |
-| `M-b`  `M-←`      | Move backward one word      |
-| `M-f`  `M-→`      | Move forward one word       |
-| `C-p`  `↑`        | Move up one line            |
-| `C-n`  `↓`        | Move down one line          |
-| `C-a`  `HOME`     | Move to start of line       |
-| `C-e`  `END`      | Move to end of line         |
-| `M-p`  `PAGEUP`   | Move up one page            |
-| `M-n`  `PAGEDOWN` | Move down one page          |
-| `M-a`  `C-HOME`   | Move to top of editor       |
-| `M-e`  `C-END`    | Move to end of editor       |
-| `S-C-↑`           | Scroll up one line          |
-| `S-C-↓`           | Scroll down one line        |
-| `C-/`             | Go to line number           |
+| Key              | Command                     |
+| ---------------- | --------------------------- |
+| `C-b` `←`        | Move backward one character |
+| `C-f` `→`        | Move forward one character  |
+| `M-b` `M-←`      | Move backward one word      |
+| `M-f` `M-→`      | Move forward one word       |
+| `C-p` `↑`        | Move up one line            |
+| `C-n` `↓`        | Move down one line          |
+| `C-a` `HOME`     | Move to start of line       |
+| `C-e` `END`      | Move to end of line         |
+| `M-p` `PAGEUP`   | Move up one page            |
+| `M-n` `PAGEDOWN` | Move down one page          |
+| `M-a` `C-HOME`   | Move to top of editor       |
+| `M-e` `C-END`    | Move to end of editor       |
+| `S-C-↑`          | Scroll up one line          |
+| `S-C-↓`          | Scroll down one line        |
+| `C-/`            | Go to line number           |
 
 ### Editing
 
@@ -136,19 +136,19 @@ The following notation is used below when refering to keys.
 
 ### Windows
 
-| Key            | Command                                     |
-| -------------- | ------------------------------------------- |
-| `C-l`          | Redraw window and center cursor             |
-| `C-w`          | Close window and editor                     |
-| `M-w 0`        | Close window                                |
-| `M-w 1`        | Close all other windows                     |
-| `M-w t`        | Move to window at top of workspace          |
-| `M-w b`        | Move to window at bottom of workspace       |
-| `M-w p`  `M-<` | Move to window above current window         |
-| `M-w n`  `M->` | Move to window below current window         |
-| `M-,`          | Switch to previous editor in current window |
-| `M-.`          | Switch to next editor in current window     |
-| `C-y`          | Select editor in current window             |
+| Key           | Command                                     |
+| ------------- | ------------------------------------------- |
+| `C-l`         | Redraw window and center cursor             |
+| `C-w`         | Close window and editor                     |
+| `M-w 0`       | Close window                                |
+| `M-w 1`       | Close all other windows                     |
+| `M-w t`       | Move to window at top of workspace          |
+| `M-w b`       | Move to window at bottom of workspace       |
+| `M-w p` `M-<` | Move to window above current window         |
+| `M-w n` `M->` | Move to window below current window         |
+| `M-,`         | Switch to previous editor in current window |
+| `M-.`         | Switch to next editor in current window     |
+| `C-y`         | Select editor in current window             |
 
 ### Help
 
