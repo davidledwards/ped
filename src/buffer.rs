@@ -13,18 +13,51 @@ use std::ptr::NonNull;
 use std::rc::Rc;
 use std::slice;
 
+/// A gap buffer.
 #[derive(Debug)]
 pub struct Buffer {
+    /// A pointer to an array of characters whose length is `capacity`.
     buf: NonNull<char>,
+
+    /// The capacity of `buf`.
     capacity: usize,
+
+    /// The number of characters in `buf`, which is strictly less than or equal to
+    /// `capacity`.
     size: usize,
+
+    /// The index of the gap in `buf`.
     gap: usize,
+
+    /// The length of the gap, which must be equal to `capacity` - `size`.
     gap_len: usize,
 }
 
 pub type BufferRef = Rc<RefCell<Buffer>>;
 
 pub type Result<T> = std::result::Result<T, std::io::Error>;
+
+/// A forward iterator.
+pub struct Forward<'a> {
+    buffer: &'a Buffer,
+    pos: usize,
+}
+
+/// A forward iterator that also produces indexes.
+pub struct ForwardIndex<'a> {
+    it: Forward<'a>,
+}
+
+/// A backward iterator.
+pub struct Backward<'a> {
+    buffer: &'a Buffer,
+    pos: usize,
+}
+
+/// A backward iterator that also produces indexes.
+pub struct BackwardIndex<'a> {
+    it: Backward<'a>,
+}
 
 impl Buffer {
     const INIT_CAPACITY: usize = 65_536;
@@ -55,16 +88,21 @@ impl Buffer {
         Rc::new(RefCell::new(self))
     }
 
+    /// Returns the number of characters in the buffer.
     #[inline]
     pub fn size(&self) -> usize {
         self.size
     }
 
+    /// Returns the gap position, which is the point of insertion and removal
+    /// operations.
     #[inline]
     pub fn get_pos(&self) -> usize {
         self.gap
     }
 
+    /// Sets the gap position to `pos` and returns the actual gap position, which may
+    /// be less than `pos` if larger than the size of the buffer.
     pub fn set_pos(&mut self, pos: usize) -> usize {
         let pos = cmp::min(pos, self.size);
         if pos < self.gap {
@@ -90,6 +128,8 @@ impl Buffer {
         self.gap
     }
 
+    /// Returns the character at `pos`, or `None` if `pos` is not less than
+    /// [`size`](Self::size).
     #[allow(dead_code)]
     pub fn get_char(&self, pos: usize) -> Option<char> {
         if pos < self.size {
@@ -103,6 +143,7 @@ impl Buffer {
         self.read_char(self.index_of(pos))
     }
 
+    /// Inserts `c` at the gap position, returning the new gap position after insertion.
     pub fn insert_char(&mut self, c: char) -> usize {
         self.ensure(1);
         self.write_char(self.gap, c);
@@ -112,6 +153,8 @@ impl Buffer {
         self.gap
     }
 
+    /// Inserts the string slice `cs` at the gap position, returning the new gap
+    /// position after insertion.
     pub fn insert_str(&mut self, cs: &str) -> usize {
         for c in cs.chars() {
             self.insert_char(c);
@@ -119,6 +162,8 @@ impl Buffer {
         self.gap
     }
 
+    /// Inserts the array of characters `cs` at the gap position, returning the new gap
+    /// position after insertion.
     pub fn insert(&mut self, cs: &[char]) -> usize {
         let n = cs.len();
         self.ensure(n);
@@ -132,6 +177,8 @@ impl Buffer {
         self.gap
     }
 
+    /// Removes the character at the gap position, returning the character if the buffer
+    /// was not empty and the gap position was not at the end of buffer.
     pub fn remove_char(&mut self) -> Option<char> {
         if self.gap < self.size {
             let c = *self.read_char(self.gap + self.gap_len);
@@ -143,6 +190,9 @@ impl Buffer {
         }
     }
 
+    /// Removes `count` characters at the gap position, though possibly less than
+    /// `count` if the number would extend beyond the end of buffer, returning a vector
+    /// of characters actually removed.
     pub fn remove(&mut self, count: usize) -> Vec<char> {
         if self.gap < self.size {
             let end = self.gap + self.gap_len;
@@ -156,6 +206,12 @@ impl Buffer {
         }
     }
 
+    /// Returns a vector of characters in the range of [`from_pos`, `to_pos`).
+    ///
+    /// There is no ordering requirement in relation to `from_pos` and `to_pos`, so it
+    /// is perfectly fine for `from_pos` < `to_pos` and `to_pos` < `from_pos`. However,
+    /// the range is always half-open from the smaller to larger position, i.e.
+    /// inclusive on the lower bound and exclusive on the upper bound.
     pub fn copy(&self, from_pos: usize, to_pos: usize) -> Vec<char> {
         if from_pos == to_pos {
             vec![]
@@ -252,11 +308,15 @@ impl Buffer {
             .unwrap_or((self.size, false))
     }
 
+    /// Reads characters from `reader` until EOF is encountered, inserting those
+    /// characters starting at the gap position, and returning the total number of
+    /// characters inserted.
     pub fn read<R>(&mut self, reader: &mut R) -> Result<usize>
     where
         R: BufRead,
     {
-        // Approximate number of characters to decode from reader before inserting into buffer.
+        // Approximate number of characters to decode from reader before inserting
+        // into buffer.
         const READ_CHUNK_SIZE: usize = 16_384;
 
         let mut chunk = String::with_capacity(READ_CHUNK_SIZE);
@@ -280,6 +340,8 @@ impl Buffer {
         Ok(count)
     }
 
+    /// Writes all characters in the buffer to `writer` and returns the total number of
+    /// UTF-8 encoded bytes written.
     pub fn write<W>(&self, writer: &mut W) -> Result<usize>
     where
         W: Write,
@@ -296,7 +358,8 @@ impl Buffer {
             let encoding = c.encode_utf8(&mut bytes);
             chunk.extend_from_slice(encoding.as_bytes());
             if chunk.len() >= WRITE_CHUNK_SIZE || pos == self.size - 1 {
-                // Sends chunk of encoded characters to writer when either condition occurs:
+                // Sends chunk of encoded characters to writer when either condition
+                // occurs:
                 // - enough bytes have been encoded to reach trigger, or
                 // - end of buffer
                 let _ = writer.write_all(chunk.as_slice())?;
@@ -307,6 +370,13 @@ impl Buffer {
         Ok(count)
     }
 
+    /// Returns a forward iterator starting at `pos`.
+    ///
+    /// `pos` is inclusive, meaning that the first character produced by the iterator
+    /// is the character at `pos`.
+    ///
+    /// `pos` is always bounded by the size of the buffer, so it is safe to provide a
+    /// value of `pos` > [`size`](Self::size).
     pub fn forward(&self, pos: usize) -> Forward<'_> {
         Forward {
             buffer: &self,
@@ -314,6 +384,13 @@ impl Buffer {
         }
     }
 
+    /// Returns a backward iterator starting at `pos`.
+    ///
+    /// `pos` is exclusive, meaning that the first character produced by the iterator
+    /// is the character at `pos - 1`.
+    ///
+    /// `pos` is always bounded by the size of the buffer, so it is safe to provide a
+    /// value of `pos` > [`size`](Self::size).
     pub fn backward(&self, pos: usize) -> Backward<'_> {
         Backward {
             buffer: &self,
@@ -321,6 +398,7 @@ impl Buffer {
         }
     }
 
+    /// Returns a forward iterator over the entire buffer.
     pub fn iter(&self) -> Forward<'_> {
         self.forward(0)
     }
@@ -430,11 +508,6 @@ impl Clone for Buffer {
     }
 }
 
-pub struct Forward<'a> {
-    buffer: &'a Buffer,
-    pos: usize,
-}
-
 impl<'a> Forward<'a> {
     pub fn index(self) -> ForwardIndex<'a> {
         ForwardIndex { it: self }
@@ -455,21 +528,12 @@ impl Iterator for Forward<'_> {
     }
 }
 
-pub struct ForwardIndex<'a> {
-    it: Forward<'a>,
-}
-
 impl Iterator for ForwardIndex<'_> {
     type Item = (usize, char);
 
     fn next(&mut self) -> Option<(usize, char)> {
         self.it.next().map(|c| (self.it.pos - 1, c))
     }
-}
-
-pub struct Backward<'a> {
-    buffer: &'a Buffer,
-    pos: usize,
 }
 
 impl<'a> Backward<'a> {
@@ -490,10 +554,6 @@ impl Iterator for Backward<'_> {
             None
         }
     }
-}
-
-pub struct BackwardIndex<'a> {
-    it: Backward<'a>,
 }
 
 impl Iterator for BackwardIndex<'_> {
