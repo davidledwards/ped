@@ -1374,10 +1374,74 @@ fn select_editor(env: &mut Environment) -> Option<Action> {
     }
 }
 
-/// Sets the active editor and cursor position within editor based on `click`, which
+/// Moves the cursor up for the editor associated with `p`, which represents a
+/// point whose origin is the top-left position of the terminal display.
+pub fn track_up(env: &mut Environment, p: Point, select: bool) {
+    let view = env.workspace().locate_view(p);
+    if let Some((view_id, _)) = view {
+        let mut editor = env.get_view_editor(view_id).borrow_mut();
+        if select {
+            editor.set_soft_mark();
+        } else {
+            editor.clear_soft_mark();
+        }
+        editor.move_up(1, false);
+        editor.render();
+    }
+}
+
+/// Moves the cursor down for the editor associated with `p`, which represents a
+/// point whose origin is the top-left position of the terminal display.
+pub fn track_down(env: &mut Environment, p: Point, select: bool) {
+    let view = env.workspace().locate_view(p);
+    if let Some((view_id, _)) = view {
+        let mut editor = env.get_view_editor(view_id).borrow_mut();
+        if select {
+            editor.set_soft_mark();
+        } else {
+            editor.clear_soft_mark();
+        }
+        editor.move_down(1, false);
+        editor.render();
+    }
+}
+
+/// Moves the cursor backward for the editor associated with `p`, which represents a
+/// point whose origin is the top-left position of the terminal display.
+pub fn track_backward(env: &mut Environment, p: Point, select: bool) {
+    let view = env.workspace().locate_view(p);
+    if let Some((view_id, _)) = view {
+        let mut editor = env.get_view_editor(view_id).borrow_mut();
+        if select {
+            editor.set_soft_mark();
+        } else {
+            editor.clear_soft_mark();
+        }
+        editor.move_backward(1);
+        editor.render();
+    }
+}
+
+/// Moves the cursor forward for the editor associated with `p`, which represents a
+/// point whose origin is the top-left position of the terminal display.
+pub fn track_forward(env: &mut Environment, p: Point, select: bool) {
+    let view = env.workspace().locate_view(p);
+    if let Some((view_id, _)) = view {
+        let mut editor = env.get_view_editor(view_id).borrow_mut();
+        if select {
+            editor.set_soft_mark();
+        } else {
+            editor.clear_soft_mark();
+        }
+        editor.move_forward(1);
+        editor.render();
+    }
+}
+
+/// Sets the active editor and cursor position within editor based on `p`, which
 /// represents a point whose origin is the top-left position of the terminal display.
-pub fn set_focus(env: &mut Environment, click: Point) {
-    let view = env.workspace().locate_view(click);
+pub fn set_focus(env: &mut Environment, p: Point) {
+    let view = env.workspace().locate_view(p);
     if let Some((view_id, cursor)) = view {
         env.set_active(Focus::To(view_id));
         let mut editor = env.get_active_editor().borrow_mut();

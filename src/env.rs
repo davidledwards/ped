@@ -89,6 +89,11 @@ impl Environment {
         self.get_view_editor_unchecked(self.active_view_id)
     }
 
+    /// Returns a reference to the editor attached to `view_id`.
+    pub fn get_view_editor(&self, view_id: u32) -> &EditorRef {
+        self.get_view_editor_unchecked(view_id)
+    }
+
     /// Sets the *active* view based on `focus` and returns the view id.
     pub fn set_active(&mut self, focus: Focus) -> u32 {
         self.active_view_id = match focus {

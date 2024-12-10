@@ -23,10 +23,10 @@ pub enum Key {
     PageUp(Shift, Ctrl),
     PageDown(Shift, Ctrl),
     Function(u8),
-    ScrollUp(Shift),
-    ScrollDown(Shift),
-    ScrollLeft(Shift),
-    ScrollRight(Shift),
+    ScrollUp(Shift, u32, u32),
+    ScrollDown(Shift, u32, u32),
+    ScrollLeft(Shift, u32, u32),
+    ScrollRight(Shift, u32, u32),
     ButtonPress(u32, u32),
     ButtonRelease(u32, u32),
 }
@@ -90,12 +90,12 @@ impl fmt::Display for Key {
             Key::PageUp(shift, ctrl) => format!("{shift}{ctrl}pg_up"),
             Key::PageDown(shift, ctrl) => format!("{shift}{ctrl}pg_down"),
             Key::Function(n) => format!("F{n}"),
-            Key::ScrollUp(shift) => format!("{shift}sc_up"),
-            Key::ScrollDown(shift) => format!("{shift}sc_down"),
-            Key::ScrollLeft(shift) => format!("{shift}sc_left"),
-            Key::ScrollRight(shift) => format!("{shift}sc_right"),
-            Key::ButtonPress(x, y) => format!("bn_press({x}, {y})"),
-            Key::ButtonRelease(x, y) => format!("bn_release({x}, {y})"),
+            Key::ScrollUp(shift, row, col) => format!("{shift}sc_up({row},{col})"),
+            Key::ScrollDown(shift, row, col) => format!("{shift}sc_down({row},{col})"),
+            Key::ScrollLeft(shift, row, col) => format!("{shift}sc_left({row},{col})"),
+            Key::ScrollRight(shift, row, col) => format!("{shift}sc_right({row},{col})"),
+            Key::ButtonPress(row, col) => format!("bn_press({row},{col})"),
+            Key::ButtonRelease(row, col) => format!("bn_release({row},{col})"),
         };
         write!(f, "{s}")
     }
@@ -306,10 +306,10 @@ impl Keyboard {
                     Shift::On
                 };
                 match button & 3 {
-                    0 => Key::ScrollUp(shift),
-                    1 => Key::ScrollDown(shift),
-                    2 => Key::ScrollRight(shift),
-                    3 => Key::ScrollLeft(shift),
+                    0 => Key::ScrollUp(shift, row, col),
+                    1 => Key::ScrollDown(shift, row, col),
+                    2 => Key::ScrollRight(shift, row, col),
+                    3 => Key::ScrollLeft(shift, row, col),
                     _ => Key::None,
                 }
             }
@@ -482,7 +482,7 @@ fn map_mods(key_mod: u8) -> (Shift, Ctrl) {
 ///
 /// Note that [`Key::Char`] is absent from these mappings because of the impracticality
 /// of mapping all possible characters.
-pub const KEY_MAPPINGS: [(&'static str, Key); 98] = [
+pub const KEY_MAPPINGS: [(&'static str, Key); 90] = [
     ("C-@", Key::Control(0)),
     ("C-a", Key::Control(1)),
     ("C-b", Key::Control(2)),
@@ -573,14 +573,6 @@ pub const KEY_MAPPINGS: [(&'static str, Key); 98] = [
     ("F18", Key::Function(18)),
     ("F19", Key::Function(19)),
     ("F20", Key::Function(20)),
-    ("sc_up", Key::ScrollUp(Shift::Off)),
-    ("sc_down", Key::ScrollDown(Shift::Off)),
-    ("sc_left", Key::ScrollLeft(Shift::Off)),
-    ("sc_right", Key::ScrollRight(Shift::Off)),
-    ("S-sc_up", Key::ScrollUp(Shift::On)),
-    ("S-sc_down", Key::ScrollDown(Shift::On)),
-    ("S-sc_left", Key::ScrollLeft(Shift::On)),
-    ("S-sc_right", Key::ScrollRight(Shift::On)),
 ];
 
 /// Returns a mapping of key names to [`Key`]s.

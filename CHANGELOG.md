@@ -2,6 +2,12 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
+## [0.3.1](https://github.com/davidledwards/ped/tree/v0.3.1) - `2024-12-10`
+
+### Fixed
+
+- Mouse scrolling now applies to editor where cursor is focused
+
 ## [0.3.0](https://github.com/davidledwards/ped/tree/v0.3.0) - `2024-12-09`
 
 ### Added

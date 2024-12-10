@@ -13,7 +13,7 @@ use crate::editor::Align;
 use crate::env::{Environment, Focus};
 use crate::error::Result;
 use crate::input::{Directive, InputEditor};
-use crate::key::{Key, Keyboard, CTRL_G};
+use crate::key::{Key, Keyboard, Shift, CTRL_G};
 use crate::op::{self, Action};
 use crate::size::Point;
 use crate::sys::{self, AsString};
@@ -171,11 +171,18 @@ impl Controller {
                     editor.render();
                 }
             }
+        } else if let Key::ScrollUp(shift, row, col) = key {
+            op::track_up(&mut self.env, Point::new(row, col), shift == Shift::On);
+        } else if let Key::ScrollDown(shift, row, col) = key {
+            op::track_down(&mut self.env, Point::new(row, col), shift == Shift::On);
+        } else if let Key::ScrollLeft(shift, row, col) = key {
+            op::track_backward(&mut self.env, Point::new(row, col), shift == Shift::On);
+        } else if let Key::ScrollRight(shift, row, col) = key {
+            op::track_forward(&mut self.env, Point::new(row, col), shift == Shift::On);
         } else if let Key::ButtonPress(row, col) = key {
-            // Set active editor and cursor position using coordinate of button press.
             op::set_focus(&mut self.env, Point::new(row, col));
         } else if let Key::ButtonRelease(_, _) = key {
-            // Absorb button release since these events serve no purpose at this time.
+            // Absorb since this event serve no purpose at this time.
         } else {
             self.key_seq.push(key.clone());
             if let Some(op_fn) = self.config.bindings.find(&self.key_seq) {
