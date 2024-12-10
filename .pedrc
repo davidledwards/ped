@@ -31,7 +31,7 @@ tab-size = 4
 #
 [colors]
 text = [252, 232]
-select = [252, 21]
+select = [255, 19]
 banner = [232, 28]
 echo = [214, 232]
 prompt = [34, 232]

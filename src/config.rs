@@ -153,7 +153,7 @@ impl Default for Colors {
     fn default() -> Colors {
         Colors {
             text: Color::new(252, 232),
-            select: Color::new(252, 21),
+            select: Color::new(255, 19),
             banner: Color::new(232, 28),
             echo: Color::new(214, 232),
             prompt: Color::new(34, 232),
