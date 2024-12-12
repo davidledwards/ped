@@ -516,8 +516,10 @@ fn scroll_center(env: &mut Environment) -> Option<Action> {
 /// Operation: `set-mark`
 fn set_mark(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
-    if let Some(_) = editor.set_hard_mark() {
+    if let Some(_) = editor.clear_mark() {
         editor.render();
+    } else {
+        editor.set_hard_mark();
     }
     None
 }
@@ -1348,6 +1350,56 @@ fn next_window(env: &mut Environment) -> Option<Action> {
     None
 }
 
+/// Operation: `select-editor`
+fn select_editor(env: &mut Environment) -> Option<Action> {
+    let editors = unattached_editors(env);
+    if editors.len() > 0 {
+        SelectEditor::question(editors, None)
+    } else {
+        Action::as_echo("only editor")
+    }
+}
+
+/// Operation: `select-editor-top`
+fn select_editor_top(env: &mut Environment) -> Option<Action> {
+    let editors = unattached_editors(env);
+    if editors.len() > 0 {
+        SelectEditor::question(editors, Some(Placement::Top))
+    } else {
+        Action::as_echo("only editor")
+    }
+}
+
+/// Operation: `select-editor-bottom`
+fn select_editor_bottom(env: &mut Environment) -> Option<Action> {
+    let editors = unattached_editors(env);
+    if editors.len() > 0 {
+        SelectEditor::question(editors, Some(Placement::Bottom))
+    } else {
+        Action::as_echo("only editor")
+    }
+}
+
+/// Operation: `select-editor-above`
+fn select_editor_above(env: &mut Environment) -> Option<Action> {
+    let editors = unattached_editors(env);
+    if editors.len() > 0 {
+        SelectEditor::question(editors, Some(Placement::Above(env.get_active_view_id())))
+    } else {
+        Action::as_echo("only editor")
+    }
+}
+
+/// Operation: `select-editor-below`
+fn select_editor_below(env: &mut Environment) -> Option<Action> {
+    let editors = unattached_editors(env);
+    if editors.len() > 0 {
+        SelectEditor::question(editors, Some(Placement::Below(env.get_active_view_id())))
+    } else {
+        Action::as_echo("only editor")
+    }
+}
+
 /// Operation: `prev-editor`
 fn prev_editor(env: &mut Environment) -> Option<Action> {
     if let Some((prev_id, _)) = prev_unattached_editor(env) {
@@ -1364,13 +1416,64 @@ fn next_editor(env: &mut Environment) -> Option<Action> {
     None
 }
 
-/// Operation: `select-editor`
-fn select_editor(env: &mut Environment) -> Option<Action> {
-    let editors = unattached_editors(env);
-    if editors.len() > 0 {
-        SelectEditor::question(editors)
-    } else {
-        Action::as_echo("only editor")
+/// An iquirer that orchetrates the selection of an editor by name, replacing the editor
+/// in the active window.
+struct SelectEditor {
+    /// Unattached editors available for selection.
+    editors: Vec<(u32, EditorRef)>,
+
+    /// Where to open the new window if specified, otherwise is replaces the editor in
+    /// the current window.
+    place: Option<Placement>,
+}
+
+impl SelectEditor {
+    const PROMPT: &str = "select editor:";
+
+    fn question(editors: Vec<(u32, EditorRef)>, place: Option<Placement>) -> Option<Action> {
+        Action::as_question(SelectEditor { editors, place }.to_box())
+    }
+
+    fn to_box(self) -> Box<dyn Inquirer> {
+        Box::new(self)
+    }
+}
+
+impl Inquirer for SelectEditor {
+    fn prompt(&self) -> String {
+        Self::PROMPT.to_string()
+    }
+
+    fn completer(&self) -> Box<dyn Completer> {
+        let accepted = self.editors.iter().map(|(_, e)| name_of(e)).collect();
+        user::list_completer(accepted)
+    }
+
+    fn respond(&mut self, env: &mut Environment, value: Option<&str>) -> Option<Action> {
+        if let Some(value) = value {
+            let editor = self
+                .editors
+                .iter()
+                .find(|(_, e)| name_of(e) == value)
+                .map(|(id, _)| *id);
+            if let Some(editor_id) = editor {
+                if let Some(place) = self.place {
+                    if let Some(view_id) = env.open_window(editor_id, place, Align::Auto) {
+                        env.set_active(Focus::To(view_id));
+                        None
+                    } else {
+                        Action::as_echo("unable to create new window")
+                    }
+                } else {
+                    env.switch_editor(editor_id, Align::Auto);
+                    None
+                }
+            } else {
+                Action::as_echo("{value}: editor not found")
+            }
+        } else {
+            None
+        }
     }
 }
 
@@ -1448,53 +1551,6 @@ pub fn set_focus(env: &mut Environment, p: Point) {
         editor.clear_soft_mark();
         editor.set_focus(cursor);
         editor.render();
-    }
-}
-
-/// An iquirer that orchetrates the selection of an editor by name, replacing the editor
-/// in the active window.
-struct SelectEditor {
-    editors: Vec<(u32, EditorRef)>,
-}
-
-impl SelectEditor {
-    const PROMPT: &str = "editor:";
-
-    fn question(editors: Vec<(u32, EditorRef)>) -> Option<Action> {
-        Action::as_question(SelectEditor { editors }.to_box())
-    }
-
-    fn to_box(self) -> Box<dyn Inquirer> {
-        Box::new(self)
-    }
-}
-
-impl Inquirer for SelectEditor {
-    fn prompt(&self) -> String {
-        Self::PROMPT.to_string()
-    }
-
-    fn completer(&self) -> Box<dyn Completer> {
-        let accepted = self.editors.iter().map(|(_, e)| name_of(e)).collect();
-        user::list_completer(accepted)
-    }
-
-    fn respond(&mut self, env: &mut Environment, value: Option<&str>) -> Option<Action> {
-        if let Some(value) = value {
-            let editor = self
-                .editors
-                .iter()
-                .find(|(_, e)| name_of(e) == value)
-                .map(|(id, _)| *id);
-            if let Some(editor_id) = editor {
-                env.switch_editor(editor_id, Align::Auto);
-                None
-            } else {
-                Action::as_echo("{value}: editor not found")
-            }
-        } else {
-            None
-        }
     }
 }
 
@@ -1672,7 +1728,7 @@ fn base_dir(editor: &EditorRef) -> PathBuf {
 }
 
 /// Predefined mapping of editing operations to editing functions.
-pub const OP_MAPPINGS: [(&'static str, OpFn); 65] = [
+pub const OP_MAPPINGS: [(&'static str, OpFn); 69] = [
     // --- exit and cancellation ---
     ("quit", quit),
     // --- help ---
@@ -1735,6 +1791,14 @@ pub const OP_MAPPINGS: [(&'static str, OpFn); 65] = [
     ("open-file-below", open_file_below),
     ("save-file", save_file),
     ("save-file-as", save_file_as),
+    // --- editor handling ---
+    ("select-editor", select_editor),
+    ("select-editor-top", select_editor_top),
+    ("select-editor-bottom", select_editor_bottom),
+    ("select-editor-above", select_editor_above),
+    ("select-editor-below", select_editor_below),
+    ("prev-editor", prev_editor),
+    ("next-editor", next_editor),
     // --- window handling ---
     ("kill-window", kill_window),
     ("close-window", close_window),
@@ -1743,9 +1807,6 @@ pub const OP_MAPPINGS: [(&'static str, OpFn); 65] = [
     ("bottom-window", bottom_window),
     ("prev-window", prev_window),
     ("next-window", next_window),
-    ("prev-editor", prev_editor),
-    ("next-editor", next_editor),
-    ("select-editor", select_editor),
 ];
 
 pub fn init_op_map() -> OpMap {

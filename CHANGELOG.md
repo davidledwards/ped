@@ -2,6 +2,17 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
+## [0.4.0](https://github.com/davidledwards/ped/tree/v0.4.0) - `2024-12-11`
+
+### Added
+
+- New key bindings to open existing editors in new windows
+
+### Changed
+
+- C-SPACE now _unsets_ an active mark
+- Default selection color to improve readability
+
 ## [0.3.1](https://github.com/davidledwards/ped/tree/v0.3.1) - `2024-12-10`
 
 ### Fixed
@@ -37,4 +48,4 @@ This file contains relevant information for each release. Please refer to the co
 - Key binding at runtime
 - Configurable colors
 - Help
-- Useful features notably absent - search, syntax coloring, themes
+- Useful features notably absent - search, syntax coloring, themes, mouse events

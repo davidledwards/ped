@@ -260,7 +260,7 @@ impl Configuration {
         Bindings::new(&bindings).unwrap_or_else(|e| panic!("{e}: default bindings failed"))
     }
 
-    const DEFAULT_BINDINGS: [(&'static str, &'static str); 79] = [
+    const DEFAULT_BINDINGS: [(&'static str, &'static str); 83] = [
         // --- exit and cancellation ---
         ("C-q", "quit"),
         // --- help ---
@@ -335,6 +335,14 @@ impl Configuration {
         ("ESC:o:n", "open-file-below"),
         ("C-s", "save-file"),
         ("ESC:s", "save-file-as"),
+        // --- editor handling ---
+        ("C-y", "select-editor"),
+        ("ESC:y:t", "select-editor-top"),
+        ("ESC:y:b", "select-editor-bottom"),
+        ("ESC:y:p", "select-editor-above"),
+        ("ESC:y:n", "select-editor-below"),
+        ("ESC:,", "prev-editor"),
+        ("ESC:.", "next-editor"),
         // --- window handling ---
         ("C-w", "kill-window"),
         ("ESC:w:0", "close-window"),
@@ -345,9 +353,6 @@ impl Configuration {
         ("ESC:<", "prev-window"),
         ("ESC:w:n", "next-window"),
         ("ESC:>", "next-window"),
-        ("ESC:,", "prev-editor"),
-        ("ESC:.", "next-editor"),
-        ("C-y", "select-editor"),
     ];
 }
 

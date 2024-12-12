@@ -109,7 +109,7 @@ The following notation is used below when refering to keys.
 
 | Key       | Command                                     |
 | --------- | ------------------------------------------- |
-| `C-SPACE` | Set mark                                    |
+| `C-SPACE` | Set/Unset mark                              |
 | `C-c`     | Copy selection or line to clipboard         |
 | `C-x`     | Cut selection or line and copy to clipboard |
 | `C-v`     | Paste contents of clipboard                 |
@@ -134,21 +134,30 @@ The following notation is used below when refering to keys.
 | `C-s`   | Save file                                      |
 | `M-s`   | Save file as another name                      |
 
+### Editors
+
+| Key     | Command                                               |
+| ------- | ----------------------------------------------------- |
+| `C-y`   | Switch to editor in current window                    |
+| `M-y t` | Switch to editor in new window at top of workspace    |
+| `M-y b` | Switch to editor in new window at bottom of workspace |
+| `M-y p` | Switch to editor in new window above current window   |
+| `M-y n` | Switch to editor in new window below current window   |
+| `M-,`   | Switch to previous editor in current window           |
+| `M-.`   | Switch to next editor in current window               |
+
 ### Windows
 
-| Key           | Command                                     |
-| ------------- | ------------------------------------------- |
-| `C-l`         | Redraw window and center cursor             |
-| `C-w`         | Close window and editor                     |
-| `M-w 0`       | Close window                                |
-| `M-w 1`       | Close all other windows                     |
-| `M-w t`       | Move to window at top of workspace          |
-| `M-w b`       | Move to window at bottom of workspace       |
-| `M-w p` `M-<` | Move to window above current window         |
-| `M-w n` `M->` | Move to window below current window         |
-| `M-,`         | Switch to previous editor in current window |
-| `M-.`         | Switch to next editor in current window     |
-| `C-y`         | Select editor in current window             |
+| Key           | Command                               |
+| ------------- | ------------------------------------- |
+| `C-l`         | Redraw window and center cursor       |
+| `C-w`         | Close window and editor               |
+| `M-w 0`       | Close window                          |
+| `M-w 1`       | Close all other windows               |
+| `M-w t`       | Move to window at top of workspace    |
+| `M-w b`       | Move to window at bottom of workspace |
+| `M-w p` `M-<` | Move to window above current window   |
+| `M-w n` `M->` | Move to window below current window   |
 
 ### Help
 
@@ -163,7 +172,7 @@ The following notation is used below when refering to keys.
 
 The core data structure for managing text is a [gap buffer](https://en.wikipedia.org/wiki/Gap_buffer) defined in `buffer.rs`, which turns out to be very efficient for insertion and removal operations. This is the only module that contains _unsafe_ Rust by design, primarily because the data structure requires something similar to a `Vec`, which could have been used but would have been too restrictive and less efficient. The simple idea behind the gap buffer that makes insertion and removal so efficient, _O(1)_, is that as the cursor moves so does the text before and after the gap. In essence, the cursor always points to the start of the gap, making insertion and removal a constant-time operation. This implementation has been slightly modified to defer any movement of text until a mutating change occurs.
 
-The only other module that contains _unsafe_ Rust by necessity is `term.rs`, which makes calls to the C runtime library to interact with the terminal.
+The only other module that contains _unsafe_ Rust, by necessity, is `term.rs`, which makes calls to the C runtime library to interact with the terminal.
 
 The rendering of text on the terminal is ultimately done using ANSI control sequences, but there are intermediate steps in the process that optimize the amount of data sent to the terminal. A key component of the rendering architecture is a _canvas_ that is essentially an abstraction over _stdout_. Central to the design of the canvas is the combination of a _front_ and _back_ grid, a two-dimensional data structure. The front grid is a faithful representation of what the user sees, whereas the back grid is a cache of pending updates. The idea is that a series of writes are applied to the back grid, and then a subsequent rendering request will generate a minimal set of ANSI commands based on the differences between the front and back grids.
 
