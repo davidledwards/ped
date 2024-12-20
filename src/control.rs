@@ -7,6 +7,7 @@
 //!
 //! The controller is essentially a loop that runs until a *quit* directive is given.
 
+use crate::color::Color;
 use crate::config::ConfigurationRef;
 use crate::echo::Echo;
 use crate::editor::Align;
@@ -16,6 +17,7 @@ use crate::input::{Directive, InputEditor};
 use crate::key::{Key, Keyboard, Shift, CTRL_G};
 use crate::op::{self, Action};
 use crate::size::Point;
+use crate::syntax::Tokenizer;
 use crate::sys::{self, AsString};
 use crate::term;
 use crate::user::Inquirer;
@@ -106,6 +108,23 @@ impl Controller {
         for (i, path) in files.iter().enumerate() {
             let path = sys::canonicalize(sys::working_dir().join(path)).as_string();
             let editor = op::open_editor(&path)?;
+            // --- hack ---
+            let mut tokens = Vec::new();
+            tokens.push((r#"\b(abstract|alignof|as|become|box|break|const|continue|crate|do|else|enum|extern|false|final|fn|for|if|impl|in|let|loop|macro|match|mod|move|mut|offsetof|override|priv|pub|pure|ref|return|sizeof|static|self|struct|super|true|trait|type|typeof|unsafe|unsized|use|virtual|where|while|yield)\b"#.to_string(), Color::ZERO));
+            tokens.push((r#"-?\d+(?:\.\d+)?(?:[eE]-?\d+)?"#.to_string(), Color::ZERO));
+            tokens.push((r#""(?:[^"\\]|(?:\\.))*""#.to_string(), Color::ZERO));
+            tokens.push((r##"r#".*"#"##.to_string(), Color::ZERO));
+            tokens.push((r#"//.*$"#.to_string(), Color::ZERO));
+            tokens.push((r#"///.*$"#.to_string(), Color::ZERO));
+            // start of multi-line comment
+            tokens.push((r#"/\*"#.to_string(), Color::ZERO));
+            // end of multi-line comment
+            tokens.push((r#"\*/"#.to_string(), Color::ZERO));
+            // tokens.push((r#"/\*[.\n]*\*/"#.to_string(), Color::ZERO));
+            let mut t = Tokenizer::new(tokens)?;
+            t.tokenize(&editor.borrow().buffer());
+            t.dump(&editor.borrow().buffer());
+            // --- hack ---
             if i == 0 {
                 self.env.set_editor(editor, Align::Auto);
             } else {

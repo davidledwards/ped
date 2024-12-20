@@ -244,6 +244,11 @@ impl Buffer {
         }
     }
 
+    /// Returns a string containing characters in the range of [`from_pos`, `to_pos`).
+    pub fn copy_as_string(&self, from_pos: usize, to_pos: usize) -> String {
+        self.copy(from_pos, to_pos).iter().collect()
+    }
+
     /// Returns the `0`-based line number corresponding to `pos`.
     pub fn line_of(&self, pos: usize) -> u32 {
         self.forward(0).take(pos).filter(|c| *c == '\n').count() as u32

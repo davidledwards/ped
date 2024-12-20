@@ -1,5 +1,6 @@
 //! A complete collection of errors.
 
+use regex_lite;
 use std::error;
 use std::fmt::{self, Display, Formatter};
 use std::io;
@@ -41,6 +42,9 @@ pub enum Error {
 
     /// An error occurred while parsing a configuration file referenced by `path`.
     Configuration { path: String, cause: String },
+
+    /// A regular expression `pattern` is invalid or too large in compiled form.
+    InvalidRegex { pattern: String, cause: String },
 }
 
 impl error::Error for Error {}
@@ -113,6 +117,13 @@ impl Error {
             cause: format!("{e}"),
         }
     }
+
+    pub fn invalid_regex(pattern: &str, e: &regex_lite::Error) -> Error {
+        Error::InvalidRegex {
+            pattern: pattern.to_string(),
+            cause: format!("{e}"),
+        }
+    }
 }
 
 impl Display for Error {
@@ -133,6 +144,9 @@ impl Display for Error {
             }
             Error::Configuration { path, cause } => {
                 write!(f, "{path}: configuration error: {cause}")
+            }
+            Error::InvalidRegex { pattern, cause } => {
+                write!(f, "{pattern}: invalid regular expression: {cause}")
             }
         }
     }

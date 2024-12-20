@@ -1,9 +1,10 @@
 //! Text searching.
 
 use crate::buffer::Buffer;
+use crate::etc;
 use regex_lite::Regex;
 use std::collections::HashMap;
-use std::ops::{ControlFlow, Range};
+use std::ops::Range;
 
 /// Defines an interface for a pattern-matching algorithm.
 pub trait Pattern {
@@ -153,46 +154,18 @@ impl RegexPattern {
         RegexPattern { regex }
     }
 
-    /// Calculates the byte offset in `buf` corresponding to the `pos`-th character.
-    fn pos_to_offset(buf: &str, pos: usize) -> usize {
-        buf.chars()
-            .take(pos)
-            .fold(0, |offset, c| offset + c.len_utf8())
-    }
-
-    /// Calculates the `pos`-th character in `buf` corresponding to the byte `offset`.
-    fn offset_to_pos(buf: &str, offset: usize) -> usize {
-        let result = buf.chars().enumerate().try_fold(0, |ofs, (pos, c)| {
-            if ofs == offset {
-                ControlFlow::Break(pos)
-            } else {
-                ControlFlow::Continue(ofs + c.len_utf8())
-            }
-        });
-        match result {
-            ControlFlow::Break(pos) => pos,
-            ControlFlow::Continue(_) => {
-                // This outcome should never happen because of guarantees made by
-                // regex library with respect to offsets in &str inputs always being
-                // correctly aligned on UTF-8 code point boundary. Nonetheless, we
-                // do not want to panic if such guarantees do not hold.
-                0
-            }
-        }
-    }
-
     fn search(&self, buffer: &str, pos: usize) -> Option<(usize, usize)> {
         // Convert starting position into an offset.
-        let pos_offset = Self::pos_to_offset(buffer, pos);
+        let pos_offset = etc::pos_to_offset(buffer, pos);
 
         self.regex.find_at(buffer, pos_offset).and_then(|m| {
             // Convert starting and ending offsets into their respective character
             // positions.
             let Range { start, end } = m.range();
-            let start_pos = Self::offset_to_pos(buffer, start);
+            let start_pos = etc::offset_to_pos(buffer, start);
 
             // This trick saves us from rescanning entire buffer to find ending offset.
-            let end_pos = start_pos + Self::offset_to_pos(&buffer[start..], end - start);
+            let end_pos = start_pos + etc::offset_to_pos(&buffer[start..], end - start);
             Some((start_pos, end_pos))
         })
     }
