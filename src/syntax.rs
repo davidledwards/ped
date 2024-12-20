@@ -1,47 +1,93 @@
-//! Syntax highlighting.
+//! Syntax coloring.
 
 use crate::buffer::Buffer;
 use crate::color::Color;
 use crate::error::{Error, Result};
 use crate::etc;
-use regex_lite::{Captures, Match, Regex, RegexBuilder};
+use regex_lite::{Captures, Regex, RegexBuilder};
 use std::cmp;
 use std::ops::{ControlFlow, Range};
 
+/// A means of tokenizing the contents of a [`Buffer`].
+pub struct Tokenizer {
+    /// A single regular expression aggregating all token definitions, each adorned
+    /// with its own capture group name.
+    re: Regex,
+
+    /// A collection of token definitions whose order is crucial, since indexes are
+    /// used during tokenization to refer to these definitions.
+    defs: Vec<Def>,
+
+    /// The number of characters tokenized.
+    chars: usize,
+
+    /// The list of token spans generated during tokenization.
+    spans: Vec<Span>,
+}
+
+/// A cursor represents a position in the [`Buffer`] used during tokenization as well
+/// as the applicable token information.
+pub struct Cursor<'a> {
+    /// A reference to the tokenizer that produced this cursor.
+    tokenizer: &'a Tokenizer,
+
+    /// The buffer position associated with this cursor.
+    pos: usize,
+
+    /// The applicable token corresponding to [`pos`](Self::pos).
+    token: Token,
+
+    /// The color associated with this token or `None` if the token represents a gap.
+    color: Option<Color>,
+}
+
+/// A token definition represents a regular expression with a unique identifier that
+/// is used in forming capture group names.
+struct Def {
+    /// A unique identifier representing this token.
+    ///
+    /// The value of `0` is reserved for special [spans](Span) that represents _gaps_
+    /// between recognized tokens.
+    id: usize,
+
+    /// The unique capture group name assigned to this token, which is formed using
+    /// [`id`](Self::id).
+    name: String,
+
+    /// The regular expression for this token.
+    pattern: String,
+
+    /// The color associated with this token.
+    color: Color,
+}
+
+/// A token is essentially a [`Span`] that is decorated with the starting and ending
+/// positions in the [`Buffer`] that was used during tokenization.
+struct Token {
+    /// An index into [`Tokenizer::defs`].
+    index: usize,
+
+    /// The starting position of the token, which is an _inclusive_ bound.
+    start_pos: usize,
+
+    /// The ending position of the token, which is an _exclusive_ bound.
+    end_pos: usize,
+}
+
+/// A span represents a slice of text that matchs a token `id`.
 struct Span {
     id: usize,
     len: usize,
 }
 
 impl Span {
-    fn new(id: usize, len: usize) -> Span {
-        Span { id, len }
-    }
-
     fn gap(len: usize) -> Span {
         Span { id: 0, len }
     }
-}
 
-struct Def {
-    id: usize, // 0 == gap
-    name: String,
-    pattern: String,
-    color: Color,
-}
-
-pub struct Tokenizer {
-    re: Regex,
-    chars: usize,
-    defs: Vec<Def>,
-    spans: Vec<Span>,
-}
-
-#[derive(Debug)]
-struct Token {
-    index: usize,
-    start_pos: usize,
-    end_pos: usize,
+    fn token(id: usize, len: usize) -> Span {
+        Span { id, len }
+    }
 }
 
 impl Token {
@@ -51,33 +97,28 @@ impl Token {
     }
 }
 
-pub struct Cursor<'a> {
-    tokenizer: &'a Tokenizer,
-
-    // pos of cursor in buffer
-    pos: usize,
-
-    // token corresponding to pos
-    token: Token,
-
-    color: Color,
-}
-
 impl<'a> Cursor<'a> {
-    pub fn color(&self) -> Color {
+    /// Returns the applicable color at this cursor position or `None` if the cursor
+    /// is contained inside a gap.
+    pub fn color(&self) -> Option<Color> {
         self.color
     }
 
+    /// Moves the cursor forward by `n` characters, though not to extend beyond
+    /// [`Tokenizer::size`].
     pub fn forward(self, n: usize) -> Cursor<'a> {
         let pos = self.pos + n;
         self.find(pos)
     }
 
+    /// Moves the cursor backward by `n` characters, though not to extend beyond `0`.
     pub fn backward(self, n: usize) -> Cursor<'a> {
         let pos = self.pos.saturating_sub(n);
         self.find(pos)
     }
 
+    /// Returns the cursor at position `pos`, though not to extend beyond
+    /// [`Tokenizer::size`].
     pub fn find(self, pos: usize) -> Cursor<'a> {
         let pos = cmp::min(pos, self.tokenizer.chars);
         if self.token.contains(pos) {
@@ -88,7 +129,7 @@ impl<'a> Cursor<'a> {
             } else {
                 self.tokenizer.find_forward(self.token, pos)
             };
-            let color = self.tokenizer.span_color(token.index);
+            let color = self.tokenizer.color(token.index);
             Cursor {
                 pos,
                 token,
@@ -100,7 +141,15 @@ impl<'a> Cursor<'a> {
 }
 
 impl Tokenizer {
+    /// Creates a new tokenizer using `tokens`, which are tuples containing a regular
+    /// expression and a color.
+    ///
+    /// If any of the regular expressions are malformed or the aggregate size of all
+    /// regular expressions is too large, then an error is returned.
     pub fn new(tokens: Vec<(String, Color)>) -> Result<Tokenizer> {
+        // Tokens are adorned with capture group names of "_<id>" where <id> is the
+        // index of the token definition offset by 1. Offset is required because
+        // token id 0 is reserved for gap spans.
         let defs = tokens
             .iter()
             .enumerate()
@@ -112,6 +161,7 @@ impl Tokenizer {
             })
             .collect::<Vec<_>>();
 
+        // Join all token regular expressions using capture group names.
         let pattern = defs
             .iter()
             .map(|def| format!("(?<{}>{})", def.name, def.pattern))
@@ -132,6 +182,80 @@ impl Tokenizer {
         Ok(this)
     }
 
+    /// Tokenizes `buffer`.
+    ///
+    /// Even though lifetimes restrict the use of prior [cursors](Cursor), it is
+    /// important to remember that any information extracted from prior cursors should
+    /// be considered invalid.
+    pub fn tokenize(&mut self, buffer: &Buffer) {
+        self.spans.clear();
+        self.chars = buffer.size();
+        if self.chars > 0 {
+            // Converting entire buffer to string is an unfortunate requirement since
+            // regex library provide iterator support.
+            let buf = buffer.iter().collect::<String>();
+
+            // Keep track of byte offset and character position following last span.
+            let mut offset = 0;
+            let mut pos = 0;
+
+            for cap in self.re.captures_iter(&buf) {
+                // Get token information associated with capture group.
+                let (id, Range { start, end }) = self.lookup_token(&cap);
+
+                // Byte offsets returned by regex library must be converted to their
+                // corresponding character positions.
+                let start_pos = pos + etc::offset_to_pos(&buf[offset..], start - offset);
+                let end_pos = start_pos + etc::offset_to_pos(&buf[start..], end - start);
+
+                // Insert gap span if non-zero distance exists between this token and
+                // prior token.
+                if start_pos > pos {
+                    self.spans.push(Span::gap(start_pos - pos));
+                }
+
+                // Add new token span.
+                self.spans.push(Span::token(id, end_pos - start_pos));
+                offset = end;
+                pos = end_pos;
+            }
+
+            // Add gap span if non-zero distance between last token and end of buffer.
+            if offset < buf.len() {
+                let end_pos = pos + etc::offset_to_pos(&buf[offset..], buf.len() - offset);
+                self.spans.push(Span::gap(end_pos - pos));
+            }
+        } else {
+            // An empty buffer requires zero-length gap to be appended to spans to
+            // ensure other functions work correctly.
+            self.spans.push(Span::gap(0));
+        }
+    }
+
+    /// Returns the cursor at position `pos`, though not to extend beyond
+    /// [`Tokenizer::size`].
+    pub fn find(&self, pos: usize) -> Cursor<'_> {
+        let pos = cmp::min(pos, self.chars);
+        let token = self.find_forward(
+            Token {
+                index: 0,
+                start_pos: 0,
+                end_pos: self.spans[0].len,
+            },
+            pos,
+        );
+        let color = self.color(token.index);
+        Cursor {
+            tokenizer: &self,
+            pos,
+            token,
+            color,
+        }
+    }
+
+    /// Returns the token applicable to `pos` relative to the `from` token.
+    ///
+    /// If `pos` does occur _after_ `from`, then this function will panic.
     fn find_forward(&self, from: Token, pos: usize) -> Token {
         debug_assert!(pos >= from.start_pos);
         let result =
@@ -155,6 +279,9 @@ impl Tokenizer {
         }
     }
 
+    /// Returns the token applicable to `pos` relative to the `from` token.
+    ///
+    /// If `pos` does occur _before_ `from`, then this function will panic.
     fn find_backward(&self, from: Token, pos: usize) -> Token {
         debug_assert!(pos <= from.start_pos);
         let result = self.spans.iter().take(from.index).rev().try_fold(
@@ -177,37 +304,6 @@ impl Tokenizer {
         }
     }
 
-    pub fn find(&self, pos: usize) -> Cursor<'_> {
-        let pos = cmp::min(pos, self.chars);
-
-        let start_token = Token {
-            index: 0,
-            start_pos: 0,
-            end_pos: self.spans[0].len,
-        };
-
-        let token = self.find_forward(start_token, pos);
-        let color = self.span_color(token.index);
-
-        Cursor {
-            tokenizer: &self,
-            pos,
-            token,
-            color,
-        }
-    }
-
-    fn span_color(&self, index: usize) -> Color {
-        let Span { id, len: _ } = self.spans[index];
-        if id == 0 {
-            // todo
-            // - this should be a value provided during initialization
-            Color::ZERO
-        } else {
-            self.defs[id - 1].color
-        }
-    }
-
     pub fn dump(&self, buffer: &Buffer) {
         let mut pos = 0;
 
@@ -223,60 +319,27 @@ impl Tokenizer {
         }
     }
 
-    pub fn tokenize(&mut self, buffer: &Buffer) {
-        // scan entire buffer and rebuild token list
-        self.chars = buffer.size();
-        self.spans.clear();
-
-        if self.chars > 0 {
-            // convert buffer to a string before scanning
-            // this is terribly inefficient, but regex library has no means of using an
-            // iterator, likely because of the need to back up when match paths fail
-            let buf = buffer.iter().collect::<String>();
-
-            // keep the pos in buffer following the last token in token_spans
-            let mut offset = 0;
-            let mut pos = 0;
-
-            for cap in self.re.captures_iter(&buf) {
-                // find token based on capture group, must be _n where n is the index
-                // into self.token_defs
-                //
-                // add gap span if there is non-zero distance between prior token and
-                // this token
-                //
-                // byte offsets produced by regex library need to be converted pos-th
-                // character in the buffer
-                let (id, m) = self.lookup_token(&cap);
-                let Range { start, end } = m.range();
-
-                let start_pos = pos + etc::offset_to_pos(&buf[offset..], start - offset);
-                let end_pos = start_pos + etc::offset_to_pos(&buf[start..], end - start);
-
-                if start_pos > pos {
-                    self.spans.push(Span::gap(start_pos - pos));
-                }
-                self.spans.push(Span::new(id, end_pos - start_pos));
-                offset = end;
-                pos = end_pos;
-            }
-
-            // add gap to end if one exists
-            if offset < buf.len() {
-                let end_pos = pos + etc::offset_to_pos(&buf[offset..], buf.len() - offset);
-                self.spans.push(Span::gap(end_pos - pos));
-            }
-        } else {
-            // add zero-length gap to make other functions work correctly
-            self.spans.push(Span::gap(0));
-        }
-    }
-
-    fn lookup_token<'a>(&self, cap: &'a Captures) -> (usize, Match<'a>) {
+    /// Returns the token id and the byte offset range for the matching capture group
+    /// `cap`.
+    ///
+    /// This function panics if the capture group does not match any of the expected
+    /// names, as such a condition would indicate a correctness problem.
+    fn lookup_token(&self, cap: &Captures) -> (usize, Range<usize>) {
         self.defs
             .iter()
-            .find_map(|def| cap.name(&def.name).map(|m| (def.id, m)))
+            .find_map(|def| cap.name(&def.name).map(|m| (def.id, m.range())))
             .unwrap_or_else(|| panic!("{}: capture group expected for token", &cap[0]))
+    }
+
+    /// Returns the color associated with the span at `index` or `None` if the span
+    /// is a gap.
+    fn color(&self, index: usize) -> Option<Color> {
+        let Span { id, len: _ } = self.spans[index];
+        if id > 0 {
+            Some(self.defs[id - 1].color)
+        } else {
+            None
+        }
     }
 }
 
@@ -389,9 +452,9 @@ mod tests {
             assert_eq!(
                 cursor.color,
                 if id == 0 {
-                    Color::ZERO
+                    None
                 } else {
-                    TOKENS[id - 1].1
+                    Some(TOKENS[id - 1].1)
                 }
             );
         }
@@ -413,9 +476,9 @@ mod tests {
             assert_eq!(
                 cursor.color,
                 if id == 0 {
-                    Color::ZERO
+                    None
                 } else {
-                    TOKENS[id - 1].1
+                    Some(TOKENS[id - 1].1)
                 }
             );
 
@@ -446,9 +509,9 @@ mod tests {
             assert_eq!(
                 cursor.color,
                 if id == 0 {
-                    Color::ZERO
+                    None
                 } else {
-                    TOKENS[id - 1].1
+                    Some(TOKENS[id - 1].1)
                 }
             );
 
