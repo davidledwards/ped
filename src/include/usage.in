@@ -18,6 +18,7 @@ usage: ped OPTIONS [file...]
     An optional configuration file is loaded if present in one of the following
     locations in order of precedence:
         - $HOME/.pedrc
+        - $HOME/.ped/pedrc
         - $HOME/.config/ped/pedrc
 
     Alternatively, a configuration file can be specified using --config, which

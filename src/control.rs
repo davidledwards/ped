@@ -16,7 +16,7 @@ use crate::input::{Directive, InputEditor};
 use crate::key::{Key, Keyboard, Shift, CTRL_G};
 use crate::op::{self, Action};
 use crate::size::Point;
-use crate::syntax::Library;
+use crate::syntax::Registry;
 use crate::sys::{self, AsString};
 use crate::term;
 use crate::token::Tokenizer;
@@ -109,8 +109,8 @@ impl Controller {
             let path = sys::canonicalize(sys::working_dir().join(path)).as_string();
             let editor = op::open_editor(&path)?;
             // --- hack ---
-            let lib = Library::load()?;
-            let syntax = lib.find("rs").unwrap();
+            let registry = Registry::load()?;
+            let syntax = registry.find("rs").unwrap();
             let mut t = Tokenizer::new(syntax.clone());
             t.tokenize(&editor.borrow().buffer());
             t.dump(&editor.borrow().buffer());

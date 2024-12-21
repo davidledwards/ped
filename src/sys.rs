@@ -117,6 +117,26 @@ pub fn is_dir<P: AsRef<Path>>(path: P) -> bool {
     Path::new(path.as_ref()).is_dir()
 }
 
+/// Returns a lexicographically-sorted list of files contained in `dir`, quietly
+/// discarding any I/O errors when reading the directory.
+pub fn list_files<P: AsRef<Path>>(dir: P) -> Vec<PathBuf> {
+    let mut entries = match dir.as_ref().read_dir() {
+        Ok(entries) => entries
+            .flat_map(|entry| {
+                entry
+                    .ok()
+                    .filter(|e| e.file_type().ok().map(|t| t.is_file()).unwrap_or(false))
+                    .map(|e| e.path())
+            })
+            .collect(),
+        Err(_) => {
+            vec![]
+        }
+    };
+    entries.sort();
+    entries
+}
+
 /// Returns a lexicographically-sorted list of files and directories contained
 /// in `dir`, quietly discarding any I/O errors when reading the directory.
 pub fn list_dir<P: AsRef<Path>>(dir: P) -> Vec<PathBuf> {

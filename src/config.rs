@@ -16,6 +16,7 @@
 //! order of precedence:
 //!
 //! * `$HOME/.pedrc`
+//! * `$HOME/.ped/pedrc`
 //! * `$HOME/.config/ped/pedrc`
 
 use crate::bind::Bindings;
@@ -163,7 +164,7 @@ impl Default for Colors {
 
 impl Configuration {
     /// A collection of resource files to try loading in order of precedence.
-    const TRY_FILES: [&str; 2] = [".pedrc", ".config/ped/pedrc"];
+    const TRY_FILES: [&str; 3] = [".pedrc", ".ped/pedrc", ".config/ped/pedrc"];
 
     /// Returns a configuration that is formed by attempting to load a resource file
     /// from well-known locations.
