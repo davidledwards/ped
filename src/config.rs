@@ -23,14 +23,11 @@ use crate::color::Color;
 use crate::error::{Error, Result};
 use crate::opt::Options;
 use crate::sys::{self, AsString};
-use serde::de::{self, SeqAccess, Visitor};
-use serde::{Deserialize, Deserializer};
+use serde::Deserialize;
 use std::collections::HashMap;
-use std::fmt;
 use std::fs;
 use std::path::Path;
 use std::rc::Rc;
-use std::result;
 
 /// A configuration representing all aspects of the editing experience.
 pub struct Configuration {
@@ -161,38 +158,6 @@ impl Default for Colors {
             line: Color::new(34, 234),
             eol: Color::new(34, 232),
         }
-    }
-}
-
-impl<'a> Deserialize<'a> for Color {
-    fn deserialize<T>(deser: T) -> result::Result<Color, T::Error>
-    where
-        T: Deserializer<'a>,
-    {
-        deser.deserialize_tuple(2, ColorVisitor)
-    }
-}
-
-struct ColorVisitor;
-
-impl<'a> Visitor<'a> for ColorVisitor {
-    type Value = Color;
-
-    fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "expecting `[u8, u8]` for Color")
-    }
-
-    fn visit_seq<T>(self, mut seq: T) -> result::Result<Color, T::Error>
-    where
-        T: SeqAccess<'a>,
-    {
-        let fg = seq
-            .next_element()?
-            .ok_or_else(|| de::Error::invalid_length(0, &self))?;
-        let bg = seq
-            .next_element()?
-            .ok_or_else(|| de::Error::invalid_length(1, &self))?;
-        Ok(Color::new(fg, bg))
     }
 }
 

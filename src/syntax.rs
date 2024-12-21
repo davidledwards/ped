@@ -2,9 +2,14 @@
 
 use crate::color::Color;
 use crate::error::{Error, Result};
+use crate::sys::AsString;
+use indexmap::IndexMap;
 use regex_lite::{Captures, Regex, RegexBuilder};
+use serde::Deserialize;
 use std::collections::HashMap;
+use std::fs;
 use std::ops::Range;
+use std::path::{Path, PathBuf};
 
 pub struct Library {
     syntax_map: HashMap<String, Syntax>,
@@ -103,22 +108,77 @@ impl Syntax {
     }
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ExternalSyntax {
+    id: ExternalId,
+    tokens: Option<IndexMap<String, Color>>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ExternalId {
+    name: String,
+    extensions: Vec<String>,
+}
+
 impl Library {
     pub fn load() -> Result<Library> {
         // todo
-        // - load TOML file
+        // - enumerate files in well known directory
+        // - load files
+        // - add them to library
 
-        let this = Library {
-            syntax_map: HashMap::new(),
-            ext_map: HashMap::new(),
+        // --- hack ---
+        let path = PathBuf::from("rust.ped");
+        let library = if path.exists() {
+            let ext_syntax = Self::read_file(&path)?;
+
+            let tokens = if let Some(tokens) = ext_syntax.tokens {
+                tokens
+                    .iter()
+                    .map(|(pattern, color)| {
+                        println!("token: pattern={pattern}, color={color:?}");
+                        (pattern.clone(), *color)
+                    })
+                    .collect::<Vec<_>>()
+            } else {
+                Vec::new()
+            };
+
+            let name = ext_syntax.id.name;
+            let syntax = Syntax::new(name.clone(), tokens)?;
+
+            let mut syntax_map = HashMap::new();
+            syntax_map.insert(name.clone(), syntax);
+
+            let mut ext_map = HashMap::new();
+            for ext in ext_syntax.id.extensions {
+                ext_map.insert(ext, name.clone());
+            }
+
+            Library {
+                syntax_map,
+                ext_map,
+            }
+        } else {
+            Library {
+                syntax_map: HashMap::new(),
+                ext_map: HashMap::new(),
+            }
         };
-        Ok(this)
+        Ok(library)
     }
 
     pub fn find(&self, ext: &str) -> Option<&Syntax> {
         self.ext_map
             .get(ext)
             .and_then(|name| self.syntax_map.get(name))
+    }
+
+    fn read_file(path: &Path) -> Result<ExternalSyntax> {
+        let content = fs::read_to_string(path).map_err(|e| Error::io(&path.as_string(), e))?;
+        toml::from_str::<ExternalSyntax>(&content).map_err(|e| Error::syntax(&path.as_string(), &e))
     }
 }
 
@@ -159,6 +219,13 @@ pub mod tests {
         let tokens = vec![("(bad".to_string(), Color::ZERO)];
         let syntax = Syntax::new(NAME.to_string(), tokens);
         assert!(syntax.is_err());
+    }
+
+    #[test]
+    fn load_syntax_file() {
+        let lib = Library::load().unwrap();
+        println!("syntax_map: {:?}", lib.syntax_map.keys());
+        println!("ext_map: {:?}", lib.ext_map);
     }
 
     pub fn build_syntax() -> Syntax {

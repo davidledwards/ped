@@ -43,6 +43,9 @@ pub enum Error {
     /// An error occurred while parsing a configuration file referenced by `path`.
     Configuration { path: String, cause: String },
 
+    /// An error occurred while parsing a syntax file referenced by `path`.
+    Syntax { path: String, cause: String },
+
     /// A regular expression `pattern` is invalid or too large in compiled form.
     InvalidRegex { pattern: String, cause: String },
 }
@@ -118,6 +121,13 @@ impl Error {
         }
     }
 
+    pub fn syntax(path: &str, e: &de::Error) -> Error {
+        Error::Syntax {
+            path: path.to_string(),
+            cause: format!("{e}"),
+        }
+    }
+
     pub fn invalid_regex(pattern: &str, e: &regex_lite::Error) -> Error {
         Error::InvalidRegex {
             pattern: pattern.to_string(),
@@ -144,6 +154,9 @@ impl Display for Error {
             }
             Error::Configuration { path, cause } => {
                 write!(f, "{path}: configuration error: {cause}")
+            }
+            Error::Syntax { path, cause } => {
+                write!(f, "{path}: syntax configuration error: {cause}")
             }
             Error::InvalidRegex { pattern, cause } => {
                 write!(f, "{pattern}: invalid regular expression: {cause}")
