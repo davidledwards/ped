@@ -17,9 +17,10 @@ use crate::input::{Directive, InputEditor};
 use crate::key::{Key, Keyboard, Shift, CTRL_G};
 use crate::op::{self, Action};
 use crate::size::Point;
-use crate::syntax::Tokenizer;
+use crate::syntax::Syntax;
 use crate::sys::{self, AsString};
 use crate::term;
+use crate::token::Tokenizer;
 use crate::user::Inquirer;
 use crate::workspace::{Placement, Workspace};
 use crate::{PACKAGE_NAME, PACKAGE_VERSION};
@@ -121,7 +122,8 @@ impl Controller {
             // end of multi-line comment
             tokens.push((r#"\*/"#.to_string(), Color::ZERO));
             // tokens.push((r#"/\*[.\n]*\*/"#.to_string(), Color::ZERO));
-            let mut t = Tokenizer::new(tokens)?;
+            let syntax = Syntax::new("Rust".to_string(), tokens)?;
+            let mut t = Tokenizer::new(syntax);
             t.tokenize(&editor.borrow().buffer());
             t.dump(&editor.borrow().buffer());
             // --- hack ---

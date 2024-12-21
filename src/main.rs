@@ -37,6 +37,7 @@ mod size;
 mod syntax;
 mod sys;
 mod term;
+mod token;
 mod user;
 mod window;
 mod workspace;
