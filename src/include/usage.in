@@ -12,6 +12,7 @@ usage: ped OPTIONS [file...]
     --print-ops       : print available operations to stdout
     --print-bindings  : print key bindings to stdout
     --config FILE     : load configuration from FILE
+    --syntax-dir DIR  : load syntax configurations from DIR
     --version         : print version information
 
   CONFIGURATION
@@ -28,3 +29,15 @@ usage: ped OPTIONS [file...]
     Configuration files are formatted using the TOML syntax, details of which
     can be found at <https://toml.io>. Configuration options specific to ped
     are documented at <https://github.com/davidledwards/ped>.
+
+  SYNTAX
+    An optional collection of syntax configuration files are enumerated and
+    loaded from one of the following directories in order of precedence:
+        - $HOME/.ped/syntax
+        - $HOME/.config/ped/syntax
+
+    Alternatively, a directory may be specified using --syntax-dir, which
+    ignores searching in the standard directories above.
+
+    Syntax configuration files are formatted using the TOML syntax and must
+    contain the `.toml` extension, otherwise all other files types are ignored.

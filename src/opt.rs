@@ -15,6 +15,7 @@ pub struct Options {
     pub print_ops: bool,
     pub print_bindings: bool,
     pub config_path: Option<String>,
+    pub syntax_dir: Option<String>,
     pub files: Vec<String>,
 }
 
@@ -31,6 +32,7 @@ impl Default for Options {
             print_ops: false,
             print_bindings: false,
             config_path: None,
+            syntax_dir: None,
             files: vec![],
         }
     }
@@ -55,6 +57,7 @@ impl Options {
                 "--print-ops" => opts.print_ops = true,
                 "--print-bindings" => opts.print_bindings = true,
                 "--config" => opts.config_path = Some(expect_value(&arg, it.next())?),
+                "--syntax-dir" => opts.syntax_dir = Some(expect_value(&arg, it.next())?),
                 arg if arg.starts_with("--") => return Err(Error::unexpected_arg(arg)),
                 _ => opts.files.push(arg),
             }
