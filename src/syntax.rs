@@ -85,6 +85,10 @@ struct ExternalSyntax {
 }
 
 impl Syntax {
+    /// A regular expression that never matches, which is used when no tokens are
+    /// provided.
+    const EMPTY_REGEX: &str = "^$a";
+
     /// Creates a new syntax identified by `name` and using `tokens`, which are
     /// tuples containing a regular expression and a color.
     ///
@@ -94,6 +98,12 @@ impl Syntax {
         // Tokens are adorned with capture group names of "_<id>" where <id> is the
         // index of the token definition offset by 1. Offset is required because
         // token id 0 is reserved to represent the absence of a token.
+        let tokens = if tokens.len() > 0 {
+            tokens
+        } else {
+            vec![(Self::EMPTY_REGEX.to_string(), Color::ZERO)]
+        };
+
         let tokens = tokens
             .iter()
             .enumerate()
@@ -269,6 +279,7 @@ pub mod tests {
         let syntax = build_syntax();
         assert_eq!(syntax.name, SYNTAX_NAME);
         assert_eq!(syntax.tokens.len(), SYNTAX_TOKENS.len());
+
         for (i, token) in syntax.tokens.iter().enumerate() {
             assert_eq!(token.id, i + 1);
             assert_eq!(token.name, format!("_{}", i + 1));
@@ -279,9 +290,15 @@ pub mod tests {
 
     #[test]
     fn new_syntax_empty() {
-        let syntax = Syntax::new(SYNTAX_NAME.to_string(), Vec::new()).unwrap();
+        let syntax = build_empty_syntax();
         assert_eq!(syntax.name, SYNTAX_NAME);
-        assert_eq!(syntax.tokens.len(), 0);
+        assert_eq!(syntax.tokens.len(), 1);
+
+        let token = &syntax.tokens[0];
+        assert_eq!(token.id, 1);
+        assert_eq!(token.name, "_1");
+        assert_eq!(token.pattern, Syntax::EMPTY_REGEX);
+        assert_eq!(token.color, Color::ZERO);
     }
 
     #[test]
@@ -293,6 +310,10 @@ pub mod tests {
 
     pub fn build_syntax() -> Syntax {
         Syntax::new(SYNTAX_NAME.to_string(), build_tokens()).unwrap()
+    }
+
+    pub fn build_empty_syntax() -> Syntax {
+        Syntax::new(SYNTAX_NAME.to_string(), Vec::new()).unwrap()
     }
 
     fn build_tokens() -> Vec<(String, Color)> {

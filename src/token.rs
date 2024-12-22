@@ -272,7 +272,7 @@ impl Tokenizer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::syntax::tests::build_syntax;
+    use crate::syntax::tests::{build_empty_syntax, build_syntax};
 
     const TOKENS: [(&str, Color); 3] = [
         (r#"-?\d+(?:\.\d+)?(?:[eE]-?\d+)?"#, Color::new(1, 1)),
@@ -330,6 +330,17 @@ mod tests {
         assert_eq!(tz.spans.len(), 1);
         assert_eq!(tz.spans[0].id, 0);
         assert_eq!(tz.spans[0].len, 0);
+    }
+
+    #[test]
+    fn tokenize_buffer_no_tokens() {
+        let mut tz = Tokenizer::new(build_empty_syntax());
+        let buf = build_buffer();
+        tz.tokenize(&buf);
+
+        assert_eq!(tz.spans.len(), 1);
+        assert_eq!(tz.spans[0].id, 0);
+        assert_eq!(tz.spans[0].len, buf.size());
     }
 
     #[test]
