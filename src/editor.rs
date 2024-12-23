@@ -1102,7 +1102,12 @@ impl Editor {
             }
 
             // todo
-            // - update tokenizer
+            // - should we keep cur_syntax similar to cur_pos?
+            let cursor = self
+                .tokenizer
+                .borrow()
+                .find(self.syntax_cursor, self.cur_pos);
+            self.tokenizer.borrow_mut().insert(cursor, text.len());
 
             // Update current line since insertion will have changed critical
             // information for navigation. New cursor location follows inserted text,
