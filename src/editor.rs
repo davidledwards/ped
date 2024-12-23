@@ -6,10 +6,12 @@
 
 use crate::buffer::{Buffer, BufferRef};
 use crate::canvas::{Canvas, CanvasRef};
-use crate::config::{Configuration, ConfigurationRef};
+use crate::config::ConfigurationRef;
 use crate::grid::Cell;
 use crate::size::{Point, Size};
+use crate::syntax::Syntax;
 use crate::sys;
+use crate::token::{Cursor, Tokenizer, TokenizerRef};
 use crate::window::{Banner, BannerRef, Window, WindowRef};
 use std::cell::{Ref, RefCell, RefMut};
 use std::cmp;
@@ -21,6 +23,9 @@ use std::time::SystemTime;
 /// An editing controller with an underlying [`Buffer`] and an attachable
 /// [`Window`].
 pub struct Editor {
+    /// Global configuration.
+    config: ConfigurationRef,
+
     /// Indicates that the editor is *persistent* as opposed to *transient*.
     persistent: bool,
 
@@ -42,6 +47,13 @@ pub struct Editor {
     /// A stack containing changes to the buffer that can be *redone*.
     redo: Vec<Change>,
 
+    /// Tokenizes the buffer for syntax coloring.
+    tokenizer: TokenizerRef,
+
+    /// A tokenization cursor that is always pointing to the top-left position on the
+    /// display.
+    syntax_cursor: Cursor,
+
     /// An indication that unsaved changes have been made to the buffer.
     dirty: bool,
 
@@ -62,9 +74,6 @@ pub struct Editor {
 
     /// An optional mark used when selecting text.
     mark: Option<Mark>,
-
-    /// Configuration that applies to the window.
-    config: ConfigurationRef,
 
     /// Canvas associated with the window.
     canvas: CanvasRef,
@@ -199,6 +208,8 @@ struct Render {
     col: u32,
     line: u32,
     line_wrapped: bool,
+    tokenizer: TokenizerRef,
+    syntax_cursor: Cursor,
 }
 
 impl Change {
@@ -369,16 +380,38 @@ impl Draw {
         }
     }
 
+    /// Formats `c` using the margin color.
     #[inline]
-    fn as_line(&self, c: char) -> Cell {
+    fn as_margin(&self, c: char) -> Cell {
         Cell::new(c, self.config.colors.line)
     }
 
+    /// Formats ` ` (space) using the text color.
     #[inline]
-    fn as_blank(&self, c: char) -> Cell {
-        Cell::new(c, self.config.colors.text)
+    fn as_blank(&self) -> Cell {
+        Cell::new(' ', self.config.colors.text)
     }
 
+    /// Formats `c` using a color depending on the current rendering context.
+    fn as_text(&self, c: char, render: &Render) -> Cell {
+        let color = if self.select_span.contains(&render.pos) {
+            self.config.colors.select
+        } else if let Some(color) = render.syntax_cursor.color() {
+            color
+        } else if self.config.settings.show_spotlight && render.row == self.cursor.row {
+            self.config.colors.spotlight
+        } else {
+            if c == '\n' && self.config.settings.show_eol {
+                self.config.colors.eol
+            } else {
+                self.config.colors.text
+            }
+        };
+        Cell::new(self.convert_char(c), color)
+    }
+
+    /// Converts `c`, if `\n`, to its displayable form, otherwise `c` is returned
+    /// unchanged.
     #[inline]
     fn convert_char(&self, c: char) -> char {
         if c == '\n' {
@@ -391,21 +424,6 @@ impl Draw {
             c
         }
     }
-
-    fn as_text(&self, c: char, render: &Render) -> Cell {
-        let color = if self.select_span.contains(&render.pos) {
-            self.config.colors.select
-        } else if self.config.settings.show_spotlight && render.row == self.cursor.row {
-            self.config.colors.spotlight
-        } else {
-            if c == '\n' && self.config.settings.show_eol {
-                self.config.colors.eol
-            } else {
-                self.config.colors.text
-            }
-        };
-        Cell::new(self.convert_char(c), color)
-    }
 }
 
 impl Render {
@@ -417,40 +435,51 @@ impl Render {
             col: 0,
             line: editor.top_line.line + 1,
             line_wrapped: false,
+            tokenizer: editor.tokenizer.clone(),
+            syntax_cursor: editor.syntax_cursor,
         }
     }
 
     /// Returns a new rendering context representing a transition to the next column.
-    fn next_col(&self) -> Render {
+    fn next_col(self) -> Render {
         Render {
             pos: self.pos + 1,
             col: self.col + 1,
-            ..*self
+            syntax_cursor: self.syntax_forward(1),
+            ..self
         }
     }
 
     /// Returns a new rendering context representing a transition to the next row,
     /// indicating that the current line wraps.
-    fn next_row(&self) -> Render {
+    fn next_row(self) -> Render {
         Render {
             pos: self.pos + 1,
             row: self.row + 1,
             col: 0,
             line_wrapped: true,
-            ..*self
+            syntax_cursor: self.syntax_forward(1),
+            ..self
         }
     }
 
     /// Returns a new rendering context representing a transition to the next line,
     /// which is also the next row.
-    fn next_line(&self) -> Render {
+    fn next_line(self) -> Render {
         Render {
             pos: self.pos + 1,
             row: self.row + 1,
             col: 0,
             line: self.line + 1,
             line_wrapped: false,
+            syntax_cursor: self.syntax_forward(1),
+            ..self
         }
+    }
+
+    /// Returns a new syntax cursor moved forward by `n` characters.
+    fn syntax_forward(&self, n: usize) -> Cursor {
+        self.tokenizer.borrow().forward(self.syntax_cursor, n)
     }
 }
 
@@ -464,36 +493,62 @@ impl Editor {
     /// Creates a *persistent* editor with `path` and an optional `timestamp`.
     ///
     /// If `buffer` is not specified, then an empty buffer is created.
-    pub fn persistent(path: &str, timestamp: Option<SystemTime>, buffer: Option<Buffer>) -> Editor {
+    pub fn persistent(
+        config: ConfigurationRef,
+        path: &str,
+        timestamp: Option<SystemTime>,
+        buffer: Option<Buffer>,
+    ) -> Editor {
         let buffer = buffer.unwrap_or_else(|| Buffer::new()).to_ref();
-        Self::new(true, path, timestamp, buffer)
+        Self::new(config, true, path, timestamp, buffer)
     }
 
     /// Creates a *transient* editor with `name`.
     ///
     /// If `buffer` is not specified, then an empty buffer is created.
-    pub fn transient(name: &str, buffer: Option<Buffer>) -> Editor {
+    pub fn transient(config: ConfigurationRef, name: &str, buffer: Option<Buffer>) -> Editor {
         let buffer = buffer.unwrap_or_else(|| Buffer::new()).to_ref();
-        Self::new(false, name, None, buffer)
+        Self::new(config, false, name, None, buffer)
     }
 
     /// Creates a new editor.
     ///
     /// Prefer to use [`Editor::persistent`] and [`Editor::transient`].
     fn new(
+        config: ConfigurationRef,
         persistent: bool,
         path: &str,
         timestamp: Option<SystemTime>,
         buffer: BufferRef,
     ) -> Editor {
         let cur_pos = buffer.borrow().get_pos();
+
+        // Constructs syntax configuration based on type of buffer and file
+        // extension, if applicable.
+        let syntax = if persistent {
+            config
+                .registry
+                .find_for(path)
+                .map(|syntax| syntax.clone())
+                .unwrap_or_else(|| Syntax::default())
+        } else {
+            Syntax::default()
+        };
+
+        // Tokenize buffer.
+        let mut tokenizer = Tokenizer::new(syntax);
+        let syntax_cursor = tokenizer.tokenize(&buffer.borrow());
+
         Editor {
+            config,
             persistent,
             path: path.to_string(),
             timestamp,
             buffer,
             undo: Vec::new(),
             redo: Vec::new(),
+            tokenizer: tokenizer.to_ref(),
+            syntax_cursor,
             dirty: false,
             cur_pos,
             top_line: Line::default(),
@@ -501,7 +556,6 @@ impl Editor {
             snap_col: None,
             cursor: Point::ORIGIN,
             mark: None,
-            config: Configuration::default().to_ref(),
             canvas: Canvas::zero().to_ref(),
             banner: Banner::none().to_ref(),
             rows: 0,
@@ -536,7 +590,7 @@ impl Editor {
     pub fn clone_persistent(&self, path: &str, timestamp: Option<SystemTime>) -> Editor {
         let mut buffer = self.buffer().clone();
         buffer.set_pos(self.cur_pos);
-        let mut editor = Self::persistent(path, timestamp, Some(buffer));
+        let mut editor = Self::persistent(self.config.clone(), path, timestamp, Some(buffer));
         editor.cursor = self.cursor;
         editor
     }
@@ -650,7 +704,6 @@ impl Editor {
     /// Attaches the `window` to this editor.
     pub fn attach(&mut self, window: WindowRef, align: Align) {
         let is_zombie = window.borrow().is_zombie();
-        self.config = window.borrow().config().clone();
         self.canvas = window.borrow().canvas().clone();
         self.banner = window.borrow().banner().clone();
 
@@ -693,7 +746,15 @@ impl Editor {
         let row = self.set_top_line(try_row);
         let col = self.cur_line.col_of(self.cur_pos);
         self.snap_col = None;
+        self.align_syntax();
         self.cursor = Point::new(row, col);
+    }
+
+    fn align_syntax(&mut self) {
+        self.syntax_cursor = self
+            .tokenizer
+            .borrow()
+            .find(self.syntax_cursor, self.top_line.row_pos);
     }
 
     pub fn draw(&mut self) {
@@ -813,6 +874,7 @@ impl Editor {
             self.snap_col = Some(try_col);
             let col = self.cur_line.snap_col(try_col, self.cols);
             self.cur_pos = self.cur_line.pos_of(col);
+            self.align_syntax();
             self.cursor = Point::new(row, col);
         }
     }
@@ -845,6 +907,7 @@ impl Editor {
             self.snap_col = Some(try_col);
             let col = self.cur_line.snap_col(try_col, self.cols);
             self.cur_pos = self.cur_line.pos_of(col);
+            self.align_syntax();
             self.cursor = Point::new(row, col);
         }
     }
@@ -949,6 +1012,7 @@ impl Editor {
         self.cur_pos = pos;
         let col = self.cur_line.col_of(self.cur_pos);
         self.snap_col = None;
+        self.align_syntax();
         self.cursor = Point::new(row, col);
     }
 
@@ -971,6 +1035,7 @@ impl Editor {
                 // Cursor still visible on display.
                 (self.cursor.row - rows, self.cursor.col)
             };
+            self.align_syntax();
             self.cursor = Point::new(row, col);
         }
     }
@@ -995,6 +1060,7 @@ impl Editor {
                 self.cur_pos = self.cur_line.pos_of(col);
                 (self.rows - 1 as u32, col)
             };
+            self.align_syntax();
             self.cursor = Point::new(row, col);
         }
     }
@@ -1035,6 +1101,9 @@ impl Editor {
                 self.log(Change::Insert(self.cur_pos, text.to_vec()));
             }
 
+            // todo
+            // - update tokenizer
+
             // Update current line since insertion will have changed critical
             // information for navigation. New cursor location follows inserted text,
             // so need to find new current line. Top line must also be updated even if
@@ -1052,6 +1121,7 @@ impl Editor {
             self.cur_pos = cur_pos;
             let col = self.cur_line.col_of(self.cur_pos);
             self.snap_col = None;
+            self.align_syntax();
             self.cursor = Point::new(row, col);
             self.dirty = true;
         }
@@ -1182,6 +1252,9 @@ impl Editor {
                 }
             }
 
+            // todo
+            // - update tokenizer
+
             // Removal of text requires current and top lines to be updated since may
             // have changed.
             self.cur_line = self.update_line(&self.cur_line);
@@ -1189,6 +1262,7 @@ impl Editor {
             self.cur_pos = from_pos;
             let col = self.cur_line.col_of(self.cur_pos);
             self.snap_col = None;
+            self.align_syntax();
             self.cursor = Point::new(row, col);
             self.dirty = true;
             text
@@ -1623,9 +1697,9 @@ impl Editor {
             .buffer
             .borrow()
             .forward(render.pos)
-            .try_fold(render, |render, c| self.render_cell(&draw, &render, c));
+            .try_fold(render, |render, c| self.render_cell(&draw, render, c));
         if let Some(render) = rest {
-            self.render_rest(&draw, &render);
+            self.render_rest(&draw, render);
         }
         self.canvas.borrow_mut().draw();
 
@@ -1639,16 +1713,16 @@ impl Editor {
 
     /// Renders an individual cell for the character `c`, returning the next rendering
     /// context or `None` if rendering has finished.
-    fn render_cell(&self, draw: &Draw, render: &Render, c: char) -> Option<Render> {
-        self.render_margin(draw, render);
+    fn render_cell(&self, draw: &Draw, render: Render, c: char) -> Option<Render> {
+        self.render_margin(draw, &render);
         let mut canvas = self.canvas.borrow_mut();
         let (row, col) = (render.row, render.col + self.margin_cols);
         let render = if c == '\n' {
-            canvas.set_cell(row, col, draw.as_text(c, render));
-            canvas.fill_row_from(row, col + 1, draw.as_text(' ', render));
+            canvas.set_cell(row, col, draw.as_text(c, &render));
+            canvas.fill_row_from(row, col + 1, draw.as_text(' ', &render));
             render.next_line()
         } else {
-            canvas.set_cell(row, col, draw.as_text(c, render));
+            canvas.set_cell(row, col, draw.as_text(c, &render));
             if render.col + 1 < self.cols {
                 render.next_col()
             } else {
@@ -1666,20 +1740,20 @@ impl Editor {
     ///
     /// This function gets invoked when the end of buffer is reached before the entire
     /// canvas is rendered.
-    fn render_rest(&self, draw: &Draw, render: &Render) {
-        self.render_margin(draw, render);
+    fn render_rest(&self, draw: &Draw, render: Render) {
+        self.render_margin(draw, &render);
         let mut canvas = self.canvas.borrow_mut();
 
         // Blank out rest of existing row.
         let (row, col) = (render.row, render.col + self.margin_cols);
-        canvas.fill_row_from(row, col, draw.as_text(' ', render));
+        canvas.fill_row_from(row, col, draw.as_text(' ', &render));
 
         // Blank out remaining rows.
         for row in (render.row + 1)..self.rows {
             if self.margin_cols > 0 {
-                canvas.fill_row_range(row, 0, self.margin_cols, draw.as_line(' '));
+                canvas.fill_row_range(row, 0, self.margin_cols, draw.as_margin(' '));
             }
-            canvas.fill_row_from(row, self.margin_cols, draw.as_blank(' '));
+            canvas.fill_row_from(row, self.margin_cols, draw.as_blank());
         }
     }
 
@@ -1689,7 +1763,7 @@ impl Editor {
         if render.col == 0 && self.margin_cols > 0 {
             let mut canvas = self.canvas.borrow_mut();
             if render.line_wrapped {
-                canvas.fill_row_range(render.row, 0, self.margin_cols, draw.as_line(' '));
+                canvas.fill_row_range(render.row, 0, self.margin_cols, draw.as_margin(' '));
             } else if render.line < Self::LINE_LIMIT {
                 let s = format!(
                     "{:>cols$} ",
@@ -1697,11 +1771,11 @@ impl Editor {
                     cols = Self::MARGIN_COLS as usize - 1
                 );
                 for (col, c) in s.char_indices() {
-                    canvas.set_cell(render.row, col as u32, draw.as_line(c));
+                    canvas.set_cell(render.row, col as u32, draw.as_margin(c));
                 }
             } else {
-                canvas.fill_row_range(render.row, 0, self.margin_cols - 1, draw.as_line('-'));
-                canvas.set_cell(render.row, self.margin_cols, draw.as_line(' '));
+                canvas.fill_row_range(render.row, 0, self.margin_cols - 1, draw.as_margin('-'));
+                canvas.set_cell(render.row, self.margin_cols, draw.as_margin(' '));
             }
         }
     }

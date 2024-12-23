@@ -10,6 +10,7 @@
 //! at runtime.
 
 use crate::buffer::Buffer;
+use crate::config::ConfigurationRef;
 use crate::editor::{Align, Editor, EditorRef};
 use crate::env::{Environment, Focus};
 use crate::error::{Error, Result};
@@ -206,30 +207,35 @@ impl Inquirer for QuitOverride {
 
 /// Operation: `help`
 fn help(env: &mut Environment) -> Option<Action> {
-    toggle_help(env, help::HELP_EDITOR_NAME, || help::help_editor())
+    toggle_help(env, help::HELP_EDITOR_NAME, |config| {
+        help::help_editor(config)
+    })
 }
 
 /// Operation: `help-keys`
 fn help_keys(env: &mut Environment) -> Option<Action> {
-    toggle_help(env, help::KEYS_EDITOR_NAME, || help::keys_editor())
+    toggle_help(env, help::KEYS_EDITOR_NAME, |config| {
+        help::keys_editor(config)
+    })
 }
 
 /// Operation: `help-ops`
 fn help_ops(env: &mut Environment) -> Option<Action> {
-    toggle_help(env, help::OPS_EDITOR_NAME, || help::ops_editor())
+    toggle_help(env, help::OPS_EDITOR_NAME, |config| {
+        help::ops_editor(config)
+    })
 }
 
 /// Operation: `help-bindings`
 fn help_bindings(env: &mut Environment) -> Option<Action> {
-    let config = env.workspace().config().clone();
-    toggle_help(env, help::BINDINGS_EDITOR_NAME, || {
-        help::bindings_editor(config.bindings.bindings())
+    toggle_help(env, help::BINDINGS_EDITOR_NAME, |config| {
+        help::bindings_editor(config)
     })
 }
 
 fn toggle_help<F>(env: &mut Environment, editor_name: &str, editor_fn: F) -> Option<Action>
 where
-    F: Fn() -> EditorRef,
+    F: Fn(ConfigurationRef) -> EditorRef,
 {
     if let Some(editor_id) = env.find_editor_id(editor_name) {
         if let Some(view_id) = env.find_editor_view_id(editor_id) {
@@ -244,7 +250,10 @@ where
             }
         }
     } else {
-        if let Some((view_id, _)) = env.open_editor(editor_fn(), Placement::Bottom, Align::Auto) {
+        let config = env.workspace().config().clone();
+        if let Some((view_id, _)) =
+            env.open_editor(editor_fn(config), Placement::Bottom, Align::Auto)
+        {
             env.set_active(Focus::To(view_id));
             None
         } else {
@@ -926,7 +935,8 @@ impl Open {
 
     fn open(&mut self, env: &mut Environment, path: &str) -> Option<Action> {
         let path = sys::canonicalize(&self.dir.join(path)).as_string();
-        match open_editor(&path) {
+        let config = env.workspace().config().clone();
+        match open_editor(config, &path) {
             Ok(editor) => {
                 if let Some(place) = self.place {
                     if let Some((view_id, _)) = env.open_editor(editor, place, Align::Auto) {
@@ -1555,7 +1565,7 @@ pub fn set_focus(env: &mut Environment, p: Point) {
 }
 
 /// Reads the file at `path` and returns a new editor with the persistent storage type.
-pub fn open_editor(path: &str) -> Result<EditorRef> {
+pub fn open_editor(config: ConfigurationRef, path: &str) -> Result<EditorRef> {
     // Try reading file contents into buffer.
     let mut buffer = Buffer::new();
     let time = match io::read_file(path, &mut buffer) {
@@ -1577,7 +1587,7 @@ pub fn open_editor(path: &str) -> Result<EditorRef> {
 
     // Create persistent buffer with position set at top.
     buffer.set_pos(0);
-    let editor = Editor::persistent(path, time, Some(buffer)).to_ref();
+    let editor = Editor::persistent(config, path, time, Some(buffer)).to_ref();
     Ok(editor)
 }
 

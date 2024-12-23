@@ -5,6 +5,7 @@
 #![allow(unused_must_use)]
 
 use crate::buffer::Buffer;
+use crate::config::ConfigurationRef;
 use crate::editor::{Editor, EditorRef};
 use crate::key::{Key, KEY_MAPPINGS};
 use crate::op::OP_MAPPINGS;
@@ -18,8 +19,8 @@ pub const OPS_EDITOR_NAME: &str = "@operations";
 pub const BINDINGS_EDITOR_NAME: &str = "@bindings";
 
 /// Returns a transient editor, named `@help`, containing general help content.
-pub fn help_editor() -> EditorRef {
-    Editor::transient(HELP_EDITOR_NAME, Some(help_buffer())).to_ref()
+pub fn help_editor(config: ConfigurationRef) -> EditorRef {
+    Editor::transient(config, HELP_EDITOR_NAME, Some(help_buffer())).to_ref()
 }
 
 fn help_buffer() -> Buffer {
@@ -34,8 +35,8 @@ fn help_buffer() -> Buffer {
 }
 
 /// Returns a transient editor, named `@keys`, containing a list of available keys.
-pub fn keys_editor() -> EditorRef {
-    Editor::transient(KEYS_EDITOR_NAME, Some(keys_buffer())).to_ref()
+pub fn keys_editor(config: ConfigurationRef) -> EditorRef {
+    Editor::transient(config, KEYS_EDITOR_NAME, Some(keys_buffer())).to_ref()
 }
 
 /// Returns a formatted list of available keys.
@@ -72,8 +73,8 @@ fn prepare_keys() -> Vec<String> {
 
 /// Returns a transient editor, named `@operations`, containing a list of available
 /// editing operations.
-pub fn ops_editor() -> EditorRef {
-    Editor::transient(OPS_EDITOR_NAME, Some(ops_buffer())).to_ref()
+pub fn ops_editor(config: ConfigurationRef) -> EditorRef {
+    Editor::transient(config, OPS_EDITOR_NAME, Some(ops_buffer())).to_ref()
 }
 
 /// Returns a formatted list of available editing operations.
@@ -109,8 +110,9 @@ fn prepare_ops() -> Vec<String> {
 }
 
 /// Returns a transient editor, named `@bindings`, containing a list of key bindings.
-pub fn bindings_editor(bindings: &HashMap<Vec<Key>, String>) -> EditorRef {
-    Editor::transient(BINDINGS_EDITOR_NAME, Some(bindings_buffer(bindings))).to_ref()
+pub fn bindings_editor(config: ConfigurationRef) -> EditorRef {
+    let buffer = bindings_buffer(config.bindings.bindings());
+    Editor::transient(config, BINDINGS_EDITOR_NAME, Some(buffer)).to_ref()
 }
 
 /// Returns a formatted list of key bindings.

@@ -129,7 +129,6 @@ impl Banner {
 
 pub struct Window {
     size: Size,
-    config: ConfigurationRef,
     canvas: CanvasRef,
     banner: BannerRef,
 }
@@ -149,7 +148,6 @@ impl Window {
 
         let mut this = Window {
             size,
-            config,
             canvas: canvas.to_ref(),
             banner: banner.to_ref(),
         };
@@ -160,7 +158,6 @@ impl Window {
     pub fn zombie() -> Window {
         Window {
             size: Size::ZERO,
-            config: Configuration::default().to_ref(),
             canvas: Canvas::zero().to_ref(),
             banner: Banner::none().to_ref(),
         }
@@ -172,10 +169,6 @@ impl Window {
 
     pub fn to_ref(self) -> WindowRef {
         Rc::new(RefCell::new(self))
-    }
-
-    pub fn config(&self) -> &ConfigurationRef {
-        &self.config
     }
 
     pub fn canvas(&self) -> &CanvasRef {

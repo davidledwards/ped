@@ -50,11 +50,17 @@ ped foo.rs bar.rs
 `ped` will try to locate and read a configuration file at the following paths in order of precedence.
 
 - `$HOME/.pedrc`
+- `$HOME/.ped/pedrc`
 - `$HOME/.config/ped/pedrc`
 
 Alternatively, a configuration file can be specified on the command line using the `--config` option.
 
 See [.pedrc](.pedrc) for a detailed explanation of configuration settings. In the absence of a configuration file, `ped` will rely on default values.
+
+`ped` will also try to locate syntax configuration files in the following directories in order of precedence.
+
+- `$HOME/.ped/syntax`
+- `$HOME/.config/ped/syntax`
 
 ## Tour
 

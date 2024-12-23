@@ -23,6 +23,7 @@ use crate::bind::Bindings;
 use crate::color::Color;
 use crate::error::{Error, Result};
 use crate::opt::Options;
+use crate::syntax::Registry;
 use crate::sys::{self, AsString};
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -41,6 +42,9 @@ pub struct Configuration {
 
     /// A map of key sequences to editing operations.
     pub bindings: Bindings,
+
+    /// A registry of syntax configurations.
+    pub registry: Registry,
 }
 
 pub type ConfigurationRef = Rc<Configuration>;
@@ -328,6 +332,7 @@ impl Default for Configuration {
             settings: Settings::default(),
             colors: Colors::default(),
             bindings: Self::init_bindings(),
+            registry: Registry::default(),
         }
     }
 }

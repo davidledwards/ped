@@ -48,6 +48,7 @@ use crate::control::Controller;
 use crate::error::Result;
 use crate::key::Keyboard;
 use crate::opt::Options;
+use crate::syntax::Registry;
 use crate::workspace::Workspace;
 use std::ops::Drop;
 use std::process::ExitCode;
@@ -109,6 +110,13 @@ fn run_opts(opts: &Options) -> Result<()> {
         Configuration::load()?
     };
     config.apply_opts(opts);
+
+    // Load optional syntax configurations via registry and update configuration.
+    config.registry = if let Some(ref syntax_dir) = opts.syntax_dir {
+        Registry::load_dir(syntax_dir)?
+    } else {
+        Registry::load()?
+    };
 
     if opts.print_bindings {
         print!("{}", help::bindings_content(config.bindings.bindings()));

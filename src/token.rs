@@ -4,8 +4,10 @@ use crate::buffer::Buffer;
 use crate::color::Color;
 use crate::etc;
 use crate::syntax::Syntax;
+use std::cell::RefCell;
 use std::cmp;
 use std::ops::{ControlFlow, Range};
+use std::rc::Rc;
 
 /// A means of tokenizing the contents of a [`Buffer`].
 pub struct Tokenizer {
@@ -19,12 +21,12 @@ pub struct Tokenizer {
     spans: Vec<Span>,
 }
 
-/// A cursor represents a position in the [`Buffer`] used during tokenization as well
-/// as the applicable token information.
-pub struct Cursor<'a> {
-    /// A reference to the tokenizer that produced this cursor.
-    tokenizer: &'a Tokenizer,
+pub type TokenizerRef = Rc<RefCell<Tokenizer>>;
 
+/// A cursor represents a position in the [`Buffer`] that was used during tokenization,
+/// and importantly, the applicable token information.
+#[derive(Copy, Clone)]
+pub struct Cursor {
     /// The buffer position associated with this cursor.
     pos: usize,
 
@@ -37,6 +39,7 @@ pub struct Cursor<'a> {
 
 /// A token is essentially a [`Span`] that is decorated with the starting and ending
 /// positions in the [`Buffer`] that was used during tokenization.
+#[derive(Copy, Clone)]
 struct Token {
     /// An index into [`Tokenizer::spans`].
     index: usize,
@@ -71,46 +74,12 @@ impl Token {
     }
 }
 
-impl<'a> Cursor<'a> {
+impl Cursor {
     /// Returns the applicable color at this cursor position or `None` if the cursor
     /// is contained inside a gap.
+    #[inline(always)]
     pub fn color(&self) -> Option<Color> {
         self.color
-    }
-
-    /// Moves the cursor forward by `n` characters, though not to extend beyond
-    /// [`Tokenizer::chars`].
-    pub fn forward(self, n: usize) -> Cursor<'a> {
-        let pos = self.pos + n;
-        self.find(pos)
-    }
-
-    /// Moves the cursor backward by `n` characters, though not to extend beyond `0`.
-    pub fn backward(self, n: usize) -> Cursor<'a> {
-        let pos = self.pos.saturating_sub(n);
-        self.find(pos)
-    }
-
-    /// Returns the cursor at position `pos`, though not to extend beyond
-    /// [`Tokenizer::chars`].
-    pub fn find(self, pos: usize) -> Cursor<'a> {
-        let pos = cmp::min(pos, self.tokenizer.chars);
-        if self.token.contains(pos) {
-            Cursor { pos, ..self }
-        } else {
-            let token = if pos < self.pos {
-                self.tokenizer.find_backward(self.token, pos)
-            } else {
-                self.tokenizer.find_forward(self.token, pos)
-            };
-            let color = self.tokenizer.color(token.index);
-            Cursor {
-                pos,
-                token,
-                color,
-                ..self
-            }
-        }
     }
 }
 
@@ -124,12 +93,13 @@ impl Tokenizer {
         }
     }
 
-    /// Tokenizes `buffer`.
-    ///
-    /// Even though lifetimes restrict the use of prior [cursors](Cursor), it is
-    /// important to remember that any information extracted from prior cursors should
-    /// be considered invalid.
-    pub fn tokenize(&mut self, buffer: &Buffer) {
+    /// Turns the tokenizer into a [`TokenizerRef`].
+    pub fn to_ref(self) -> TokenizerRef {
+        Rc::new(RefCell::new(self))
+    }
+
+    /// Tokenizes `buffer` and returns a cursor at position `0`.
+    pub fn tokenize(&mut self, buffer: &Buffer) -> Cursor {
         self.spans.clear();
         self.chars = buffer.size();
         if self.chars > 0 {
@@ -172,11 +142,21 @@ impl Tokenizer {
             // ensure other functions work correctly.
             self.spans.push(Span::gap(0));
         }
+
+        // Return cursor at position 0.
+        Cursor {
+            pos: 0,
+            token: Token {
+                index: 0,
+                start_pos: 0,
+                end_pos: self.spans[0].len,
+            },
+            color: self.color(0),
+        }
     }
 
-    /// Returns the cursor at position `pos`, though not to extend beyond
-    /// [`Tokenizer::chars`].
-    pub fn find(&self, pos: usize) -> Cursor<'_> {
+    /// Returns the cursor at position `pos`.
+    pub fn _get(&self, pos: usize) -> Cursor {
         let pos = cmp::min(pos, self.chars);
         let token = self.find_forward(
             Token {
@@ -187,12 +167,41 @@ impl Tokenizer {
             pos,
         );
         let color = self.color(token.index);
-        Cursor {
-            tokenizer: &self,
-            pos,
-            token,
-            color,
+        Cursor { pos, token, color }
+    }
+
+    /// Finds the cursor at position `pos` relative to `cursor`.
+    pub fn find(&self, cursor: Cursor, pos: usize) -> Cursor {
+        let pos = cmp::min(pos, self.chars);
+        if cursor.token.contains(pos) {
+            Cursor { pos, ..cursor }
+        } else {
+            let token = if pos < cursor.pos {
+                self.find_backward(cursor.token, pos)
+            } else {
+                self.find_forward(cursor.token, pos)
+            };
+            let color = self.color(token.index);
+            Cursor {
+                pos,
+                token,
+                color,
+                ..cursor
+            }
         }
+    }
+
+    /// Finds the cursor that is `n` characters after `cursor`.
+    pub fn forward(&self, cursor: Cursor, n: usize) -> Cursor {
+        let pos = cursor.pos + n;
+        self.find(cursor, pos)
+    }
+
+    /// Finds the cursor that is `n` characters before `cursor`.
+    #[allow(dead_code)]
+    pub fn backward(&self, cursor: Cursor, n: usize) -> Cursor {
+        let pos = cursor.pos.saturating_sub(n);
+        self.find(cursor, pos)
     }
 
     /// Returns the token applicable to `pos` relative to the `from` token.
@@ -243,21 +252,6 @@ impl Tokenizer {
         match result {
             ControlFlow::Break(token) => token,
             ControlFlow::Continue(token) => token,
-        }
-    }
-
-    pub fn dump(&self, buffer: &Buffer) {
-        let mut pos = 0;
-
-        for (i, span) in self.spans.iter().enumerate() {
-            let Span { id, len } = span;
-            let text = if *id == 0 {
-                String::from("")
-            } else {
-                buffer.copy(pos, pos + len).iter().collect::<String>()
-            };
-            eprintln!("[{i}]: <token {id}>: pos={pos}, len={len}, text={text}");
-            pos += len;
         }
     }
 
@@ -350,11 +344,10 @@ mod tests {
 
         let mut tz = build_tokenizer();
         let buf = build_buffer();
-        tz.tokenize(&buf);
+        let mut cursor = tz.tokenize(&buf);
 
-        let mut cursor = tz.find(0);
         for p in POS_TOKENS {
-            cursor = cursor.find(p.0);
+            cursor = tz.find(cursor, p.0);
 
             // Verify that (pos, index) values match.
             assert_eq!(cursor.pos, p.0);
@@ -380,9 +373,8 @@ mod tests {
     fn cursor_forward() {
         let mut tz = build_tokenizer();
         let buf = build_buffer();
-        tz.tokenize(&buf);
+        let mut cursor = tz.tokenize(&buf);
 
-        let mut cursor = tz.find(0);
         while cursor.pos < tz.chars {
             // Verify that token information matches what exists in spans.
             let (id, len, _) = SPANS[cursor.token.index];
@@ -398,7 +390,7 @@ mod tests {
                 }
             );
 
-            cursor = cursor.forward(1);
+            cursor = tz.forward(cursor, 1);
         }
     }
 
@@ -406,9 +398,8 @@ mod tests {
     fn cursor_backward() {
         let mut tz = build_tokenizer();
         let buf = build_buffer();
-        tz.tokenize(&buf);
+        let mut cursor = tz.tokenize(&buf);
 
-        let mut cursor = tz.find(tz.chars);
         while cursor.pos > 0 {
             // Verify that token information matches what exists in spans.
             let (id, len, _) = SPANS[cursor.token.index];
@@ -431,7 +422,7 @@ mod tests {
                 }
             );
 
-            cursor = cursor.backward(1);
+            cursor = tz.backward(cursor, 1);
         }
     }
 

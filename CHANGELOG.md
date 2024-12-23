@@ -2,6 +2,13 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
+## [0.5.0](https://github.com/davidledwards/ped/tree/v0.5.0) - `2024-12-??`
+
+### Added
+
+- Syntax highlighting
+- New location to search for configuration file
+
 ## [0.4.0](https://github.com/davidledwards/ped/tree/v0.4.0) - `2024-12-11`
 
 ### Added

@@ -47,7 +47,10 @@ impl Environment {
         // Seed list of editors with builtins.
         let mut editor_map = EditorMap::new();
         for (id, name) in Self::BUILTIN_EDITORS {
-            editor_map.insert(id, Editor::transient(name, None).to_ref());
+            editor_map.insert(
+                id,
+                Editor::transient(workspace.borrow().config().clone(), name, None).to_ref(),
+            );
         }
         let editor_id_seq = editor_map.len() as u32;
 

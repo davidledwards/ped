@@ -85,6 +85,9 @@ struct ExternalSyntax {
 }
 
 impl Syntax {
+    /// Name of default syntax.
+    const DEFAULT_NAME: &str = "Default";
+
     /// A regular expression that never matches, which is used when no tokens are
     /// provided.
     const EMPTY_REGEX: &str = "^$a";
@@ -153,9 +156,16 @@ impl Syntax {
     }
 }
 
+impl Default for Syntax {
+    fn default() -> Syntax {
+        Syntax::new(Self::DEFAULT_NAME.to_string(), Vec::new())
+            .unwrap_or_else(|e| panic!("{}: syntax failed: {}", Self::DEFAULT_NAME, e))
+    }
+}
+
 impl Registry {
     /// A collection of directories to try loading syntax configurations.
-    const TRY_DIRS: [&str; 3] = ["projects/ped/syntax", ".ped/syntax", ".config/ped/syntax"];
+    const TRY_DIRS: [&str; 2] = [".ped/syntax", ".config/ped/syntax"];
 
     /// File extensions that identify candidate syntax configurations.
     const FILE_EXT: &str = "toml";
@@ -197,6 +207,14 @@ impl Registry {
         self.ext_map
             .get(ext)
             .and_then(|name| self.syntax_map.get(name))
+    }
+
+    /// Returns the syntax configuration matching the file extension for `path`, or
+    /// `None` if no match is found.
+    pub fn find_for<P: AsRef<Path>>(&self, path: P) -> Option<&Syntax> {
+        path.as_ref()
+            .extension()
+            .and_then(|ext| self.find(&ext.to_string_lossy()))
     }
 
     /// Creates a registry by enumerating and loading files from `dir`.

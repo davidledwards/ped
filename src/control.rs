@@ -16,10 +16,8 @@ use crate::input::{Directive, InputEditor};
 use crate::key::{Key, Keyboard, Shift, CTRL_G};
 use crate::op::{self, Action};
 use crate::size::Point;
-use crate::syntax::Registry;
 use crate::sys::{self, AsString};
 use crate::term;
-use crate::token::Tokenizer;
 use crate::user::Inquirer;
 use crate::workspace::{Placement, Workspace};
 use crate::{PACKAGE_NAME, PACKAGE_VERSION};
@@ -107,14 +105,7 @@ impl Controller {
         let view_id = self.env.get_active_view_id();
         for (i, path) in files.iter().enumerate() {
             let path = sys::canonicalize(sys::working_dir().join(path)).as_string();
-            let editor = op::open_editor(&path)?;
-            // --- hack ---
-            let registry = Registry::load()?;
-            let syntax = registry.find("rs").unwrap();
-            let mut t = Tokenizer::new(syntax.clone());
-            t.tokenize(&editor.borrow().buffer());
-            t.dump(&editor.borrow().buffer());
-            // --- hack ---
+            let editor = op::open_editor(self.config.clone(), &path)?;
             if i == 0 {
                 self.env.set_editor(editor, Align::Auto);
             } else {
