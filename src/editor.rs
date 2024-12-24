@@ -630,6 +630,16 @@ impl Editor {
         self.buffer.borrow_mut()
     }
 
+    #[inline]
+    fn tokenizer(&self) -> Ref<'_, Tokenizer> {
+        self.tokenizer.borrow()
+    }
+
+    #[inline]
+    fn tokenizer_mut(&self) -> RefMut<'_, Tokenizer> {
+        self.tokenizer.borrow_mut()
+    }
+
     pub fn is_dirty(&self) -> bool {
         self.dirty
     }
@@ -1101,13 +1111,11 @@ impl Editor {
                 self.log(Change::Insert(self.cur_pos, text.to_vec()));
             }
 
-            // todo
-            // - should we keep cur_syntax similar to cur_pos?
-            let cursor = self
-                .tokenizer
-                .borrow()
-                .find(self.syntax_cursor, self.cur_pos);
-            self.tokenizer.borrow_mut().insert(cursor, text.len());
+            // Update tokenizer with insertion range.
+            let cursor = self.tokenizer().find(self.syntax_cursor, self.cur_pos);
+            self.tokenizer_mut().insert(cursor, text.len());
+            let cursor = self.tokenizer_mut().tokenize(&self.buffer());
+            self.syntax_cursor = cursor;
 
             // Update current line since insertion will have changed critical
             // information for navigation. New cursor location follows inserted text,
@@ -1257,10 +1265,11 @@ impl Editor {
                 }
             }
 
-            // todo
-            // - update tokenizer
-            let cursor = self.tokenizer.borrow().find(self.syntax_cursor, from_pos);
-            self.tokenizer.borrow_mut().remove(cursor, text.len());
+            // Update tokenizer with removal range.
+            let cursor = self.tokenizer().find(self.syntax_cursor, from_pos);
+            self.tokenizer_mut().remove(cursor, text.len());
+            let cursor = self.tokenizer_mut().tokenize(&self.buffer());
+            self.syntax_cursor = cursor;
 
             // Removal of text requires current and top lines to be updated since may
             // have changed.
