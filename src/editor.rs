@@ -1259,6 +1259,8 @@ impl Editor {
 
             // todo
             // - update tokenizer
+            let cursor = self.tokenizer.borrow().find(self.syntax_cursor, from_pos);
+            self.tokenizer.borrow_mut().remove(cursor, text.len());
 
             // Removal of text requires current and top lines to be updated since may
             // have changed.

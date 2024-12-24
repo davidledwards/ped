@@ -25,7 +25,7 @@ pub type TokenizerRef = Rc<RefCell<Tokenizer>>;
 
 /// A cursor represents a position in the [`Buffer`] that was used during tokenization,
 /// and importantly, the applicable token information.
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct Cursor {
     /// The buffer position associated with this cursor.
     pos: usize,
@@ -39,7 +39,7 @@ pub struct Cursor {
 
 /// A token is essentially a [`Span`] that is decorated with the starting and ending
 /// positions in the [`Buffer`] that was used during tokenization.
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 struct Token {
     /// An index into [`Tokenizer::spans`].
     index: usize,
@@ -189,57 +189,6 @@ impl Tokenizer {
         self.find(cursor, pos)
     }
 
-    // fn dump(&self, label: &str) {
-    //     eprintln!("--- {label} ---");
-    //     for (i, span) in self.spans.iter().enumerate() {
-    //         eprintln!("{i} -> id={}, len={}", span.id, span.len);
-    //     }
-    // }
-
-    /// Inserts a span of `len` characters at the position of `cursor`, and returns
-    /// a new cursor at the same position.
-    pub fn insert(&mut self, cursor: Cursor, len: usize) -> Cursor {
-        if len > 0 {
-            self.chars += len;
-            let token = &cursor.token;
-            let index = if cursor.pos > token.start_pos {
-                // Insertion occurs after start position of token, so truncate existing
-                // span, add span representing insertion, and add final span to
-                // represent suffix of original span that was truncated.
-                self.spans[token.index].len = cursor.pos - token.start_pos;
-                self.spans.insert(token.index + 1, Span::gap(len));
-                self.spans.insert(
-                    token.index + 2,
-                    Span::token(self.spans[token.index].id, token.end_pos - cursor.pos),
-                );
-                token.index + 1
-            } else {
-                // Insertion occurs at start position of token, so simply add span
-                // representing insertion.
-                self.spans.insert(token.index, Span::gap(len));
-                token.index
-            };
-
-            // Resulting cursor points to token for newly inserted span.
-            Cursor {
-                pos: cursor.pos,
-                token: Token {
-                    index,
-                    start_pos: cursor.pos,
-                    end_pos: cursor.pos + len,
-                },
-                color: None,
-            }
-        } else {
-            cursor
-        }
-    }
-
-    pub fn remove(&mut self, cursor: Cursor, len: usize) -> Cursor {
-        // todo
-        cursor
-    }
-
     /// Returns the token applicable to `pos` relative to the `from` token.
     ///
     /// If `pos` does occur _after_ `from`, then this function will panic.
@@ -291,8 +240,116 @@ impl Tokenizer {
         }
     }
 
-    fn id(&self, token: &Token) -> usize {
-        self.spans[token.index].id
+    /// Inserts a new span of `len` characters at the position of `cursor`, and returns
+    /// a cursor at the same position.
+    pub fn insert(&mut self, cursor: Cursor, len: usize) -> Cursor {
+        if len > 0 {
+            let token = &cursor.token;
+
+            let index = if cursor.pos > token.start_pos {
+                // Insertion occurs after start position of token, so truncate existing
+                // span, add span representing insertion, and add final span to
+                // represent suffix of original span that was truncated.
+                self.spans[token.index].len = cursor.pos - token.start_pos;
+                self.spans.insert(token.index + 1, Span::gap(len));
+                self.spans.insert(
+                    token.index + 2,
+                    Span::token(self.spans[token.index].id, token.end_pos - cursor.pos),
+                );
+                token.index + 1
+            } else {
+                // Insertion occurs at start position of token, so simply add span
+                // representing insertion.
+                self.spans.insert(token.index, Span::gap(len));
+                token.index
+            };
+            self.chars += len;
+
+            // Resulting cursor points to token for newly inserted span.
+            Cursor {
+                pos: cursor.pos,
+                token: Token {
+                    index,
+                    start_pos: cursor.pos,
+                    end_pos: cursor.pos + len,
+                },
+                color: None,
+            }
+        } else {
+            cursor
+        }
+    }
+
+    /// Removes possibly many spans of `len` characters at the position of `cursor`,
+    /// and returns a cursor at the same position.
+    pub fn remove(&mut self, cursor: Cursor, len: usize) -> Cursor {
+        if len > 0 {
+            // Find cursor following removal of specified length, noting that actual
+            // length may be less if number of characters would extend beyond end.
+            let end_cursor = self.find(cursor, cursor.pos + len);
+            let len = end_cursor.pos - cursor.pos;
+            let token = &cursor.token;
+            let end_token = &end_cursor.token;
+
+            let (start_pos, index) = if token.index == end_token.index {
+                // Removal is confined to current token, so simply reduce length of
+                // existing span.
+                self.spans[token.index].len -= len;
+
+                // Start position and span index remain unchanged for token used in
+                // constructing resulting cursor.
+                (token.start_pos, token.index)
+            } else {
+                // Removal includes at least one span but possibly many. Evaluate
+                // starting and ending boundaries to trim and/or include their
+                // corresponding spans for removal.
+                let start_index = if cursor.pos > token.start_pos {
+                    // Truncate suffix portion of span, and since span still exists, it
+                    // cannot be removed, hence returning adjacent token index.
+                    self.spans[token.index].len -= cursor.pos - token.start_pos;
+                    token.index + 1
+                } else {
+                    // Entire span can be removed.
+                    token.index
+                };
+
+                let end_index = if end_cursor.pos < end_token.end_pos {
+                    // Truncate prefix portion of span, and since still exists, it
+                    // cannot be removed, hence returning previous token index.
+                    self.spans[end_token.index].len -= end_cursor.pos - end_token.start_pos;
+                    end_token.index - 1
+                } else {
+                    // Entire space can be removed.
+                    end_token.index
+                };
+
+                // Possibility exists for start index to be greater than end index under
+                // sole condition: when starting and ending positions exist in adjacent
+                // spans, so make sure this check is done to avoid panic!
+                if start_index <= end_index {
+                    self.spans.drain(start_index..=end_index);
+                }
+
+                // Because start token is either truncated or entirely removed, start
+                // position of resulting to token is always original cursor position.
+                (cursor.pos, start_index)
+            };
+            self.chars -= len;
+
+            // Resulting cursor points to either existing token that was truncated or
+            // following token that becomes adjacent after removal.
+            Cursor {
+                pos: cursor.pos,
+                token: Token {
+                    index,
+                    start_pos,
+                    end_pos: start_pos + self.spans[index].len,
+                },
+                color: self.color(index),
+            }
+        } else {
+            cursor
+        }
     }
 
     /// Returns the color associated with the span at `index` or `None` if the span
@@ -305,8 +362,6 @@ impl Tokenizer {
 
 #[cfg(test)]
 mod tests {
-    use libc::STA_CLK;
-
     use super::*;
     use crate::syntax::tests::{build_empty_syntax, build_syntax};
 
@@ -520,6 +575,121 @@ mod tests {
         assert_eq!(cursor.pos, pos);
         assert_eq!(cursor.token.start_pos, pos);
         assert_eq!(cursor.token.end_pos, pos + (len - (POS - START_POS)));
+        assert_eq!(cursor.color, color_of(id));
+    }
+
+    #[test]
+    fn remove_single_span() {
+        const POS: usize = 27;
+        const LEN: usize = 3;
+        const START_POS: usize = 24;
+
+        let mut tz = build_tokenizer();
+        let buf = build_buffer();
+        let cursor = tz.tokenize(&buf);
+        let chars = tz.chars;
+
+        let cursor = tz.find(cursor, POS);
+        let (id, len, _) = SPANS[cursor.token.index];
+        assert_eq!(cursor.pos, POS);
+        assert_eq!(cursor.token.start_pos, START_POS);
+
+        // Results in zero spans being removed.
+        let cursor = tz.remove(cursor, LEN);
+        assert_eq!(tz.chars, chars - LEN);
+        assert_eq!(tz.spans.len(), SPANS.len());
+
+        // Verify that current token only changed in length.
+        assert_eq!(cursor.pos, POS);
+        assert_eq!(cursor.token.start_pos, START_POS);
+        assert_eq!(cursor.token.end_pos, START_POS + (len - LEN));
+        assert_eq!(cursor.color, color_of(id));
+    }
+
+    #[test]
+    fn remove_single_span_entire() {
+        const POS: usize = 24;
+        const LEN: usize = 7;
+
+        let mut tz = build_tokenizer();
+        let buf = build_buffer();
+        let cursor = tz.tokenize(&buf);
+        let chars = tz.chars;
+
+        let cursor = tz.find(cursor, POS);
+        let (id, len, _) = SPANS[cursor.token.index + 1];
+        assert_eq!(cursor.pos, POS);
+        assert_eq!(cursor.token.start_pos, POS);
+
+        // Results in current span being removed.
+        let cursor = tz.remove(cursor, LEN);
+        assert_eq!(tz.chars, chars - LEN);
+        assert_eq!(tz.spans.len(), SPANS.len() - 1);
+
+        // Verify that new token at cursor matches following token.
+        assert_eq!(cursor.pos, POS);
+        assert_eq!(cursor.token.start_pos, POS);
+        assert_eq!(cursor.token.end_pos, POS + len);
+        assert_eq!(cursor.color, color_of(id));
+    }
+
+    #[test]
+    fn remove_multiple_spans_inclusive() {
+        const POS: usize = 6;
+        const LEN: usize = 26;
+
+        let mut tz = build_tokenizer();
+        let buf = build_buffer();
+        let cursor = tz.tokenize(&buf);
+        let chars = tz.chars;
+
+        let cursor = tz.find(cursor, POS);
+        let (id, len, _) = SPANS[cursor.token.index + 8];
+        assert_eq!(cursor.pos, POS);
+        assert_eq!(cursor.token.start_pos, POS);
+
+        // Results in mutiple spans being removed, including edges.
+        let cursor = tz.remove(cursor, LEN);
+        assert_eq!(tz.chars, chars - LEN);
+        assert_eq!(tz.spans.len(), SPANS.len() - 8);
+
+        // Verify that new token at cursor matches token following last span removed.
+        assert_eq!(cursor.pos, POS);
+        assert_eq!(cursor.token.start_pos, POS);
+        assert_eq!(cursor.token.end_pos, POS + len);
+        assert_eq!(cursor.color, color_of(id));
+    }
+
+    #[test]
+    fn remove_multiple_spans_exclusive() {
+        const POS: usize = 7;
+        const LEN: usize = 23;
+        const START_POS: usize = 6;
+
+        let mut tz = build_tokenizer();
+        let buf = build_buffer();
+        let cursor = tz.tokenize(&buf);
+        let chars = tz.chars;
+
+        // Find last token whose prefix will be truncated.
+        let cursor = tz.find(cursor, POS + LEN);
+        let (id, _, _) = SPANS[cursor.token.index];
+        let len = cursor.token.end_pos - cursor.pos;
+
+        let cursor = tz.find(cursor, POS);
+        assert_eq!(cursor.pos, POS);
+        assert_eq!(cursor.token.start_pos, START_POS);
+
+        // Results in mutiple spans being removed, excluding edges.
+        let cursor = tz.remove(cursor, LEN);
+        assert_eq!(tz.chars, chars - LEN);
+        assert_eq!(tz.spans.len(), SPANS.len() - 5);
+
+        // Verify that new token at cursor matches final token whose prefix was
+        // truncated.
+        assert_eq!(cursor.pos, POS);
+        assert_eq!(cursor.token.start_pos, POS);
+        assert_eq!(cursor.token.end_pos, POS + len);
         assert_eq!(cursor.color, color_of(id));
     }
 
