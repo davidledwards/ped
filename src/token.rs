@@ -1,7 +1,6 @@
 //! Tokenization for syntax coloring.
 
 use crate::buffer::Buffer;
-use crate::color::Color;
 use crate::etc;
 use crate::syntax::Syntax;
 use std::cell::RefCell;
@@ -33,8 +32,9 @@ pub struct Cursor {
     /// The applicable token corresponding to [`pos`](Self::pos).
     token: Token,
 
-    /// The color associated with this token or `None` if the token represents a gap.
-    color: Option<Color>,
+    /// The foreground color associated with this token or `None` if the token
+    /// represents a gap.
+    color: Option<u8>,
 }
 
 /// A token is essentially a [`Span`] that is decorated with the starting and ending
@@ -75,10 +75,10 @@ impl Token {
 }
 
 impl Cursor {
-    /// Returns the applicable color at this cursor position or `None` if the cursor
-    /// is contained inside a gap.
+    /// Returns the applicable foreground color at this cursor position or `None` if
+    /// the cursor is contained inside a gap.
     #[inline(always)]
-    pub fn color(&self) -> Option<Color> {
+    pub fn color(&self) -> Option<u8> {
         self.color
     }
 }
@@ -352,9 +352,9 @@ impl Tokenizer {
         }
     }
 
-    /// Returns the color associated with the span at `index` or `None` if the span
-    /// is a gap.
-    fn color(&self, index: usize) -> Option<Color> {
+    /// Returns the foreground color associated with the span at `index` or `None` if
+    /// the span is a gap.
+    fn color(&self, index: usize) -> Option<u8> {
         let Span { id, len: _ } = self.spans[index];
         self.syntax.color(id)
     }
@@ -365,10 +365,10 @@ mod tests {
     use super::*;
     use crate::syntax::tests::{build_empty_syntax, build_syntax};
 
-    const TOKENS: [(&str, Color); 3] = [
-        (r#"-?\d+(?:\.\d+)?(?:[eE]-?\d+)?"#, Color::new(1, 1)),
-        (r#""(?:[^"\\]|(?:\\.))*""#, Color::new(2, 2)),
-        (r#"\b(?:foo|bar)\b"#, Color::new(3, 3)),
+    const TOKENS: [(&str, u8); 3] = [
+        (r#"-?\d+(?:\.\d+)?(?:[eE]-?\d+)?"#, 1),
+        (r#""(?:[^"\\]|(?:\\.))*""#, 2),
+        (r#"\b(?:foo|bar)\b"#, 3),
     ];
 
     const TEXT: &str = "Lorem 1.2\n34 ip😀sum foo \"dolor\" bar -9.87e-6\n";
@@ -704,7 +704,7 @@ mod tests {
         buf
     }
 
-    fn color_of(id: usize) -> Option<Color> {
+    fn color_of(id: usize) -> Option<u8> {
         if id > 0 {
             Some(TOKENS[id - 1].1)
         } else {

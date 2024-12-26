@@ -64,7 +64,7 @@ fn init_color_map() -> ColorMap {
     color_map
 }
 
-pub struct ColorVisitor;
+//pub struct ColorVisitor;
 
 impl Color {
     /// A special color constant where `fg` and `bg` are initialized to `0`.
@@ -81,32 +81,32 @@ impl Default for Color {
     }
 }
 
-impl<'a> Deserialize<'a> for Color {
-    fn deserialize<T>(deser: T) -> result::Result<Color, T::Error>
-    where
-        T: Deserializer<'a>,
-    {
-        deser.deserialize_tuple(2, ColorVisitor)
-    }
-}
+// impl<'a> Deserialize<'a> for Color {
+//     fn deserialize<T>(deser: T) -> result::Result<Color, T::Error>
+//     where
+//         T: Deserializer<'a>,
+//     {
+//         deser.deserialize_tuple(2, ColorVisitor)
+//     }
+// }
 
-impl<'a> Visitor<'a> for ColorVisitor {
-    type Value = Color;
+// impl<'a> Visitor<'a> for ColorVisitor {
+//     type Value = Color;
 
-    fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "expecting `[u8, u8]` for Color")
-    }
+//     fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+//         write!(f, "expecting `[u8, u8]` for Color")
+//     }
 
-    fn visit_seq<T>(self, mut seq: T) -> result::Result<Color, T::Error>
-    where
-        T: SeqAccess<'a>,
-    {
-        let fg = seq
-            .next_element()?
-            .ok_or_else(|| de::Error::invalid_length(0, &self))?;
-        let bg = seq
-            .next_element()?
-            .ok_or_else(|| de::Error::invalid_length(1, &self))?;
-        Ok(Color::new(fg, bg))
-    }
-}
+//     fn visit_seq<T>(self, mut seq: T) -> result::Result<Color, T::Error>
+//     where
+//         T: SeqAccess<'a>,
+//     {
+//         let fg = seq
+//             .next_element()?
+//             .ok_or_else(|| de::Error::invalid_length(0, &self))?;
+//         let bg = seq
+//             .next_element()?
+//             .ok_or_else(|| de::Error::invalid_length(1, &self))?;
+//         Ok(Color::new(fg, bg))
+//     }
+// }

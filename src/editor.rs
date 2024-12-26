@@ -395,8 +395,8 @@ impl Draw {
 
     /// Formats `c` using a color depending on the current rendering context.
     fn as_text(&self, c: char, render: &Render) -> Cell {
-        let fg = if let Some(color) = render.syntax_cursor.color() {
-            color.fg
+        let fg = if let Some(fg) = render.syntax_cursor.color() {
+            fg
         } else {
             if c == '\n' && self.config.settings.show_eol {
                 self.config.theme.eol_fg

@@ -17,7 +17,6 @@
 //! * `$HOME/.ped/syntax`
 //! * `$HOME/.config/ped/syntax`
 
-use crate::color::Color;
 use crate::error::{Error, Result};
 use crate::sys::{self, AsString};
 use indexmap::IndexMap;
@@ -66,15 +65,15 @@ struct Token {
     /// The regular expression for this token.
     pattern: String,
 
-    /// The color associated with this token.
-    color: Color,
+    /// The foreground color associated with this token.
+    color: u8,
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ExternalConfig {
     syntax: ExternalSyntax,
-    tokens: Option<IndexMap<String, Color>>,
+    tokens: Option<IndexMap<String, u8>>,
 }
 
 #[derive(Deserialize)]
@@ -93,18 +92,18 @@ impl Syntax {
     const EMPTY_REGEX: &str = "^$a";
 
     /// Creates a new syntax identified by `name` and using `tokens`, which are
-    /// tuples containing a regular expression and a color.
+    /// tuples containing a regular expression and a foreground color.
     ///
     /// If any of the regular expressions are malformed or the aggregate size of all
     /// regular expressions is too large, then an error is returned.
-    pub fn new(name: String, tokens: Vec<(String, Color)>) -> Result<Syntax> {
+    pub fn new(name: String, tokens: Vec<(String, u8)>) -> Result<Syntax> {
         // Tokens are adorned with capture group names of "_<id>" where <id> is the
         // index of the token definition offset by 1. Offset is required because
         // token id 0 is reserved to represent the absence of a token.
         let tokens = if tokens.len() > 0 {
             tokens
         } else {
-            vec![(Self::EMPTY_REGEX.to_string(), Color::ZERO)]
+            vec![(Self::EMPTY_REGEX.to_string(), 0)]
         };
 
         let tokens = tokens
@@ -146,8 +145,8 @@ impl Syntax {
             .unwrap_or_else(|| panic!("{}: capture group expected for token", &cap[0]))
     }
 
-    /// Returns the color associated with the token referenced by `id`.
-    pub fn color(&self, id: usize) -> Option<Color> {
+    /// Returns the foreground color associated with the token referenced by `id`.
+    pub fn color(&self, id: usize) -> Option<u8> {
         if id == 0 {
             None
         } else {
@@ -286,10 +285,10 @@ pub mod tests {
 
     const SYNTAX_NAME: &str = "foo";
 
-    const SYNTAX_TOKENS: [(&str, Color); 3] = [
-        (r#"-?\d+(?:\.\d+)?(?:[eE]-?\d+)?"#, Color::new(1, 1)),
-        (r#""(?:[^"\\]|(?:\\.))*""#, Color::new(2, 2)),
-        (r#"\b(?:foo|bar)\b"#, Color::new(3, 3)),
+    const SYNTAX_TOKENS: [(&str, u8); 3] = [
+        (r#"-?\d+(?:\.\d+)?(?:[eE]-?\d+)?"#, 1),
+        (r#""(?:[^"\\]|(?:\\.))*""#, 2),
+        (r#"\b(?:foo|bar)\b"#, 3),
     ];
 
     #[test]
@@ -316,12 +315,12 @@ pub mod tests {
         assert_eq!(token.id, 1);
         assert_eq!(token.name, "_1");
         assert_eq!(token.pattern, Syntax::EMPTY_REGEX);
-        assert_eq!(token.color, Color::ZERO);
+        assert_eq!(token.color, 0);
     }
 
     #[test]
     fn invalid_token() {
-        let tokens = vec![("(bad".to_string(), Color::ZERO)];
+        let tokens = vec![("(bad".to_string(), 0)];
         let syntax = Syntax::new(SYNTAX_NAME.to_string(), tokens);
         assert!(syntax.is_err());
     }
@@ -334,7 +333,7 @@ pub mod tests {
         Syntax::new(SYNTAX_NAME.to_string(), Vec::new()).unwrap()
     }
 
-    fn build_tokens() -> Vec<(String, Color)> {
+    fn build_tokens() -> Vec<(String, u8)> {
         SYNTAX_TOKENS
             .iter()
             .map(|(token, color)| (token.to_string(), *color))
