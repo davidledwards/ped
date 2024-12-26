@@ -26,7 +26,7 @@ tab-size = 4
 # and whose values must be in the range of [0, 255]. Colors follow the 8-bit
 # ANSI standard at <https://en.wikipedia.org/wiki/ANSI_escape_code#8-bit>.
 #
-# Note that colors handling is not very robust at this point in time, so expect
+# Note that color handling is not very robust at this point in time, so expect
 # this section to evolve.
 #
 [colors]

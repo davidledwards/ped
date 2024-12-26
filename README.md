@@ -25,10 +25,10 @@ brew install ped
 
 Releases can be downloaded directly from [GitHub](https://github.com/davidledwards/ped/releases).
 
-Alternatively, using the [GitHub CLI](https://cli.github.com/), releases can also be downloaded from the command line. For example, to download version `0.1.0`, run the following command.
+Alternatively, using the [GitHub CLI](https://cli.github.com/), releases can also be downloaded from the command line. For example, to download version `0.5.0`, run the following command.
 
 ```shell
-gh release download --repo https://github.com/davidledwards/ped v0.1.0
+gh release download --repo https://github.com/davidledwards/ped v0.5.0
 ```
 
 ## Usage
@@ -47,7 +47,7 @@ Edit multiple files, opened in separate windows.
 ped foo.rs bar.rs
 ```
 
-`ped` will try to locate and read a configuration file at the following paths in order of precedence.
+`ped` will try to locate and read a configuration file at one of the following paths in order of precedence.
 
 - `$HOME/.pedrc`
 - `$HOME/.ped/pedrc`
@@ -57,7 +57,7 @@ Alternatively, a configuration file can be specified on the command line using t
 
 See [.pedrc](.pedrc) for a detailed explanation of configuration settings. In the absence of a configuration file, `ped` will rely on default values.
 
-`ped` will also try to locate syntax configuration files in the following directories in order of precedence.
+`ped` will also try to locate syntax configuration files in one of the following directories in order of precedence. See the [ped-syntax](https://github.com/davidledwards/ped-syntax) repository for more information about creating and installing syntax files.
 
 - `$HOME/.ped/syntax`
 - `$HOME/.config/ped/syntax`
@@ -182,13 +182,13 @@ The only other module that contains _unsafe_ Rust, by necessity, is `term.rs`, w
 
 The display of text on the terminal is ultimately done using ANSI control sequences, but there are intermediate steps in the process that optimize the amount of data sent to the terminal. A key component of the display architecture is a _canvas_ that is essentially an abstraction over _stdout_. Central to the design of the canvas is the combination of a _front_ and _back_ grid, a two-dimensional data structure. The front grid is a faithful representation of what the user sees, whereas the back grid is a cache of pending updates. The idea is that a series of writes are applied to the back grid, and then a subsequent draw request will generate a minimal set of ANSI commands based on the differences between the front and back grids.
 
-The rendering process is a possibly novel approach since I did zero research on existing methods implemented in other editors. Since the text buffer is not organized as a collection of lines, but rather a contiguous array of characters with a gap in the middle, efficient rendering turned out to be one of the more difficult problems to solve. These core challenges include scrolling, insertion and removal of text, and line wrapping among others. It became evident early in design iterations that the rendering algorithms could be kept simple by only concerning themselves with the text visible on the display. That may seem obvious, but it is not necessarily the intuition when thinking through possible solutions. Notably, the rendering algorithm is based on two critical reference points in the buffer: one representing the top line of the display, and the other representing the line of the cursor. All movement and mutating operations are relative to these two points of reference. An earlier version used only one reference point, the current line, but it became clear that tracking the top line made a number of operations more efficient. The tradeoff with this algorithmic approach is that the majority of movement operations are _O(n)_, but in practice, these tend to be small distances, so the complexity that would come with implementing something more efficient than _O(n)_ would be hard to justify.
+The rendering process is a possibly novel approach, as I did zero research on existing methods implemented in other editors. Since the text buffer is not organized as a collection of lines, but rather a contiguous array of characters with a gap in the middle, efficient rendering turned out to be one of the more difficult problems to solve. These core challenges include scrolling, insertion and removal of text, and line wrapping among others. It became evident early in design iterations that the rendering algorithms could be kept simple by only concerning themselves with the text visible on the display. That may seem obvious, but it is not necessarily intuitive when thinking through possible solutions. Notably, the rendering algorithm is based on two critical reference points in the buffer: one representing the top line of the display, and the other representing the line of the cursor. All movement and mutating operations are relative to these two points of reference. An earlier version used only one reference point, the current line, but it became clear that tracking the top line made a number of operations more efficient. The tradeoff with this algorithmic approach is that the majority of movement operations are _O(n)_, but in practice, these tend to be small distances, so the complexity that would come with implementing something more efficient than _O(n)_ would be hard to justify.
 
 A _keyboard_ abstraction encapsulates the terminal, which is switched to _raw_ mode as part of initialization. The job of the keyboard is to interpret ANSI control sequences read from _stdin_ and turn those into _keys_. A key, or a sequence of keys, is bound to some editing operation, whether it be the simple insertion of a character or something more complex such as pasting text from the clipboard. In order to make the association between _key sequence_ and _editing operation_ more flexible, this binding process happens at runtime using a finite set of key names and editing operations. While `ped` does provide default bindings, these can be altered through configuration files.
 
 An _editor_ is perhaps one of the more complicated data structures that combines a _buffer_ and a _window_. The purpose of the editor is to implement editing primitives that modify the underlying buffer and then determine how those changes are rendered in the window. The editing operations, which are bound to keys at runtime, are actually defined outside of the _editor_ in `op.rs`. The idea is that all current and future operations can be built using the editor primitives.
 
-The entire editing experience is facilitated by a central _controller_, which in a simplified sense, reads keys and dispatches to their corresponding editing operations. The controller also manages the workspace, which contains a collection of windows, and provides a restricted _environment_ to functions that implement editing operations. It also coordinates interaction with the user in the form of _questions_, such as opening a file or asking to save a dirty buffer.
+The entire editing experience is facilitated by a central _controller_, which in a simplified sense, reads keys and calls their corresponding editing operations. The controller also manages the workspace, which contains a collection of windows, and provides a restricted _environment_ to functions that implement editing operations. It also coordinates interaction with the user in the form of _questions_, such as opening a file or asking to save a dirty buffer.
 
 The concept of a _question_ is implemented using an _inquirer_ combined with a _completer_, both of which are abstractions that allow the controller to deal only with the general problem. This design allows the development of arbitrarily complex interactions, such as the _open file_ dialog that provides file completion assistance.
 
