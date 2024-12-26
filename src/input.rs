@@ -344,7 +344,7 @@ impl InputEditor {
                 .collect::<String>();
 
             let (origin, _) = self.workspace.borrow().shared_region();
-            let color = self.workspace.borrow().config().colors.prompt;
+            let color = self.workspace.borrow().config().theme.prompt_color;
             Writer::new_at(origin)
                 .set_color(color)
                 .write_str(prompt.as_str())
@@ -360,13 +360,13 @@ impl InputEditor {
 
         // Write user-provided section of text to canvas followed by optional hint,
         // since colors are distinct.
-        let color = self.workspace.borrow().config().colors.text;
+        let color = self.workspace.borrow().config().theme.text_color;
         let user_end = cmp::min(end, self.len);
         for (col, c) in self.input[start..user_end].iter().enumerate() {
             let cell = Cell::new(*c, color);
             self.canvas.set_cell(0, col as u32, cell);
         }
-        let color = self.workspace.borrow().config().colors.echo;
+        let color = self.workspace.borrow().config().theme.echo_color;
         let hint_ofs = user_end - start;
         for (col, c) in self.input[user_end..end].iter().enumerate() {
             let cell = Cell::new(*c, color);
@@ -376,7 +376,7 @@ impl InputEditor {
         // Clear unused area on canvas.
         let cols = (end - start) as u32;
         if cols < self.input_cols {
-            let cell = Cell::new(' ', self.workspace.borrow().config().colors.text);
+            let cell = Cell::new(' ', self.workspace.borrow().config().theme.text_color);
             self.canvas.fill_row_from(0, cols, cell);
         }
 

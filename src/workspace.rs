@@ -323,7 +323,7 @@ impl Workspace {
 
     pub fn clear_shared(&mut self) {
         Writer::new_at(self.shared_origin)
-            .set_color(self.config.colors.echo)
+            .set_color(self.config.theme.echo_color)
             .write_str(" ".repeat(self.size.cols as usize).as_str())
             .send();
     }

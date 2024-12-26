@@ -5,6 +5,7 @@
 
 use serde::de::{self, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer};
+use std::collections::HashMap;
 use std::fmt;
 use std::result;
 
@@ -13,6 +14,54 @@ use std::result;
 pub struct Color {
     pub fg: u8,
     pub bg: u8,
+}
+
+type ColorMap = HashMap<&'static str, u8>;
+
+pub struct Colors {
+    color_map: ColorMap,
+}
+
+impl Colors {
+    pub fn new() -> Colors {
+        Colors {
+            color_map: init_color_map(),
+        }
+    }
+
+    pub fn lookup(&self, name: &str) -> Option<u8> {
+        self.color_map
+            .get(name)
+            .map(|color| *color)
+            .or_else(|| name.parse::<u8>().ok())
+    }
+}
+
+const COLOR_MAPPINGS: [(&str, u8); 16] = [
+    ("black", 0),
+    ("red", 1),
+    ("green", 2),
+    ("yellow", 3),
+    ("blue", 4),
+    ("magenta", 5),
+    ("cyan", 6),
+    ("white", 7),
+    ("gray", 8),
+    ("bright-red", 9),
+    ("bright-green", 10),
+    ("bright-yellow", 11),
+    ("bright-blue", 12),
+    ("bright-magenta", 13),
+    ("bright-cyan", 14),
+    ("bright-white", 15),
+];
+
+fn init_color_map() -> ColorMap {
+    let mut color_map = ColorMap::new();
+    for (name, color) in COLOR_MAPPINGS {
+        color_map.insert(name, color);
+    }
+    color_map
 }
 
 pub struct ColorVisitor;

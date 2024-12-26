@@ -6,6 +6,7 @@
 
 use crate::buffer::{Buffer, BufferRef};
 use crate::canvas::{Canvas, CanvasRef};
+use crate::color::Color;
 use crate::config::ConfigurationRef;
 use crate::grid::Cell;
 use crate::size::{Point, Size};
@@ -383,31 +384,36 @@ impl Draw {
     /// Formats `c` using the margin color.
     #[inline]
     fn as_margin(&self, c: char) -> Cell {
-        Cell::new(c, self.config.colors.line)
+        Cell::new(c, self.config.theme.margin_color)
     }
 
     /// Formats ` ` (space) using the text color.
     #[inline]
     fn as_blank(&self) -> Cell {
-        Cell::new(' ', self.config.colors.text)
+        Cell::new(' ', self.config.theme.text_color)
     }
 
     /// Formats `c` using a color depending on the current rendering context.
     fn as_text(&self, c: char, render: &Render) -> Cell {
-        let color = if self.select_span.contains(&render.pos) {
-            self.config.colors.select
-        } else if let Some(color) = render.syntax_cursor.color() {
-            color
-        } else if self.config.settings.show_spotlight && render.row == self.cursor.row {
-            self.config.colors.spotlight
+        let fg = if let Some(color) = render.syntax_cursor.color() {
+            color.fg
         } else {
             if c == '\n' && self.config.settings.show_eol {
-                self.config.colors.eol
+                self.config.theme.eol_fg
             } else {
-                self.config.colors.text
+                self.config.theme.text_fg
             }
         };
-        Cell::new(self.convert_char(c), color)
+
+        let bg = if self.select_span.contains(&render.pos) {
+            self.config.theme.select_bg
+        } else if self.config.settings.show_spotlight && render.row == self.cursor.row {
+            self.config.theme.spotlight_bg
+        } else {
+            self.config.theme.text_bg
+        };
+
+        Cell::new(self.convert_char(c), Color::new(fg, bg))
     }
 
     /// Converts `c`, if `\n`, to its displayable form, otherwise `c` is returned

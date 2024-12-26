@@ -38,7 +38,7 @@ pub struct Configuration {
     pub settings: Settings,
 
     /// A collection of configurable colors.
-    pub colors: Colors,
+    pub theme: Theme,
 
     /// A map of key sequences to editing operations.
     pub bindings: Bindings,
@@ -56,22 +56,30 @@ pub struct Settings {
     pub tab_size: usize,
 }
 
-pub struct Colors {
-    pub text: Color,
-    pub select: Color,
-    pub banner: Color,
-    pub echo: Color,
-    pub prompt: Color,
-    pub spotlight: Color,
-    pub line: Color,
-    pub eol: Color,
+pub struct Theme {
+    pub text_fg: u8,
+    pub text_bg: u8,
+    pub select_bg: u8,
+    pub spotlight_bg: u8,
+    pub eol_fg: u8,
+    pub echo_fg: u8,
+    pub prompt_fg: u8,
+    pub banner_fg: u8,
+    pub banner_bg: u8,
+    pub margin_fg: u8,
+    pub margin_bg: u8,
+    pub text_color: Color,
+    pub echo_color: Color,
+    pub prompt_color: Color,
+    pub banner_color: Color,
+    pub margin_color: Color,
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ExternalConfiguration {
     settings: Option<ExternalSettings>,
-    colors: Option<ExternalColors>,
+    theme: Option<ExternalTheme>,
     bindings: Option<HashMap<String, String>>,
 }
 
@@ -93,15 +101,39 @@ struct ExternalSettings {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct ExternalColors {
-    text: Option<Color>,
-    select: Option<Color>,
-    banner: Option<Color>,
-    echo: Option<Color>,
-    prompt: Option<Color>,
-    spotlight: Option<Color>,
-    line: Option<Color>,
-    eol: Option<Color>,
+struct ExternalTheme {
+    #[serde(rename = "text-fg")]
+    text_fg: Option<u8>,
+
+    #[serde(rename = "text-bg")]
+    text_bg: Option<u8>,
+
+    #[serde(rename = "select-bg")]
+    select_bg: Option<u8>,
+
+    #[serde(rename = "spotlight-bg")]
+    spotlight_bg: Option<u8>,
+
+    #[serde(rename = "eol-fg")]
+    eol_fg: Option<u8>,
+
+    #[serde(rename = "echo-fg")]
+    echo_fg: Option<u8>,
+
+    #[serde(rename = "prompt-fg")]
+    prompt_fg: Option<u8>,
+
+    #[serde(rename = "banner-fg")]
+    banner_fg: Option<u8>,
+
+    #[serde(rename = "banner-bg")]
+    banner_bg: Option<u8>,
+
+    #[serde(rename = "margin-fg")]
+    margin_fg: Option<u8>,
+
+    #[serde(rename = "margin-bg")]
+    margin_bg: Option<u8>,
 }
 
 impl Settings {
@@ -135,33 +167,69 @@ impl Default for Settings {
     }
 }
 
-impl Colors {
-    /// Applies the external colors `ext` on top of `self`.
-    fn apply(&mut self, ext: Option<ExternalColors>) {
+impl Theme {
+    const TEXT_FG: u8 = 252;
+    const TEXT_BG: u8 = 232;
+    const SELECT_BG: u8 = 19;
+    const SPOTLIGHT_BG: u8 = 234;
+    const EOL_FG: u8 = 34;
+    const ECHO_FG: u8 = 214;
+    const PROMPT_FG: u8 = 34;
+    const BANNER_FG: u8 = 232;
+    const BANNER_BG: u8 = 28;
+    const MARGIN_FG: u8 = 34;
+    const MARGIN_BG: u8 = 234;
+
+    /// Applies the external theme `ext` on top of `self`.
+    fn apply(&mut self, ext: Option<ExternalTheme>) {
         if let Some(ext) = ext {
-            self.text = ext.text.unwrap_or(self.text);
-            self.select = ext.select.unwrap_or(self.select);
-            self.banner = ext.banner.unwrap_or(self.banner);
-            self.echo = ext.echo.unwrap_or(self.echo);
-            self.prompt = ext.prompt.unwrap_or(self.prompt);
-            self.spotlight = ext.spotlight.unwrap_or(self.spotlight);
-            self.line = ext.line.unwrap_or(self.line);
-            self.eol = ext.eol.unwrap_or(self.eol);
+            self.text_fg = ext.text_fg.unwrap_or(self.text_fg);
+            self.text_bg = ext.text_bg.unwrap_or(self.text_bg);
+            self.select_bg = ext.select_bg.unwrap_or(self.select_bg);
+            self.spotlight_bg = ext.spotlight_bg.unwrap_or(self.spotlight_bg);
+            self.eol_fg = ext.eol_fg.unwrap_or(self.eol_fg);
+            self.echo_fg = ext.echo_fg.unwrap_or(self.echo_fg);
+            self.prompt_fg = ext.prompt_fg.unwrap_or(self.prompt_fg);
+            self.banner_fg = ext.banner_fg.unwrap_or(self.banner_fg);
+            self.banner_bg = ext.banner_bg.unwrap_or(self.banner_bg);
+            self.margin_fg = ext.margin_fg.unwrap_or(self.margin_fg);
+            self.margin_bg = ext.margin_bg.unwrap_or(self.margin_bg);
+
+            // These are preconstructed colors combining fg/bg primarily as convenience.
+            self.text_color = Color::new(self.text_fg, self.text_bg);
+            self.echo_color.fg = self.echo_fg;
+            self.prompt_color.fg = self.prompt_fg;
+            self.banner_color = Color::new(self.banner_fg, self.banner_bg);
+            self.margin_color = Color::new(self.margin_fg, self.margin_bg);
         }
     }
 }
 
-impl Default for Colors {
-    fn default() -> Colors {
-        Colors {
-            text: Color::new(252, 232),
-            select: Color::new(255, 19),
-            banner: Color::new(232, 28),
-            echo: Color::new(214, 232),
-            prompt: Color::new(34, 232),
-            spotlight: Color::new(252, 234),
-            line: Color::new(34, 234),
-            eol: Color::new(34, 232),
+impl Default for Theme {
+    fn default() -> Theme {
+        let text_color = Color::new(Self::TEXT_FG, Self::TEXT_BG);
+        let echo_color = Color::new(Self::ECHO_FG, text_color.bg);
+        let prompt_color = Color::new(Self::PROMPT_FG, text_color.bg);
+        let banner_color = Color::new(Self::BANNER_FG, Self::BANNER_BG);
+        let margin_color = Color::new(Self::MARGIN_FG, Self::MARGIN_BG);
+
+        Theme {
+            text_fg: text_color.fg,
+            text_bg: text_color.bg,
+            select_bg: Self::SELECT_BG,
+            spotlight_bg: Self::SPOTLIGHT_BG,
+            eol_fg: Self::EOL_FG,
+            echo_fg: echo_color.fg,
+            prompt_fg: prompt_color.fg,
+            banner_fg: banner_color.fg,
+            banner_bg: banner_color.bg,
+            margin_fg: margin_color.fg,
+            margin_bg: margin_color.bg,
+            text_color,
+            echo_color,
+            prompt_color,
+            banner_color,
+            margin_color,
         }
     }
 }
@@ -207,7 +275,7 @@ impl Configuration {
     /// Applies the external configuration `ext` on top of `self`.
     fn apply(&mut self, ext: ExternalConfiguration) -> Result<()> {
         self.settings.apply(ext.settings);
-        self.colors.apply(ext.colors);
+        self.theme.apply(ext.theme);
         if let Some(bindings) = ext.bindings {
             for (key_seq, op) in bindings {
                 self.bindings.bind(&key_seq, &op)?;
@@ -330,7 +398,7 @@ impl Default for Configuration {
     fn default() -> Configuration {
         Configuration {
             settings: Settings::default(),
-            colors: Colors::default(),
+            theme: Theme::default(),
             bindings: Self::init_bindings(),
             registry: Registry::default(),
         }

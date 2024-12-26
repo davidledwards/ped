@@ -40,4 +40,4 @@ usage: ped OPTIONS [file...]
     ignores searching in the standard directories above.
 
     Syntax configuration files are formatted using the TOML syntax and must
-    contain the `.toml` extension, otherwise all other files types are ignored.
+    contain the `.toml` extension. All other files types are ignored.

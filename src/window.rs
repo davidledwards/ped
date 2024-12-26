@@ -64,7 +64,7 @@ impl Banner {
     pub fn draw(&mut self) {
         self.writer
             .set_origin()
-            .set_color(self.config.colors.banner);
+            .set_color(self.config.theme.banner_color);
 
         if self.cols < Self::MIN_COLS {
             self.writer

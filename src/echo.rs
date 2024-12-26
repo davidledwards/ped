@@ -35,7 +35,7 @@ impl Echo {
             let blank_cols = size.cols - chars.len() as u32;
 
             Writer::new_at(origin)
-                .set_color(self.workspace.borrow().config().colors.echo)
+                .set_color(self.workspace.borrow().config().theme.echo_color)
                 .write_str(chars.into_iter().collect::<String>().as_str())
                 .write_str(" ".repeat(blank_cols as usize).as_str())
                 .send();
