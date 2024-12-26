@@ -113,9 +113,9 @@ fn run_opts(opts: &Options) -> Result<()> {
 
     // Load optional syntax configurations via registry and update configuration.
     config.registry = if let Some(ref syntax_dir) = opts.syntax_dir {
-        Registry::load_dir(syntax_dir)?
+        Registry::load_dir(syntax_dir, &config.colors)?
     } else {
-        Registry::load()?
+        Registry::load(&config.colors)?
     };
 
     if opts.print_bindings {

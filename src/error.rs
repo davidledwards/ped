@@ -48,6 +48,9 @@ pub enum Error {
 
     /// A regular expression `pattern` is invalid or too large in compiled form.
     InvalidRegex { pattern: String, cause: String },
+
+    /// The color `name` is not valid.
+    InvalidColor { name: String },
 }
 
 impl error::Error for Error {}
@@ -134,6 +137,12 @@ impl Error {
             cause: format!("{e}"),
         }
     }
+
+    pub fn invalid_color(name: &str) -> Error {
+        Error::InvalidColor {
+            name: name.to_string(),
+        }
+    }
 }
 
 impl Display for Error {
@@ -160,6 +169,9 @@ impl Display for Error {
             }
             Error::InvalidRegex { pattern, cause } => {
                 write!(f, "{pattern}: invalid regular expression: {cause}")
+            }
+            Error::InvalidColor { name } => {
+                write!(f, "{name}: invalid color")
             }
         }
     }

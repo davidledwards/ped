@@ -2,6 +2,16 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
+## [0.6.0](https://github.com/davidledwards/ped/tree/v0.6.0) - `2024-12-26`
+
+### Changed
+
+- Major usability improvement when referencing and defining colors
+
+### Fixed
+
+* Minor display issues related to prior method of color management
+
 ## [0.5.0](https://github.com/davidledwards/ped/tree/v0.5.0) - `2024-12-24`
 
 ### Added

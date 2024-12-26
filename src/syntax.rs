@@ -17,6 +17,7 @@
 //! * `$HOME/.ped/syntax`
 //! * `$HOME/.config/ped/syntax`
 
+use crate::color::{ColorValue, Colors};
 use crate::error::{Error, Result};
 use crate::sys::{self, AsString};
 use indexmap::IndexMap;
@@ -73,7 +74,7 @@ struct Token {
 #[serde(deny_unknown_fields)]
 struct ExternalConfig {
     syntax: ExternalSyntax,
-    tokens: Option<IndexMap<String, u8>>,
+    tokens: Option<IndexMap<String, ColorValue>>,
 }
 
 #[derive(Deserialize)]
@@ -176,13 +177,13 @@ impl Registry {
     /// contain any configuration files.
     ///
     /// An error is returned if any syntax configuration file is malformed in any way.
-    pub fn load() -> Result<Registry> {
+    pub fn load(colors: &Colors) -> Result<Registry> {
         let root_path = sys::home_dir();
         Self::TRY_DIRS
             .iter()
             .map(|dir| root_path.join(dir))
             .find(|dir| sys::is_dir(dir))
-            .map(|dir| Self::load_dir(dir))
+            .map(|dir| Self::load_dir(dir, colors))
             .unwrap_or_else(|| Ok(Registry::default()))
     }
 
@@ -192,9 +193,9 @@ impl Registry {
     /// An empty registry is returned if `dir` is missing or not a directory.
     ///
     /// An error is returned if any syntax configuration file is malformed in any way.
-    pub fn load_dir<P: AsRef<Path>>(dir: P) -> Result<Registry> {
+    pub fn load_dir<P: AsRef<Path>>(dir: P, colors: &Colors) -> Result<Registry> {
         if sys::is_dir(&dir) {
-            Self::load_registry(&dir)
+            Self::load_registry(&dir, colors)
         } else {
             Ok(Registry::default())
         }
@@ -217,7 +218,7 @@ impl Registry {
     }
 
     /// Creates a registry by enumerating and loading files from `dir`.
-    fn load_registry<P: AsRef<Path>>(dir: P) -> Result<Registry> {
+    fn load_registry<P: AsRef<Path>>(dir: P, colors: &Colors) -> Result<Registry> {
         let paths = sys::list_files(dir.as_ref());
         let paths = paths
             .iter()
@@ -233,7 +234,7 @@ impl Registry {
         let mut syntax_map = HashMap::new();
         let mut ext_map = HashMap::new();
         for path in paths {
-            let (syntax, exts) = Self::load_syntax(path)?;
+            let (syntax, exts) = Self::load_syntax(path, colors)?;
             let name = syntax.name.clone();
             for ext in exts {
                 ext_map.insert(ext, name.clone());
@@ -250,13 +251,18 @@ impl Registry {
 
     /// Loads the syntax configuration referenced by `path`, returning the syntax
     /// along with a vector of file extensions.
-    fn load_syntax<P: AsRef<Path>>(path: P) -> Result<(Syntax, Vec<String>)> {
+    fn load_syntax<P: AsRef<Path>>(path: P, colors: &Colors) -> Result<(Syntax, Vec<String>)> {
         let config = Self::read_file(path.as_ref())?;
         let tokens = if let Some(tokens) = config.tokens {
-            tokens
-                .iter()
-                .map(|(pattern, color)| (pattern.clone(), *color))
-                .collect::<Vec<_>>()
+            let mut ts = Vec::new();
+            for (pattern, color) in &tokens {
+                if let Some(c) = colors.lookup_value(color) {
+                    ts.push((pattern.clone(), c));
+                } else {
+                    return Err(Error::invalid_color(&color.to_string()));
+                }
+            }
+            ts
         } else {
             Vec::new()
         };
