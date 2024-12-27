@@ -85,8 +85,6 @@ The following notation is used below when refering to keys.
 | ---------------- | --------------------------- |
 | `C-b` `←`        | Move backward one character |
 | `C-f` `→`        | Move forward one character  |
-| `M-b` `M-←`      | Move backward one word      |
-| `M-f` `M-→`      | Move forward one word       |
 | `C-p` `↑`        | Move up one line            |
 | `C-n` `↓`        | Move down one line          |
 | `C-a` `HOME`     | Move to start of line       |
@@ -95,8 +93,10 @@ The following notation is used below when refering to keys.
 | `M-n` `PAGEDOWN` | Move down one page          |
 | `M-a` `C-HOME`   | Move to top of editor       |
 | `M-e` `C-END`    | Move to end of editor       |
-| `S-C-↑`          | Scroll up one line          |
-| `S-C-↓`          | Scroll down one line        |
+| `M-b` `C-←`      | Move backward one word      |
+| `M-f` `C-→`      | Move forward one word       |
+| `C-↑`            | Scroll up one line          |
+| `C-↓`            | Scroll down one line        |
 | `C-/`            | Go to line number           |
 
 ### Editing

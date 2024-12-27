@@ -318,7 +318,7 @@ impl Configuration {
         Bindings::new(&bindings).unwrap_or_else(|e| panic!("{e}: default bindings failed"))
     }
 
-    const DEFAULT_BINDINGS: [(&'static str, &'static str); 83] = [
+    const DEFAULT_BINDINGS: [(&'static str, &'static str); 87] = [
         // --- exit and cancellation ---
         ("C-q", "quit"),
         // --- help ---
@@ -329,16 +329,10 @@ impl Configuration {
         // --- navigation and selection ---
         ("C-b", "move-backward"),
         ("left", "move-backward"),
-        ("ESC:b", "move-backward-word"),
-        ("ESC:left", "move-backward-word"),
         ("S-left", "move-backward-select"),
-        ("ESC:B", "move-backward-word-select"),
         ("C-f", "move-forward"),
         ("right", "move-forward"),
-        ("ESC:f", "move-forward-word"),
-        ("ESC:right", "move-forward-word"),
         ("S-right", "move-forward-select"),
-        ("ESC:F", "move-forward-word-select"),
         ("C-p", "move-up"),
         ("up", "move-up"),
         ("S-up", "move-up-select"),
@@ -363,8 +357,18 @@ impl Configuration {
         ("C-end", "move-bottom"),
         ("ESC:e", "move-bottom"),
         ("S-C-end", "move-bottom-select"),
-        ("S-C-up", "scroll-up"),
-        ("S-C-down", "scroll-down"),
+        ("ESC:b", "move-backward-word"),
+        ("C-left", "move-backward-word"),
+        ("ESC:B", "move-backward-word-select"),
+        ("S-C-left", "move-backward-word-select"),
+        ("ESC:f", "move-forward-word"),
+        ("C-right", "move-forward-word"),
+        ("ESC:F", "move-forward-word-select"),
+        ("S-C-right", "move-forward-word-select"),
+        ("C-up", "scroll-up"),
+        ("S-C-up", "scroll-up-select"),
+        ("C-down", "scroll-down"),
+        ("S-C-down", "scroll-down-select"),
         ("C-l", "scroll-center"),
         ("C-@", "set-mark"),
         ("C-_", "goto-line"),

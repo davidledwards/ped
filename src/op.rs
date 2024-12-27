@@ -485,8 +485,13 @@ fn move_bottom_select(env: &mut Environment) -> Option<Action> {
 /// Operation: `scroll-up`
 fn scroll_up(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
+
+    // Capture current buffer position before scrolling in case soft mark needs to
+    // be cleared.
     let prior_pos = editor.pos();
     editor.scroll_up(1);
+
+    // Clear soft mark if buffer position moved as a result of scrolling.
     if editor.pos() != prior_pos {
         editor.clear_soft_mark();
     }
@@ -494,14 +499,37 @@ fn scroll_up(env: &mut Environment) -> Option<Action> {
     None
 }
 
+/// Operation: `scroll-up-select`
+fn scroll_up_select(env: &mut Environment) -> Option<Action> {
+    let mut editor = env.get_active_editor().borrow_mut();
+    editor.set_soft_mark();
+    editor.scroll_up(1);
+    editor.render();
+    None
+}
+
 /// Operation: `scroll-down`
 fn scroll_down(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
+
+    // Capture current buffer position before scrolling in case soft mark needs to
+    // be cleared.
     let prior_pos = editor.pos();
     editor.scroll_down(1);
+
+    // Clear soft mark if buffer position moved as a result of scrolling.
     if editor.pos() != prior_pos {
         editor.clear_soft_mark();
     }
+    editor.render();
+    None
+}
+
+/// Operation: `scroll-down-select`
+fn scroll_down_select(env: &mut Environment) -> Option<Action> {
+    let mut editor = env.get_active_editor().borrow_mut();
+    editor.set_soft_mark();
+    editor.scroll_down(1);
     editor.render();
     None
 }
@@ -1770,7 +1798,7 @@ fn base_dir(editor: &EditorRef) -> PathBuf {
 }
 
 /// Predefined mapping of editing operations to editing functions.
-pub const OP_MAPPINGS: [(&'static str, OpFn); 69] = [
+pub const OP_MAPPINGS: [(&'static str, OpFn); 71] = [
     // --- exit and cancellation ---
     ("quit", quit),
     // --- help ---
@@ -1804,7 +1832,9 @@ pub const OP_MAPPINGS: [(&'static str, OpFn); 69] = [
     ("move-bottom", move_bottom),
     ("move-bottom-select", move_bottom_select),
     ("scroll-up", scroll_up),
+    ("scroll-up-select", scroll_up_select),
     ("scroll-down", scroll_down),
+    ("scroll-down-select", scroll_down_select),
     ("scroll-center", scroll_center),
     ("set-mark", set_mark),
     ("goto-line", goto_line),

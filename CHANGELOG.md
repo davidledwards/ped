@@ -2,6 +2,21 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
+## [0.6.1](https://github.com/davidledwards/ped/tree/v0.6.1) - `2024-12-26`
+
+### Added
+
+- Selection via `SHIFT` key when scrolling by mouse
+
+### Changed
+
+- Minor changes to default key bindings for scrolling and moving forward and backward by word
+- Major usability improvement when referencing and defining colors
+
+### Fixed
+
+- Mouse tracking now _scrolls_ instead of moving cursor
+
 ## [0.6.0](https://github.com/davidledwards/ped/tree/v0.6.0) - `2024-12-26`
 
 ### Changed
@@ -10,7 +25,7 @@ This file contains relevant information for each release. Please refer to the co
 
 ### Fixed
 
-* Minor display issues related to prior method of color management
+- Minor display issues related to prior method of color management
 
 ## [0.5.0](https://github.com/davidledwards/ped/tree/v0.5.0) - `2024-12-24`
 
