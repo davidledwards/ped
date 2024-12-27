@@ -20,6 +20,7 @@ usage: ped OPTIONS [file...]
   CONFIGURATION
     An optional configuration file is loaded if present in one of the following
     locations in order of precedence:
+
         - $HOME/.pedrc
         - $HOME/.ped/pedrc
         - $HOME/.config/ped/pedrc
@@ -35,6 +36,7 @@ usage: ped OPTIONS [file...]
   SYNTAX
     An optional collection of syntax configuration files are enumerated and
     loaded from one of the following directories in order of precedence:
+
         - $HOME/.ped/syntax
         - $HOME/.config/ped/syntax
 

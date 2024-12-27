@@ -534,7 +534,7 @@ impl Editor {
         let syntax = if persistent {
             config
                 .registry
-                .find_for(path)
+                .find(path)
                 .map(|syntax| syntax.clone())
                 .unwrap_or_else(|| Syntax::default())
         } else {

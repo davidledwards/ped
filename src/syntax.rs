@@ -33,8 +33,8 @@ pub struct Registry {
     /// A map of canonical syntax names to syntax configurations.
     syntax_map: HashMap<String, Syntax>,
 
-    /// A map of file extensions to canonical syntax names.
-    ext_map: HashMap<String, String>,
+    /// A list of regular expressions that map to canonical syntax names.
+    re_list: Vec<(Regex, String)>,
 }
 
 /// A syntax configuration.
@@ -81,7 +81,7 @@ struct ExternalConfig {
 #[serde(deny_unknown_fields)]
 struct ExternalSyntax {
     name: String,
-    extensions: Vec<String>,
+    files: Vec<String>,
 }
 
 impl Syntax {
@@ -201,20 +201,15 @@ impl Registry {
         }
     }
 
-    /// Returns the syntax configuration matching the file extension `ext`, or `None`
-    /// if no match is found.
-    pub fn find(&self, ext: &str) -> Option<&Syntax> {
-        self.ext_map
-            .get(ext)
-            .and_then(|name| self.syntax_map.get(name))
-    }
-
-    /// Returns the syntax configuration matching the file extension for `path`, or
+    /// Returns the first syntax configuration matching the file name of `path`, or
     /// `None` if no match is found.
-    pub fn find_for<P: AsRef<Path>>(&self, path: P) -> Option<&Syntax> {
-        path.as_ref()
-            .extension()
-            .and_then(|ext| self.find(&ext.to_string_lossy()))
+    pub fn find<P: AsRef<Path>>(&self, path: P) -> Option<&Syntax> {
+        path.as_ref().file_name().and_then(|file| {
+            self.re_list
+                .iter()
+                .find(|(re, _)| re.is_match(&file.to_string_lossy()))
+                .and_then(|(_, name)| self.syntax_map.get(name))
+        })
     }
 
     /// Creates a registry by enumerating and loading files from `dir`.
@@ -232,27 +227,29 @@ impl Registry {
             .collect::<Vec<_>>();
 
         let mut syntax_map = HashMap::new();
-        let mut ext_map = HashMap::new();
+        let mut re_list = Vec::new();
         for path in paths {
-            let (syntax, exts) = Self::load_syntax(path, colors)?;
+            let (syntax, res) = Self::load_syntax(path, colors)?;
             let name = syntax.name.clone();
-            for ext in exts {
-                ext_map.insert(ext, name.clone());
+            for re in res {
+                re_list.push((re, name.clone()));
             }
             syntax_map.insert(name, syntax);
         }
 
         let registry = Registry {
             syntax_map,
-            ext_map,
+            re_list,
         };
         Ok(registry)
     }
 
     /// Loads the syntax configuration referenced by `path`, returning the syntax
-    /// along with a vector of file extensions.
-    fn load_syntax<P: AsRef<Path>>(path: P, colors: &Colors) -> Result<(Syntax, Vec<String>)> {
+    /// along with a vector of regular expressions for matching file names.
+    fn load_syntax<P: AsRef<Path>>(path: P, colors: &Colors) -> Result<(Syntax, Vec<Regex>)> {
         let config = Self::read_file(path.as_ref())?;
+
+        // Build tokens and create syntax configuration.
         let tokens = if let Some(tokens) = config.tokens {
             let mut ts = Vec::new();
             for (pattern, color) in &tokens {
@@ -267,7 +264,14 @@ impl Registry {
             Vec::new()
         };
         let syntax = Syntax::new(config.syntax.name, tokens)?;
-        Ok((syntax, config.syntax.extensions))
+
+        // Convert file patterns to regular expressions.
+        let mut res = Vec::new();
+        for pattern in config.syntax.files {
+            let re = Regex::new(&pattern).map_err(|e| Error::invalid_regex(&pattern, &e))?;
+            res.push(re);
+        }
+        Ok((syntax, res))
     }
 
     fn read_file(path: &Path) -> Result<ExternalConfig> {
@@ -280,7 +284,7 @@ impl Default for Registry {
     fn default() -> Registry {
         Registry {
             syntax_map: HashMap::new(),
-            ext_map: HashMap::new(),
+            re_list: Vec::new(),
         }
     }
 }
