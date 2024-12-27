@@ -8,7 +8,7 @@ The *ped*estrian text editor.
 
 The genesis of this project stemmed from a desire to learn the [Rust](https://www.rust-lang.org/) programming language while also building something useful and nontrivial.
 
-During my university years studying computer science, I spent evenings and weekends developing a text editor for MS-DOS in Turbo Pascal 3.0. Unfortunately, the source code has been lost forever, but rest assured that reviewing that code today would likely be a dreadful experience.
+During my university years studying computer science, I spent evenings and weekends developing a text editor for MS-DOS in Turbo Pascal 3.0. Unfortunately, the source code seems to have been lost forever, but rest assured that reviewing the code today would likely be a dreadful experience.
 
 This is a hobbyist project with the goal of building a fully functional terminal-based editor supporting multiple buffers and windows, regular expression search, syntax highlighting, and perhaps other features yet to be decided. I plan to develop most everything from scratch as opposed to using prebuilt libraries. The desire is to learn, not to go fast.
 
@@ -25,10 +25,10 @@ brew install ped
 
 Releases can be downloaded directly from [GitHub](https://github.com/davidledwards/ped/releases).
 
-Alternatively, using the [GitHub CLI](https://cli.github.com/), releases can also be downloaded from the command line. For example, to download version `0.7.0`, run the following command.
+Alternatively, using the [GitHub CLI](https://cli.github.com/), releases can also be downloaded from the command line. For example, to download version `0.8.0`, run the following command.
 
 ```shell
-gh release download --repo https://github.com/davidledwards/ped v0.7.0
+gh release download --repo https://github.com/davidledwards/ped v0.8.0
 ```
 
 ## Usage
@@ -55,12 +55,36 @@ ped foo.rs bar.rs
 
 Alternatively, a configuration file can be specified on the command line using the `--config` option.
 
+```shell
+ped --config ~/alt/.pedrc README.md
+```
+
 See [.pedrc](.pedrc) for a detailed explanation of configuration settings. In the absence of a configuration file, `ped` will rely on default values.
 
 `ped` will also try to locate syntax configuration files in one of the following directories in order of precedence. See the [ped-syntax](https://github.com/davidledwards/ped-syntax) repository for more information about creating and installing syntax files.
 
 - `$HOME/.ped/syntax`
 - `$HOME/.config/ped/syntax`
+
+Alternatively, a directory containing syntax configurations can be specified using the `--syntax` option.
+
+```shell
+ped --syntax ~/alt/syntax README.md
+```
+
+`ped` can also be instructed to ignore all configuration files, including syntax configurations, using the `--bare` and `--bare-syntax` options, respectively. This is useful in circumstances where configuration files contain errors, which will cause `ped` to exit prematurely.
+
+This ignores _all_ configurations.
+
+```shell
+ped --bare README.md
+```
+
+This ignores syntax configurations only. Note that the configuration file is still loaded.
+
+```shell
+ped --bare-syntax README.md
+```
 
 ## Tour
 

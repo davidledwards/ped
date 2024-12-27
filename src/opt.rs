@@ -16,6 +16,8 @@ pub struct Options {
     pub bindings: bool,
     pub config_path: Option<String>,
     pub syntax_dir: Option<String>,
+    pub bare: bool,
+    pub bare_syntax: bool,
     pub files: Vec<String>,
 }
 
@@ -33,6 +35,8 @@ impl Default for Options {
             bindings: false,
             config_path: None,
             syntax_dir: None,
+            bare: false,
+            bare_syntax: false,
             files: vec![],
         }
     }
@@ -58,6 +62,8 @@ impl Options {
                 "--bindings" => opts.bindings = true,
                 "--config" => opts.config_path = Some(expect_value(&arg, it.next())?),
                 "--syntax" => opts.syntax_dir = Some(expect_value(&arg, it.next())?),
+                "--bare" => opts.bare = true,
+                "--bare-syntax" => opts.bare_syntax = true,
                 arg if arg.starts_with("--") => return Err(Error::unexpected_arg(arg)),
                 _ => opts.files.push(arg),
             }

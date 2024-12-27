@@ -2,6 +2,12 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
+## [0.8.0](https://github.com/davidledwards/ped/tree/v0.7.0) - `2024-12-27`
+
+### Added
+
+- CLI options `--bare` and `--bare-syntax` to ignore loading, respectively, _all_ configuration files or syntax configurations only
+
 ## [0.7.0](https://github.com/davidledwards/ped/tree/v0.7.0) - `2024-12-27`
 
 ### Changed

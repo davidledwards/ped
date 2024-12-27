@@ -104,7 +104,9 @@ fn run_opts(opts: &Options) -> Result<()> {
     // Load optional configuration from either standard location or path specified on
     // command line, and apply command line options afterwards since these override
     // all other settings.
-    let mut config = if let Some(ref config_path) = opts.config_path {
+    let mut config = if opts.bare {
+        Configuration::default()
+    } else if let Some(ref config_path) = opts.config_path {
         Configuration::load_file(config_path)?
     } else {
         Configuration::load()?
@@ -112,7 +114,9 @@ fn run_opts(opts: &Options) -> Result<()> {
     config.apply_opts(opts);
 
     // Load optional syntax configurations via registry and update configuration.
-    config.registry = if let Some(ref syntax_dir) = opts.syntax_dir {
+    config.registry = if opts.bare || opts.bare_syntax {
+        Registry::default()
+    } else if let Some(ref syntax_dir) = opts.syntax_dir {
         Registry::load_dir(syntax_dir, &config.colors)?
     } else {
         Registry::load(&config.colors)?
