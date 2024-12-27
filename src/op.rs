@@ -485,7 +485,11 @@ fn move_bottom_select(env: &mut Environment) -> Option<Action> {
 /// Operation: `scroll-up`
 fn scroll_up(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
+    let prior_pos = editor.pos();
     editor.scroll_up(1);
+    if editor.pos() != prior_pos {
+        editor.clear_soft_mark();
+    }
     editor.render();
     None
 }
@@ -493,7 +497,11 @@ fn scroll_up(env: &mut Environment) -> Option<Action> {
 /// Operation: `scroll-down`
 fn scroll_down(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
+    let prior_pos = editor.pos();
     editor.scroll_down(1);
+    if editor.pos() != prior_pos {
+        editor.clear_soft_mark();
+    }
     editor.render();
     None
 }
@@ -1487,34 +1495,58 @@ impl Inquirer for SelectEditor {
     }
 }
 
-/// Moves the cursor up for the editor associated with `p`, which represents a
+/// Scrolls the display down for the editor associated with `p`, which represents a
 /// point whose origin is the top-left position of the terminal display.
 pub fn track_up(env: &mut Environment, p: Point, select: bool) {
     let view = env.workspace().locate_view(p);
     if let Some((view_id, _)) = view {
         let mut editor = env.get_view_editor(view_id).borrow_mut();
-        if select {
+
+        // Update soft mark if selection is active, otherwise capture current buffer
+        // position before scrolling in case soft mark needs to be cleared.
+        let prior_pos = if select {
             editor.set_soft_mark();
+            None
         } else {
-            editor.clear_soft_mark();
+            Some(editor.pos())
+        };
+        editor.scroll_down(1);
+
+        // If selection is inactive and buffer position moved as a result of scrolling,
+        // then soft mark must be cleared.
+        if let Some(prior_pos) = prior_pos {
+            if editor.pos() != prior_pos {
+                editor.clear_soft_mark();
+            }
         }
-        editor.move_up(1, false);
         editor.render();
     }
 }
 
-/// Moves the cursor down for the editor associated with `p`, which represents a
+/// Scrolls the display up for the editor associated with `p`, which represents a
 /// point whose origin is the top-left position of the terminal display.
 pub fn track_down(env: &mut Environment, p: Point, select: bool) {
     let view = env.workspace().locate_view(p);
     if let Some((view_id, _)) = view {
         let mut editor = env.get_view_editor(view_id).borrow_mut();
-        if select {
+
+        // Update soft mark if selection is active, otherwise capture current buffer
+        // position before scrolling in case soft mark needs to be cleared.
+        let prior_pos = if select {
             editor.set_soft_mark();
+            None
         } else {
-            editor.clear_soft_mark();
+            Some(editor.pos())
+        };
+        editor.scroll_up(1);
+
+        // If selection is inactive and buffer position moved as a result of scrolling,
+        // then soft mark must be cleared.
+        if let Some(prior_pos) = prior_pos {
+            if editor.pos() != prior_pos {
+                editor.clear_soft_mark();
+            }
         }
-        editor.move_down(1, false);
         editor.render();
     }
 }
