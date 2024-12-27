@@ -4,16 +4,16 @@ usage: ped OPTIONS [file...]
   The pedestrian text editor.
 
   OPTIONS
-    --show-spotlight  : highlight cursor row
-    --show-lines      : show line numbers in left margin
-    --show-eol        : make \n visible with special character
-    --tab-size N      : use N spaces for tab (default: 3)
-    --print-keys      : print available keys to stdout
-    --print-ops       : print available operations to stdout
-    --print-bindings  : print key bindings to stdout
-    --config FILE     : load configuration from FILE
-    --syntax-dir DIR  : load syntax configurations from DIR
-    --version         : print version information
+    --spotlight    : highlight cursor row
+    --lines        : show line numbers in left margin
+    --eol          : make \n visible with special character
+    --tab N        : use N spaces for tab (default: 3)
+    --keys         : print available keys to stdout
+    --ops          : print available operations to stdout
+    --bindings     : print key bindings to stdout
+    --config FILE  : load configuration from FILE
+    --syntax DIR   : load syntax configurations from DIR
+    --version      : print version information
 
   CONFIGURATION
     An optional configuration file is loaded if present in one of the following
@@ -36,8 +36,8 @@ usage: ped OPTIONS [file...]
         - $HOME/.ped/syntax
         - $HOME/.config/ped/syntax
 
-    Alternatively, a directory may be specified using --syntax-dir, which
-    ignores searching in the standard directories above.
+    Alternatively, a directory may be specified using --syntax, which ignores
+    searching in the standard directories above.
 
     Syntax configuration files are formatted using the TOML syntax and must
     contain the `.toml` extension. All other files types are ignored.

@@ -53,10 +53,10 @@ pub struct Configuration {
 pub type ConfigurationRef = Rc<Configuration>;
 
 pub struct Settings {
-    pub show_spotlight: bool,
-    pub show_lines: bool,
-    pub show_eol: bool,
-    pub tab_size: usize,
+    pub spotlight: bool,
+    pub lines: bool,
+    pub eol: bool,
+    pub tab: usize,
 }
 
 pub struct Theme {
@@ -90,17 +90,10 @@ struct ExternalConfiguration {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ExternalSettings {
-    #[serde(rename = "show-spotlight")]
-    show_spotlight: Option<bool>,
-
-    #[serde(rename = "show-lines")]
-    show_lines: Option<bool>,
-
-    #[serde(rename = "show-eol")]
-    show_eol: Option<bool>,
-
-    #[serde(rename = "tab-size")]
-    tab_size: Option<usize>,
+    spotlight: Option<bool>,
+    lines: Option<bool>,
+    eol: Option<bool>,
+    tab: Option<usize>,
 }
 
 #[derive(Deserialize)]
@@ -144,29 +137,29 @@ impl Settings {
     /// Applies the external settings `ext` on top of `self`.
     fn apply(&mut self, ext: Option<ExternalSettings>) {
         if let Some(ext) = ext {
-            self.show_spotlight = ext.show_spotlight.unwrap_or(self.show_spotlight);
-            self.show_lines = ext.show_lines.unwrap_or(self.show_lines);
-            self.show_eol = ext.show_eol.unwrap_or(self.show_eol);
-            self.tab_size = ext.tab_size.unwrap_or(self.tab_size);
+            self.spotlight = ext.spotlight.unwrap_or(self.spotlight);
+            self.lines = ext.lines.unwrap_or(self.lines);
+            self.eol = ext.eol.unwrap_or(self.eol);
+            self.tab = ext.tab.unwrap_or(self.tab);
         }
     }
 
     /// Applies the relevant settings from `opts` on top of `self`.
     pub fn apply_opts(&mut self, opts: &Options) {
-        self.show_spotlight = opts.show_spotlight.unwrap_or(self.show_spotlight);
-        self.show_lines = opts.show_lines.unwrap_or(self.show_lines);
-        self.show_eol = opts.show_eol.unwrap_or(self.show_eol);
-        self.tab_size = opts.tab_size.unwrap_or(self.tab_size);
+        self.spotlight = opts.spotlight.unwrap_or(self.spotlight);
+        self.lines = opts.lines.unwrap_or(self.lines);
+        self.eol = opts.eol.unwrap_or(self.eol);
+        self.tab = opts.tab.unwrap_or(self.tab);
     }
 }
 
 impl Default for Settings {
     fn default() -> Settings {
         Settings {
-            show_spotlight: false,
-            show_lines: false,
-            show_eol: false,
-            tab_size: 3,
+            spotlight: false,
+            lines: false,
+            eol: false,
+            tab: 3,
         }
     }
 }

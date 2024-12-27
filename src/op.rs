@@ -626,7 +626,7 @@ fn insert_line(env: &mut Environment) -> Option<Action> {
 
 /// Operation: `insert-tab`
 fn insert_tab(env: &mut Environment) -> Option<Action> {
-    let tab_size = env.workspace().config().settings.tab_size;
+    let tab_size = env.workspace().config().settings.tab;
     let mut editor = env.get_active_editor().borrow_mut();
     editor.clear_mark();
     let n = tab_size - (editor.location().col as usize % tab_size);

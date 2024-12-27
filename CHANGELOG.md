@@ -2,6 +2,28 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
+## [0.7.0](https://github.com/davidledwards/ped/tree/v0.7.0) - `2024-12-27`
+
+### Changed
+
+- Shortened names of CLI options
+
+  - `--show-spotlight` → `--spotlight`
+  - `--show-lines` → `--lines`
+  - `--show-eol` → `--eol`
+  - `--tab-size` → `--tab`
+  - `--print-keys` → `--keys`
+  - `--print-ops` → `--ops`
+  - `--print-bindings` → `--bindings`
+  - `--syntax-dir` → `--syntax`
+
+- Shortened names of configuration settings
+
+  - `show-spotlight` → `spotlight`
+  - `show-lines` → `lines`
+  - `show-eol` → `eol`
+  - `tab-size` → `tab`
+
 ## [0.6.1](https://github.com/davidledwards/ped/tree/v0.6.1) - `2024-12-26`
 
 ### Added

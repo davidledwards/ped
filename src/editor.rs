@@ -398,7 +398,7 @@ impl Draw {
         let fg = if let Some(fg) = render.syntax_cursor.color() {
             fg
         } else {
-            if c == '\n' && self.config.settings.show_eol {
+            if c == '\n' && self.config.settings.eol {
                 self.config.theme.eol_fg
             } else {
                 self.config.theme.text_fg
@@ -407,7 +407,7 @@ impl Draw {
 
         let bg = if self.select_span.contains(&render.pos) {
             self.config.theme.select_bg
-        } else if self.config.settings.show_spotlight && render.row == self.cursor.row {
+        } else if self.config.settings.spotlight && render.row == self.cursor.row {
             self.config.theme.spotlight_bg
         } else {
             self.config.theme.text_bg
@@ -421,7 +421,7 @@ impl Draw {
     #[inline]
     fn convert_char(&self, c: char) -> char {
         if c == '\n' {
-            if self.config.settings.show_eol {
+            if self.config.settings.eol {
                 Self::EOL_CHAR
             } else {
                 ' '
@@ -726,7 +726,7 @@ impl Editor {
         // Allocate leftmost columns of window to line numbers, but only if enabled and
         // total width of window is large enough to reasonably accommodate.
         let Size { rows, cols } = self.canvas.borrow().size();
-        self.margin_cols = if self.config.settings.show_lines && cols >= Self::MARGIN_COLS * 2 {
+        self.margin_cols = if self.config.settings.lines && cols >= Self::MARGIN_COLS * 2 {
             Self::MARGIN_COLS
         } else {
             0

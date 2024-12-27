@@ -89,10 +89,10 @@ fn run() -> Result<()> {
     } else if opts.version {
         println!("{PACKAGE_NAME} {PACKAGE_VERSION} ({BUILD_HASH} {BUILD_DATE})");
         Ok(())
-    } else if opts.print_keys {
+    } else if opts.keys {
         print!("{}", help::keys_content());
         Ok(())
-    } else if opts.print_ops {
+    } else if opts.ops {
         print!("{}", help::ops_content());
         Ok(())
     } else {
@@ -118,7 +118,7 @@ fn run_opts(opts: &Options) -> Result<()> {
         Registry::load(&config.colors)?
     };
 
-    if opts.print_bindings {
+    if opts.bindings {
         print!("{}", help::bindings_content(config.bindings.bindings()));
         Ok(())
     } else {

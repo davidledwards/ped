@@ -6,19 +6,19 @@
 [settings]
 # Enables highlighting of the cursor row.
 # Default = false
-show-spotlight = true
+spotlight = true
 
 # Shows line numbers in the left margin.
 # Default = false
-show-lines = true
+lines = true
 
 # Makes \n characters visible using a special character.
 # Default = false
-show-eol = true
+eol = true
 
 # Sets the tab stop size.
 # Default = 3
-tab-size = 4
+tab = 4
 
 # This section contains custom-defined color names that map to color values.
 #
@@ -49,6 +49,9 @@ tab-size = 4
 #
 [colors]
 "funky-red" = 196
+"charcoal" = 232
+"light-gray" = 234
+"medium-gray" = 237
 
 # This section allows the configuration of alternative color themes.
 #
@@ -56,16 +59,16 @@ tab-size = 4
 #
 [theme]
 text-fg = "white"
-text-bg = "black"
+text-bg = "charcoal"
 select-bg = "blue"
-spotlight-bg = "gray"
+spotlight-bg = "light-gray"
 eol-fg = "yellow"
 echo-fg = "funky-red"
 prompt-fg = "magenta"
 banner-fg = "white"
-banner-bg = "black"
+banner-bg = "medium-gray"
 margin-fg = "green"
-margin-bg = "gray"
+margin-bg = "light-gray"
 
 # This section allows key sequences to be rebound to editing operations.
 #
