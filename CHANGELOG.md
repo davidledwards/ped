@@ -2,6 +2,12 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
+## [0.8.1](https://github.com/davidledwards/ped/tree/v0.8.1) - `2024-12-28`
+
+### Fixed
+
+- Panic when deleting to the end of buffer _and_ text is being tokenized for syntax highlighting
+
 ## [0.8.0](https://github.com/davidledwards/ped/tree/v0.8.0) - `2024-12-27`
 
 ### Added
