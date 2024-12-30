@@ -218,6 +218,14 @@ The concept of a _question_ is implemented using an _inquirer_ combined with a _
 
 The _workspace_ supports multiple windows that split vertically with equal allocation of screen real estate. This was an early decision to keep the windowing system simple, at least for now. The workspace also manages resizing of windows when a change in the terminal size is detected.
 
+## Limitations
+
+`ped` currently has a few notable limitations or deficiencies that will be addressed in future versions.
+
+- Tab characters `\t` are not rendered correctly.
+- An auto-save feature has not been implemented, so remember to save frequently.
+- A target binary does not exist for Windows.
+
 ## Release
 
 Instructions for building and releasing can be found [here](RELEASE.md).
