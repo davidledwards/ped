@@ -181,8 +181,8 @@ impl Theme {
     const WHITSPACE_FG: u8 = 243;
     const ECHO_FG: u8 = 214;
     const PROMPT_FG: u8 = 34;
-    const BANNER_FG: u8 = 232;
-    const BANNER_BG: u8 = 28;
+    const BANNER_FG: u8 = 255;
+    const BANNER_BG: u8 = 22;
     const MARGIN_FG: u8 = 34;
     const MARGIN_BG: u8 = 234;
 
