@@ -25,10 +25,10 @@ brew install ped
 
 Releases can be downloaded directly from [GitHub](https://github.com/davidledwards/ped/releases).
 
-Alternatively, using the [GitHub CLI](https://cli.github.com/), releases can also be downloaded from the command line. For example, to download version `0.8.1`, run the following command.
+Alternatively, using the [GitHub CLI](https://cli.github.com/), releases can also be downloaded from the command line. For example, to download version `0.9.0`, run the following command.
 
 ```shell
-gh release download --repo https://github.com/davidledwards/ped v0.8.1
+gh release download --repo https://github.com/davidledwards/ped v0.9.0
 ```
 
 ## Usage
@@ -222,7 +222,6 @@ The _workspace_ supports multiple windows that split vertically with equal alloc
 
 `ped` currently has a few notable limitations or deficiencies that will be addressed in future versions.
 
-- Tab characters `\t` are not rendered correctly.
 - An auto-save feature has not been implemented, so remember to save frequently.
 - A target binary does not exist for Windows.
 
