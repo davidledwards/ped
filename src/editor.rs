@@ -360,7 +360,8 @@ impl Default for Line {
 }
 
 impl Draw {
-    const EOL_CHAR: char = '\u{23ce}';
+    const EOL_CHAR: char = '\u{21b2}';
+    const TAB_CHAR: char = '\u{2192}';
 
     fn new(editor: &Editor) -> Draw {
         let select_span = editor
@@ -398,8 +399,8 @@ impl Draw {
         let fg = if let Some(fg) = render.syntax_cursor.color() {
             fg
         } else {
-            if c == '\n' && self.config.settings.eol {
-                self.config.theme.eol_fg
+            if (c == '\n' && self.config.settings.eol) || c == '\t' {
+                self.config.theme.whitespace_fg
             } else {
                 self.config.theme.text_fg
             }
@@ -426,6 +427,8 @@ impl Draw {
             } else {
                 ' '
             }
+        } else if c == '\t' {
+            Self::TAB_CHAR
         } else {
             c
         }

@@ -7,7 +7,9 @@ usage: ped OPTIONS [file...]
     --spotlight    : highlight cursor row
     --lines        : show line numbers in left margin
     --eol          : make \n visible with special character
-    --tab N        : use N spaces for tab (default: 3)
+    --tab-hard     : insert tabs as \t
+    --tab-soft     : insert tabs as spaces (default)
+    --tab-size N   : tab stop size when --tab-soft (default: 4)
     --keys         : print available keys to stdout
     --ops          : print available operations to stdout
     --bindings     : print key bindings to stdout

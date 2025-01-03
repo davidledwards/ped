@@ -16,9 +16,13 @@ lines = true
 # Default = false
 eol = true
 
-# Sets the tab stop size.
-# Default = 3
-tab = 4
+# Insert tabs as \t instead of spaces.
+# Default = false
+tab-hard = true
+
+# Sets the tab stop size, which applies only when tab-hard = false
+# Default = 4
+tab-size = 8
 
 # This section contains custom-defined color names that map to color values.
 #
@@ -62,7 +66,7 @@ text-fg = "white"
 text-bg = "charcoal"
 select-bg = "blue"
 spotlight-bg = "light-gray"
-eol-fg = "yellow"
+whitespace-fg = "yellow"
 echo-fg = "funky-red"
 prompt-fg = "magenta"
 banner-fg = "white"

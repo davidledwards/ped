@@ -2,6 +2,22 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
+## [0.9.0](https://github.com/davidledwards/ped/tree/v0.9.0) - `2025-01-02`
+
+### Added
+
+- CLI options `--tab-hard` and `--tab-soft` to insert literal `\t` or spaces, respectively, when `TAB` key is pressed
+
+### Changed
+
+- CLI option `--tab` to `--tab-size`
+- Configuration setting `tab` to `tab-size`
+- Configuration color `eol-fg` to `whitespace-fg`
+
+### Fixed
+
+- Rendering of `\t` now correctly shows single character `→` (does not indent as one might expect)
+
 ## [0.8.1](https://github.com/davidledwards/ped/tree/v0.8.1) - `2024-12-28`
 
 ### Fixed

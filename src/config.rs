@@ -56,7 +56,8 @@ pub struct Settings {
     pub spotlight: bool,
     pub lines: bool,
     pub eol: bool,
-    pub tab: usize,
+    pub tab_hard: bool,
+    pub tab_size: usize,
 }
 
 pub struct Theme {
@@ -64,7 +65,7 @@ pub struct Theme {
     pub text_bg: u8,
     pub select_bg: u8,
     pub spotlight_bg: u8,
-    pub eol_fg: u8,
+    pub whitespace_fg: u8,
     pub echo_fg: u8,
     pub prompt_fg: u8,
     pub banner_fg: u8,
@@ -93,7 +94,12 @@ struct ExternalSettings {
     spotlight: Option<bool>,
     lines: Option<bool>,
     eol: Option<bool>,
-    tab: Option<usize>,
+
+    #[serde(rename = "tab-hard")]
+    tab_hard: Option<bool>,
+
+    #[serde(rename = "tab-size")]
+    tab_size: Option<usize>,
 }
 
 #[derive(Deserialize)]
@@ -111,8 +117,8 @@ struct ExternalTheme {
     #[serde(rename = "spotlight-bg")]
     spotlight_bg: Option<ColorValue>,
 
-    #[serde(rename = "eol-fg")]
-    eol_fg: Option<ColorValue>,
+    #[serde(rename = "whitespace-fg")]
+    whitespace_fg: Option<ColorValue>,
 
     #[serde(rename = "echo-fg")]
     echo_fg: Option<ColorValue>,
@@ -140,7 +146,8 @@ impl Settings {
             self.spotlight = ext.spotlight.unwrap_or(self.spotlight);
             self.lines = ext.lines.unwrap_or(self.lines);
             self.eol = ext.eol.unwrap_or(self.eol);
-            self.tab = ext.tab.unwrap_or(self.tab);
+            self.tab_hard = ext.tab_hard.unwrap_or(self.tab_hard);
+            self.tab_size = ext.tab_size.unwrap_or(self.tab_size);
         }
     }
 
@@ -149,7 +156,8 @@ impl Settings {
         self.spotlight = opts.spotlight.unwrap_or(self.spotlight);
         self.lines = opts.lines.unwrap_or(self.lines);
         self.eol = opts.eol.unwrap_or(self.eol);
-        self.tab = opts.tab.unwrap_or(self.tab);
+        self.tab_hard = opts.tab_hard.unwrap_or(self.tab_hard);
+        self.tab_size = opts.tab_size.unwrap_or(self.tab_size);
     }
 }
 
@@ -159,7 +167,8 @@ impl Default for Settings {
             spotlight: false,
             lines: false,
             eol: false,
-            tab: 3,
+            tab_hard: false,
+            tab_size: 4,
         }
     }
 }
@@ -169,7 +178,7 @@ impl Theme {
     const TEXT_BG: u8 = 232;
     const SELECT_BG: u8 = 19;
     const SPOTLIGHT_BG: u8 = 234;
-    const EOL_FG: u8 = 34;
+    const WHITSPACE_FG: u8 = 243;
     const ECHO_FG: u8 = 214;
     const PROMPT_FG: u8 = 34;
     const BANNER_FG: u8 = 232;
@@ -196,7 +205,7 @@ impl Theme {
             self.text_bg = resolve(self.text_bg, &ext.text_bg, colors)?;
             self.select_bg = resolve(self.select_bg, &ext.select_bg, colors)?;
             self.spotlight_bg = resolve(self.spotlight_bg, &ext.spotlight_bg, colors)?;
-            self.eol_fg = resolve(self.eol_fg, &ext.eol_fg, colors)?;
+            self.whitespace_fg = resolve(self.whitespace_fg, &ext.whitespace_fg, colors)?;
             self.echo_fg = resolve(self.echo_fg, &ext.echo_fg, colors)?;
             self.prompt_fg = resolve(self.prompt_fg, &ext.prompt_fg, colors)?;
             self.banner_fg = resolve(self.banner_fg, &ext.banner_fg, colors)?;
@@ -228,7 +237,7 @@ impl Default for Theme {
             text_bg: text_color.bg,
             select_bg: Self::SELECT_BG,
             spotlight_bg: Self::SPOTLIGHT_BG,
-            eol_fg: Self::EOL_FG,
+            whitespace_fg: Self::WHITSPACE_FG,
             echo_fg: echo_color.fg,
             prompt_fg: prompt_color.fg,
             banner_fg: banner_color.fg,

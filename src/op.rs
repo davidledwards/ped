@@ -626,11 +626,15 @@ fn insert_line(env: &mut Environment) -> Option<Action> {
 
 /// Operation: `insert-tab`
 fn insert_tab(env: &mut Environment) -> Option<Action> {
-    let tab_size = env.workspace().config().settings.tab;
     let mut editor = env.get_active_editor().borrow_mut();
     editor.clear_mark();
-    let n = tab_size - (editor.location().col as usize % tab_size);
-    editor.insert_str(&" ".repeat(n));
+    if env.workspace().config().settings.tab_hard {
+        editor.insert_char('\t');
+    } else {
+        let tab_size = env.workspace().config().settings.tab_size;
+        let n = tab_size - (editor.location().col as usize % tab_size);
+        editor.insert_str(&" ".repeat(n));
+    }
     editor.render();
     None
 }
