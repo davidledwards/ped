@@ -67,7 +67,7 @@ struct RestoreTerminal;
 
 impl Drop for RestoreTerminal {
     fn drop(&mut self) {
-        term::restore().unwrap_or_else(|e| println!("error restoring terminal: {e}"));
+        restore_term().unwrap_or_else(|e| println!("error restoring terminal: {e}"));
     }
 }
 
@@ -126,42 +126,39 @@ fn run_opts(opts: &Options) -> Result<()> {
         print!("{}", help::bindings_content(config.bindings.bindings()));
         Ok(())
     } else {
-        prepare_term();
-        run_config(opts, config)?;
-        restore_term();
-        Ok(())
+        run_config(opts, config)
     }
 }
 
 fn run_config(opts: &Options, config: Configuration) -> Result<()> {
+    // Prepare terminal but ensure original settings are restored upon return.
+    prepare_term()?;
+    let _restore = RestoreTerminal;
+
     // Initialize main controller and open files specified on command line.
     let mut controller = Controller::new(Keyboard::new(), Workspace::new(config));
     controller.open(&opts.files)?;
-
-    // Puts terminal into raw mode prior to running main controller loop, but also
-    // ensures terminal settings are restored upon exit.
-    term::init()?;
-    {
-        let _restore = RestoreTerminal;
-        controller.run();
-    }
+    controller.run();
     Ok(())
 }
 
-fn prepare_term() {
+fn prepare_term() -> Result<()> {
+    term::init()?;
     print!(
         "{}{}{}",
         ansi::alt_screen(true),
         ansi::track_mouse(true),
         ansi::clear_screen()
     );
+    Ok(())
 }
 
-fn restore_term() {
+fn restore_term() -> Result<()> {
     print!(
         "{}{}{}",
         ansi::clear_screen(),
         ansi::track_mouse(false),
         ansi::alt_screen(false)
     );
+    term::restore()
 }
