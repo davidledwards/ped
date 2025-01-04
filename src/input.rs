@@ -377,7 +377,7 @@ impl InputEditor {
         let cols = (end - start) as u32;
         if cols < self.input_cols {
             let cell = Cell::new(' ', self.workspace.borrow().config().theme.text_color);
-            self.canvas.fill_row_from(0, cols, cell);
+            self.canvas.fill_cell_from(0, cols, cell);
         }
 
         // Send pending changes to canvas and set new cursor position.

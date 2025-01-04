@@ -9,10 +9,13 @@
 //! with the *front* grid to essentially produce an intermediate diff, which is then
 //! used to generate the terminal output.
 
+use crate::color::Color;
 use crate::grid::{Cell, Grid};
 use crate::size::{Point, Size};
 use crate::writer::Writer;
 use std::cell::RefCell;
+use std::cmp;
+use std::ops::Range;
 use std::rc::Rc;
 
 /// An abstraction over the terminal display.
@@ -71,34 +74,52 @@ impl Canvas {
         self.back.set_cell(row, col, cell);
     }
 
+    pub fn write_char(&mut self, row: u32, col: u32, c: char, color: Color) -> u32 {
+        if col < self.size.cols {
+            self.back.set_cell(row, col, Cell::new(c, color));
+            1
+        } else {
+            0
+        }
+    }
+
+    pub fn write_str(&mut self, row: u32, col: u32, chars: &str, color: Color) -> u32 {
+        let chars = chars.chars().collect::<Vec<_>>();
+        self.write(row, col, &chars, color)
+    }
+
+    pub fn write(&mut self, row: u32, col: u32, chars: &[char], color: Color) -> u32 {
+        debug_assert!(row < self.size.rows);
+        let n = cmp::min(chars.len(), (self.size.cols - col) as usize);
+        for (i, c) in chars.iter().take(n).enumerate() {
+            self.back
+                .set_cell(row, col + i as u32, Cell::new(*c, color));
+        }
+        n as u32
+    }
+
     /// Fills all cells with `cell` in the column range [`start_col`, `end_col`)
     /// for the given `row`.
-    pub fn fill_row_range(&mut self, row: u32, start_col: u32, end_col: u32, cell: Cell) {
+    pub fn fill_cell(&mut self, row: u32, cols: Range<u32>, cell: Cell) {
         debug_assert!(row < self.size.rows);
-        debug_assert!(start_col <= end_col);
-        debug_assert!(end_col <= self.size.cols);
+        let Range { start, end } = cols;
+        debug_assert!(start <= end);
+        debug_assert!(end <= self.size.cols);
+        self.back.fill_range(row, start, end, cell);
+    }
 
-        self.back.fill_range(row, start_col, end_col, cell);
+    pub fn fill(&mut self, row: u32, cols: Range<u32>, c: char, color: Color) {
+        self.fill_cell(row, cols, Cell::new(c, color));
     }
 
     /// Fills all cells with `cell` in the column range [`start_col`, ..) for the
     /// given `row`.
-    pub fn fill_row_from(&mut self, row: u32, start_col: u32, cell: Cell) {
-        self.fill_row_range(row, start_col, self.size.cols, cell);
+    pub fn fill_cell_from(&mut self, row: u32, start_col: u32, cell: Cell) {
+        self.fill_cell(row, start_col..self.size.cols, cell);
     }
 
-    /// Fills all cells with `cell` for the given `row`.
-    #[allow(dead_code)]
-    pub fn fill_row(&mut self, row: u32, cell: Cell) {
-        self.fill_row_from(row, 0, cell);
-    }
-
-    /// Fills all cells with `cell` for rows in the range [`start_row`, `end_row`).
-    #[allow(dead_code)]
-    pub fn fill_rows(&mut self, start_row: u32, end_row: u32, cell: Cell) {
-        for row in start_row..end_row {
-            self.fill_row(row, cell);
-        }
+    pub fn fill_row(&mut self, row: u32, c: char, color: Color) {
+        self.fill(row, 0..self.size.cols, c, color);
     }
 
     /// Sets the cursor position on the canvas to `cursor`.

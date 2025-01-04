@@ -796,6 +796,7 @@ impl Editor {
             .borrow_mut()
             .set_dirty(self.dirty)
             .set_title(self.name())
+            .set_syntax(self.tokenizer().syntax().name.clone())
             .set_location(self.location())
             .draw();
     }
@@ -1744,7 +1745,7 @@ impl Editor {
         let (row, col) = (render.row, render.col + self.margin_cols);
         let render = if c == '\n' {
             canvas.set_cell(row, col, draw.as_text(c, &render));
-            canvas.fill_row_from(row, col + 1, draw.as_text(' ', &render));
+            canvas.fill_cell_from(row, col + 1, draw.as_text(' ', &render));
             render.next_line()
         } else {
             canvas.set_cell(row, col, draw.as_text(c, &render));
@@ -1771,14 +1772,14 @@ impl Editor {
 
         // Blank out rest of existing row.
         let (row, col) = (render.row, render.col + self.margin_cols);
-        canvas.fill_row_from(row, col, draw.as_text(' ', &render));
+        canvas.fill_cell_from(row, col, draw.as_text(' ', &render));
 
         // Blank out remaining rows.
         for row in (render.row + 1)..self.rows {
             if self.margin_cols > 0 {
-                canvas.fill_row_range(row, 0, self.margin_cols, draw.as_margin(' '));
+                canvas.fill_cell(row, 0..self.margin_cols, draw.as_margin(' '));
             }
-            canvas.fill_row_from(row, self.margin_cols, draw.as_blank());
+            canvas.fill_cell_from(row, self.margin_cols, draw.as_blank());
         }
     }
 
@@ -1788,7 +1789,7 @@ impl Editor {
         if render.col == 0 && self.margin_cols > 0 {
             let mut canvas = self.canvas.borrow_mut();
             if render.line_wrapped {
-                canvas.fill_row_range(render.row, 0, self.margin_cols, draw.as_margin(' '));
+                canvas.fill_cell(render.row, 0..self.margin_cols, draw.as_margin(' '));
             } else if render.line < Self::LINE_LIMIT {
                 let s = format!(
                     "{:>cols$} ",
@@ -1799,7 +1800,7 @@ impl Editor {
                     canvas.set_cell(render.row, col as u32, draw.as_margin(c));
                 }
             } else {
-                canvas.fill_row_range(render.row, 0, self.margin_cols - 1, draw.as_margin('-'));
+                canvas.fill_cell(render.row, 0..self.margin_cols - 1, draw.as_margin('-'));
                 canvas.set_cell(render.row, self.margin_cols, draw.as_margin(' '));
             }
         }

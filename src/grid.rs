@@ -72,13 +72,13 @@ impl Grid {
         self.content.fill(Cell::EMPTY);
     }
 
-    // Apply differences in `other` grid with respect to this grid and return a vector
-    // of those differences.
-    //
-    // Note that a side effect is that this grid will be equivalent to `other` upon
-    // return.
-    //
-    // Both grids must have equivalent sizes, otherwise the function panics.
+    /// Apply differences in `other` grid with respect to this grid and return a vector
+    /// of those differences.
+    ///
+    /// Note that a side effect is that this grid will be equivalent to `other` upon
+    /// return.
+    ///
+    /// Both grids must have equivalent sizes, otherwise the function panics.
     pub fn reconcile(&mut self, other: &Grid) -> Vec<(Point, Cell)> {
         debug_assert!(self.size.rows == other.size.rows);
         debug_assert!(self.size.cols == other.size.cols);

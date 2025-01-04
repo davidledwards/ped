@@ -98,6 +98,11 @@ impl Tokenizer {
         Rc::new(RefCell::new(self))
     }
 
+    /// Returns a reference to the syntax configuration.
+    pub fn syntax(&self) -> &Syntax {
+        &self.syntax
+    }
+
     /// Tokenizes `buffer` and returns a cursor at position `0`.
     pub fn tokenize(&mut self, buffer: &Buffer) -> Cursor {
         self.spans.clear();
