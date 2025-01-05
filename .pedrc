@@ -61,19 +61,22 @@ tab-size = 8
 #
 # Values from the [colors] section may be referenced here.
 #
+# Recognized color themes and default values:
+#   text-fg = 252
+#   text-bg = 232
+#   select-bg = 19
+#   spotlight-bg = 234
+#   whitespace-fg = 243
+#   accent-fg = 45
+#   echo-fg = 214
+#   prompt-fg = 34
+#   banner-fg = 255
+#   banner-bg = 22
+#   margin-fg = 34
+#   margin-bg = 234
+#
 [theme]
-text-fg = "white"
-text-bg = "charcoal"
-select-bg = "blue"
-spotlight-bg = "light-gray"
-whitespace-fg = "yellow"
 echo-fg = "funky-red"
-accent-fg = "charcoal"
-prompt-fg = "magenta"
-banner-fg = "white"
-banner-bg = "medium-gray"
-margin-fg = "green"
-margin-bg = "light-gray"
 
 # This section allows key sequences to be rebound to editing operations.
 #
