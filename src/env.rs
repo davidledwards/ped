@@ -6,6 +6,7 @@
 
 use crate::editor::{Align, Editor, EditorRef};
 use crate::search::Pattern;
+use crate::source::Source;
 use crate::window::WindowRef;
 use crate::workspace::{Placement, Workspace, WorkspaceRef};
 use std::cell::{Ref, RefMut};
@@ -36,12 +37,12 @@ pub enum Focus {
 }
 
 impl Environment {
-    /// Collection of predefined editors, all of which are *transient* and may not
+    /// Collection of predefined editors, all of which are _ephemeral_ and may not
     /// be removed from the list of editors.
     ///
     /// Note that this collection must not be empty, otherwise initialization of the
     /// environment will panic.
-    const BUILTIN_EDITORS: [(u32, &'static str); 1] = [(0, "@scratch")];
+    const BUILTIN_EDITORS: [(u32, &'static str); 1] = [(0, "scratch")];
 
     pub fn new(workspace: WorkspaceRef) -> Environment {
         // Seed list of editors with builtins.
@@ -49,7 +50,12 @@ impl Environment {
         for (id, name) in Self::BUILTIN_EDITORS {
             editor_map.insert(
                 id,
-                Editor::transient(workspace.borrow().config().clone(), name, None).to_ref(),
+                Editor::new(
+                    workspace.borrow().config().clone(),
+                    Source::Ephemeral(name.to_string()),
+                    None,
+                )
+                .to_ref(),
             );
         }
         let editor_id_seq = editor_map.len() as u32;
@@ -123,12 +129,12 @@ impl Environment {
             .map(|(v_id, _)| *v_id)
     }
 
-    /// Returns the id of the editor whose [`name`](Editor::name) matches `name`,
+    /// Returns the id of the editor whose [`source`](Editor::source) matches `source`,
     /// otherwise `None`.
-    pub fn find_editor_id(&self, name: &str) -> Option<u32> {
+    pub fn find_editor_id(&self, source: &str) -> Option<u32> {
         self.editor_map
             .iter()
-            .find(|(_, e)| e.borrow().name() == name)
+            .find(|(_, e)| e.borrow().source().to_string() == source)
             .map(|(id, _)| *id)
     }
 

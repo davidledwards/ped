@@ -9,18 +9,24 @@ use crate::config::ConfigurationRef;
 use crate::editor::{Editor, EditorRef};
 use crate::key::{Key, KEY_MAPPINGS};
 use crate::op::OP_MAPPINGS;
+use crate::source::Source;
 use crate::{BUILD_DATE, BUILD_HASH, PACKAGE_NAME, PACKAGE_VERSION};
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write;
 
-pub const HELP_EDITOR_NAME: &str = "@help";
-pub const KEYS_EDITOR_NAME: &str = "@keys";
-pub const OPS_EDITOR_NAME: &str = "@operations";
-pub const BINDINGS_EDITOR_NAME: &str = "@bindings";
+pub const HELP_EDITOR_NAME: &str = "help";
+pub const KEYS_EDITOR_NAME: &str = "keys";
+pub const OPS_EDITOR_NAME: &str = "operations";
+pub const BINDINGS_EDITOR_NAME: &str = "bindings";
 
-/// Returns a transient editor, named `@help`, containing general help content.
+/// Returns an ephemeral editor, named `@help`, containing general help content.
 pub fn help_editor(config: ConfigurationRef) -> EditorRef {
-    Editor::transient(config, HELP_EDITOR_NAME, Some(help_buffer())).to_ref()
+    Editor::new(
+        config,
+        Source::as_ephemeral(HELP_EDITOR_NAME),
+        Some(help_buffer()),
+    )
+    .to_ref()
 }
 
 fn help_buffer() -> Buffer {
@@ -34,9 +40,14 @@ fn help_buffer() -> Buffer {
     make_buffer(&out)
 }
 
-/// Returns a transient editor, named `@keys`, containing a list of available keys.
+/// Returns an ephemeral editor, named `@keys`, containing a list of available keys.
 pub fn keys_editor(config: ConfigurationRef) -> EditorRef {
-    Editor::transient(config, KEYS_EDITOR_NAME, Some(keys_buffer())).to_ref()
+    Editor::new(
+        config,
+        Source::as_ephemeral(KEYS_EDITOR_NAME),
+        Some(keys_buffer()),
+    )
+    .to_ref()
 }
 
 /// Returns a formatted list of available keys.
@@ -71,10 +82,15 @@ fn prepare_keys() -> Vec<String> {
     keys
 }
 
-/// Returns a transient editor, named `@operations`, containing a list of available
+/// Returns an ephemeral editor, named `@operations`, containing a list of available
 /// editing operations.
 pub fn ops_editor(config: ConfigurationRef) -> EditorRef {
-    Editor::transient(config, OPS_EDITOR_NAME, Some(ops_buffer())).to_ref()
+    Editor::new(
+        config,
+        Source::as_ephemeral(OPS_EDITOR_NAME),
+        Some(ops_buffer()),
+    )
+    .to_ref()
 }
 
 /// Returns a formatted list of available editing operations.
@@ -109,10 +125,15 @@ fn prepare_ops() -> Vec<String> {
     ops
 }
 
-/// Returns a transient editor, named `@bindings`, containing a list of key bindings.
+/// Returns an ephemeral editor, named `@bindings`, containing a list of key bindings.
 pub fn bindings_editor(config: ConfigurationRef) -> EditorRef {
     let buffer = bindings_buffer(config.bindings.bindings());
-    Editor::transient(config, BINDINGS_EDITOR_NAME, Some(buffer)).to_ref()
+    Editor::new(
+        config,
+        Source::as_ephemeral(BINDINGS_EDITOR_NAME),
+        Some(buffer),
+    )
+    .to_ref()
 }
 
 /// Returns a formatted list of key bindings.

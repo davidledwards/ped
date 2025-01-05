@@ -8,7 +8,7 @@
 //! [TOML specification](https://toml.io).
 //!
 //! Syntax files are enumerated and loaded by searching predefined directories via
-//! [`Registry::load()`], or from a custom directory using [`Registry::load_file()`].
+//! [`Registry::load()`], or from a custom directory using [`Registry::load_dir()`].
 //! Any file in the applicable directory with an extension of `.toml` is assumed to
 //! be a syntax configuration.
 //!

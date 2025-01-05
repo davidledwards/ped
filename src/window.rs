@@ -7,6 +7,7 @@ use crate::canvas::{Canvas, CanvasRef};
 use crate::color::Color;
 use crate::config::ConfigurationRef;
 use crate::size::{Point, Size};
+use crate::source::Source;
 use crate::sys;
 use std::cell::RefCell;
 use std::ops::Range;
@@ -16,12 +17,12 @@ use std::usize;
 pub struct Banner {
     canvas: Canvas,
     dirty_area: Option<u32>,
-    title_area: Option<Range<u32>>,
+    source_area: Option<Range<u32>>,
     loc_area: Option<Range<u32>>,
     banner_color: Color,
     accent_color: Color,
     dirty: bool,
-    title: String,
+    source: Source,
     syntax: String,
     loc: Point,
 }
@@ -37,29 +38,33 @@ impl Banner {
     /// otherwise it is clipped.
     const MIN_COLS_FOR_LOCATION: u32 = 32;
 
-    /// Number of columns allocated to left and right margins.
-    const MARGIN_COLS: u32 = 1;
+    /// Number of columns allocated to left margin.
+    const LEFT_MARGIN_COLS: u32 = 1;
 
-    const TITLE_ELLIPSIS: &str = "...";
+    /// Number of columns allocated to right margin.
+    const RIGHT_MARGIN_COLS: u32 = 2;
 
-    /// Number of additional columns required in the title and syntax area for
+    /// Prefix to use when truncating the source.
+    const SOURCE_ELLIPSIS: &str = "...";
+
+    /// Number of additional columns required in the source and syntax area for
     /// whitespace and other adornments.
-    const TITLE_ADORN_COLS: usize = 3;
+    const SOURCE_ADORN_COLS: usize = 3;
 
-    /// Number of columns allocated to whitespace between title and location areas.
+    /// Number of columns allocated to whitespace between source and location areas.
     const GAP_COLS: u32 = 2;
 
     /// Number of columns allocated to line numbers.
     const LINE_COLS: u32 = 5;
 
     /// Maximum line number that can be shown based on allocated columns.
-    const LINE_LIMIT: u32 = u32::pow(10, Self::LINE_COLS - 1);
+    const LINE_LIMIT: u32 = u32::pow(10, Self::LINE_COLS);
 
     /// Number of columns allocated to column numbers.
     const COL_COLS: u32 = 4;
 
     /// Maximum column number that can be shown based on allocated columns.
-    const COL_LIMIT: u32 = u32::pow(10, Self::COL_COLS - 1);
+    const COL_LIMIT: u32 = u32::pow(10, Self::COL_COLS);
 
     /// Number of columns allocated to location area.
     const LOCATION_COLS: u32 = Self::LINE_COLS + Self::COL_COLS + 1;
@@ -67,7 +72,7 @@ impl Banner {
     fn new(origin: Point, cols: u32, config: ConfigurationRef) -> Banner {
         // Determine which areas of banner will be shown based on available number of
         // columns.
-        let (dirty_area, title_area, loc_area) = Self::calc_areas(cols);
+        let (dirty_area, source_area, loc_area) = Self::calc_areas(cols);
         let banner_color = Color::new(config.theme.banner_fg, config.theme.banner_bg);
         let accent_color = Color::new(config.theme.accent_fg, config.theme.banner_bg);
 
@@ -78,12 +83,12 @@ impl Banner {
         Banner {
             canvas,
             dirty_area,
-            title_area,
+            source_area,
             loc_area,
             banner_color,
             accent_color,
             dirty: false,
-            title: String::new(),
+            source: Source::Null,
             syntax: String::new(),
             loc: Point::ORIGIN,
         }
@@ -93,12 +98,12 @@ impl Banner {
         Banner {
             canvas: Canvas::zero(),
             dirty_area: None,
-            title_area: None,
+            source_area: None,
             loc_area: None,
             banner_color: Color::ZERO,
             accent_color: Color::ZERO,
             dirty: false,
-            title: String::new(),
+            source: Source::Null,
             syntax: String::new(),
             loc: Point::ORIGIN,
         }
@@ -121,19 +126,15 @@ impl Banner {
         self
     }
 
-    pub fn set_title(&mut self, title: String) -> &mut Banner {
-        if title != self.title {
-            self.title = title;
-            self.draw_title();
-        }
+    pub fn set_source(&mut self, source: Source) -> &mut Banner {
+        self.source = source;
+        self.draw_source();
         self
     }
 
     pub fn set_syntax(&mut self, syntax: String) -> &mut Banner {
-        if syntax != self.syntax {
-            self.syntax = syntax;
-            self.draw_title();
-        }
+        self.syntax = syntax;
+        self.draw_source();
         self
     }
 
@@ -150,34 +151,36 @@ impl Banner {
         }
     }
 
-    fn draw_title(&mut self) {
-        if let Some(Range { start, end }) = self.title_area {
+    fn draw_source(&mut self) {
+        if let Some(Range { start, end }) = self.source_area {
             let avail_cols = (end - start) as usize;
-            let mut title = self.title.chars().collect::<Vec<_>>();
+            let mut source = self.source.to_string().chars().collect::<Vec<_>>();
             let mut syntax = self.syntax.chars().collect::<Vec<_>>();
 
-            if title.len() + syntax.len() + Self::TITLE_ADORN_COLS > avail_cols {
-                // Try shortening title by using file name portion only, though note
+            if source.len() + syntax.len() + Self::SOURCE_ADORN_COLS > avail_cols {
+                // Try shortening source by using file name portion only, though note
                 // that shortening may not actually happen.
-                title = sys::file_name(&self.title).chars().collect::<Vec<_>>();
+                if let Source::File(path, _) = &self.source {
+                    source = sys::file_name(path).chars().collect::<Vec<_>>();
+                }
 
-                if title.len() + syntax.len() + Self::TITLE_ADORN_COLS > avail_cols {
+                if source.len() + syntax.len() + Self::SOURCE_ADORN_COLS > avail_cols {
                     // Try clipping syntax information as next attempt to fit within
                     // available area.
                     syntax.clear();
 
-                    if title.len() > avail_cols {
-                        // Final attempt truncates prefix of title, but adds ellipsis as
+                    if source.len() > avail_cols {
+                        // Final attempt truncates prefix of source, but adds ellipsis as
                         // visual cue that truncation occurred.
-                        title.drain(0..title.len() - avail_cols + Self::TITLE_ELLIPSIS.len());
-                        title.splice(0..0, Self::TITLE_ELLIPSIS.chars());
+                        source.drain(0..source.len() - avail_cols + Self::SOURCE_ELLIPSIS.len());
+                        source.splice(0..0, Self::SOURCE_ELLIPSIS.chars());
                     }
                 }
             }
 
-            // Draw possibly clipped forms of title and syntax on canvas.
+            // Draw possibly clipped forms of source and syntax on canvas.
             let mut col = start;
-            col += self.canvas.write(0, col, &title, self.banner_color);
+            col += self.canvas.write(0, col, &source, self.banner_color);
             if syntax.len() > 0 {
                 col += self.canvas.write_str(0, col, " (", self.banner_color);
                 col += self.canvas.write(0, col, &syntax, self.accent_color);
@@ -220,17 +223,18 @@ impl Banner {
         if cols < Self::MIN_COLS {
             (None, None, None)
         } else if cols < Self::MIN_COLS_FOR_LOCATION {
-            // Clip location area entirely, which increases area for title and syntax.
-            let dirty_area = Self::MARGIN_COLS;
-            let title_area = dirty_area + 1..cols - Self::MARGIN_COLS;
-            (Some(dirty_area), Some(title_area), None)
+            // Clip location area entirely, which increases area for source and syntax.
+            let dirty_area = Self::LEFT_MARGIN_COLS;
+            let source_area = dirty_area + 1..cols - Self::RIGHT_MARGIN_COLS;
+            (Some(dirty_area), Some(source_area), None)
         } else {
-            // Limit area available for title and syntax.
-            let dirty_area = Self::MARGIN_COLS;
-            let title_area =
-                dirty_area + 1..cols - Self::MARGIN_COLS - Self::LOCATION_COLS - Self::GAP_COLS;
-            let loc_area = cols - Self::MARGIN_COLS - Self::LOCATION_COLS..cols - Self::MARGIN_COLS;
-            (Some(dirty_area), Some(title_area), Some(loc_area))
+            // Limit area available for source and syntax.
+            let dirty_area = Self::LEFT_MARGIN_COLS;
+            let source_area = dirty_area + 1
+                ..cols - Self::RIGHT_MARGIN_COLS - Self::LOCATION_COLS - Self::GAP_COLS;
+            let loc_area = cols - Self::RIGHT_MARGIN_COLS - Self::LOCATION_COLS
+                ..cols - Self::RIGHT_MARGIN_COLS;
+            (Some(dirty_area), Some(source_area), Some(loc_area))
         }
     }
 }
@@ -248,12 +252,15 @@ impl Window {
     const CANVAS_SIZE_ADJUST: Size = Size::rows(1);
 
     pub fn new(origin: Point, size: Size, config: ConfigurationRef) -> Window {
-        let canvas_origin = origin + Self::CANVAS_ORIGIN_OFFSET;
-        let canvas_size = size - Self::CANVAS_SIZE_ADJUST;
-        let banner_origin = origin + Size::rows(size.rows - 1);
-        let canvas = Canvas::new(canvas_origin, canvas_size);
-        let banner = Banner::new(banner_origin, size.cols, config.clone());
-
+        let canvas = Canvas::new(
+            origin + Self::CANVAS_ORIGIN_OFFSET,
+            size - Self::CANVAS_SIZE_ADJUST,
+        );
+        let banner = Banner::new(
+            origin + Size::rows(size.rows - 1),
+            size.cols,
+            config.clone(),
+        );
         let mut this = Window {
             size,
             canvas: canvas.to_ref(),

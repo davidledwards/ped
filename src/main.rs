@@ -34,6 +34,7 @@ mod op;
 mod opt;
 mod search;
 mod size;
+mod source;
 mod syntax;
 mod sys;
 mod term;

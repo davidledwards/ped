@@ -10,34 +10,22 @@ use crate::color::Color;
 use crate::config::ConfigurationRef;
 use crate::grid::Cell;
 use crate::size::{Point, Size};
+use crate::source::Source;
 use crate::syntax::Syntax;
-use crate::sys;
 use crate::token::{Cursor, Tokenizer, TokenizerRef};
 use crate::window::{Banner, BannerRef, Window, WindowRef};
 use std::cell::{Ref, RefCell, RefMut};
 use std::cmp;
 use std::ops::Range;
-use std::path::PathBuf;
 use std::rc::Rc;
-use std::time::SystemTime;
 
-/// An editing controller with an underlying [`Buffer`] and an attachable
-/// [`Window`].
+/// An editing controller with an underlying [`Buffer`] and an attachable [`Window`].
 pub struct Editor {
     /// Global configuration.
     config: ConfigurationRef,
 
-    /// Indicates that the editor is *persistent* as opposed to *transient*.
-    persistent: bool,
-
-    /// Path to storage when the editor is *persistent*, otherwise this is the
-    /// *transient* name.
-    path: String,
-
-    /// An optional timestamp that only applies to *persistent* editors, where the
-    /// presence of a value indicates the last modification time when the editor was
-    /// read or written to storage.
-    timestamp: Option<SystemTime>,
+    /// The source of the buffer.
+    source: Source,
 
     /// Buffer containing the contents of this editor.
     buffer: BufferRef,
@@ -493,48 +481,22 @@ impl Render {
 }
 
 impl Editor {
-    /// Number of columns allocated to the margin for displaying line numbers.
+    /// Number of columns allocated to the margin.
     const MARGIN_COLS: u32 = 6;
 
     /// Exclusive upper bound on line numbers that can be displayed in the margin.
     const LINE_LIMIT: u32 = 10_u32.pow(Self::MARGIN_COLS - 1);
 
-    /// Creates a *persistent* editor with `path` and an optional `timestamp`.
+    /// Creates a new editor using `source` and an optional `buffer`.
     ///
-    /// If `buffer` is not specified, then an empty buffer is created.
-    pub fn persistent(
-        config: ConfigurationRef,
-        path: &str,
-        timestamp: Option<SystemTime>,
-        buffer: Option<Buffer>,
-    ) -> Editor {
+    /// If `buffer` is `None`, then an empty buffer is created.
+    pub fn new(config: ConfigurationRef, source: Source, buffer: Option<Buffer>) -> Editor {
         let buffer = buffer.unwrap_or_else(|| Buffer::new()).to_ref();
-        Self::new(config, true, path, timestamp, buffer)
-    }
-
-    /// Creates a *transient* editor with `name`.
-    ///
-    /// If `buffer` is not specified, then an empty buffer is created.
-    pub fn transient(config: ConfigurationRef, name: &str, buffer: Option<Buffer>) -> Editor {
-        let buffer = buffer.unwrap_or_else(|| Buffer::new()).to_ref();
-        Self::new(config, false, name, None, buffer)
-    }
-
-    /// Creates a new editor.
-    ///
-    /// Prefer to use [`Editor::persistent`] and [`Editor::transient`].
-    fn new(
-        config: ConfigurationRef,
-        persistent: bool,
-        path: &str,
-        timestamp: Option<SystemTime>,
-        buffer: BufferRef,
-    ) -> Editor {
         let cur_pos = buffer.borrow().get_pos();
 
-        // Constructs syntax configuration based on type of buffer and file
-        // extension, if applicable.
-        let syntax = if persistent {
+        // Constructs syntax configuration based on type of buffer and file extension,
+        // if applicable.
+        let syntax = if let Source::File(path, _) = &source {
             config
                 .registry
                 .find(path)
@@ -550,9 +512,7 @@ impl Editor {
 
         Editor {
             config,
-            persistent,
-            path: path.to_string(),
-            timestamp,
+            source,
             buffer,
             undo: Vec::new(),
             redo: Vec::new(),
@@ -578,50 +538,25 @@ impl Editor {
         Rc::new(RefCell::new(self))
     }
 
-    /// Returns `true` if this editor is *persistent*.
-    pub fn is_persistent(&self) -> bool {
-        self.persistent
-    }
-
-    /// Makes this editor *persistent* with `path` and an optional `timestamp`.
-    pub fn make_persistent(&mut self, path: &str, timestamp: Option<SystemTime>) {
-        self.persistent = true;
-        self.path = path.to_string();
-        self.timestamp = timestamp;
-    }
-
-    /// Returns a partial clone of this editor as a *persistent* editor with `path` and
-    /// an optional `timestamp`.
+    /// Returns a partial clone of this editor using `source`.
     ///
     /// Specifically, the buffer is cloned as well as the current buffer position and
     /// cursor values. All other attributes are initialized as if a new editor were
     /// being created.
-    pub fn clone_persistent(&self, path: &str, timestamp: Option<SystemTime>) -> Editor {
+    pub fn clone_as(&self, source: Source) -> Editor {
         let mut buffer = self.buffer().clone();
         buffer.set_pos(self.cur_pos);
-        let mut editor = Self::persistent(self.config.clone(), path, timestamp, Some(buffer));
+        let mut editor = Self::new(self.config.clone(), source, Some(buffer));
         editor.cursor = self.cursor;
         editor
     }
 
-    pub fn path(&self) -> PathBuf {
-        if self.is_persistent() {
-            PathBuf::from(&self.path)
-        } else {
-            PathBuf::from("")
-        }
+    pub fn source(&self) -> &Source {
+        &self.source
     }
 
-    pub fn timestamp(&self) -> Option<SystemTime> {
-        self.timestamp.clone()
-    }
-
-    pub fn name(&self) -> String {
-        if self.is_persistent() {
-            sys::pretty_path(&self.path)
-        } else {
-            self.path.clone()
-        }
+    pub fn assume(&mut self, source: Source) {
+        self.source = source;
     }
 
     #[inline]
@@ -790,7 +725,7 @@ impl Editor {
         self.banner
             .borrow_mut()
             .set_dirty(self.dirty)
-            .set_title(self.name())
+            .set_source(self.source.clone())
             .set_syntax(self.tokenizer().syntax().name.clone())
             .set_location(self.location())
             .draw();
