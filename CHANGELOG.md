@@ -2,6 +2,22 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
+## [0.10.0](https://github.com/davidledwards/ped/tree/v0.10.0) - `2025-01-05`
+
+### Added
+
+- Show applicable syntax configuration in banner bar
+- Configuration color `accent-fg` to enhance banner bar
+
+### Changed
+
+- Progressive layout of banner bar based on width of terminal
+- File completion is now case-insensitive when matching candidates
+
+### Fixed
+
+- Restoring terminal properly under certain failure cases at startup
+
 ## [0.9.0](https://github.com/davidledwards/ped/tree/v0.9.0) - `2025-01-02`
 
 ### Added

@@ -267,7 +267,7 @@ impl ListCompleter {
             .accepted
             .iter()
             .enumerate()
-            .filter(|(_, v)| v.contains(value))
+            .filter(|(_, v)| v.to_lowercase().contains(&value.to_lowercase()))
             .map(|(index, _)| index)
             .collect();
         self.last_match = None;
@@ -395,7 +395,7 @@ impl FileCompleter {
     fn matches(comps: &Vec<String>, prefix: &str) -> Vec<String> {
         comps
             .iter()
-            .filter(|path| path.starts_with(prefix))
+            .filter(|path| path.to_lowercase().starts_with(&prefix.to_lowercase()))
             .cloned()
             .collect()
     }
@@ -414,9 +414,12 @@ impl Completer for FileCompleter {
         // to follow with suggestion to replace input.
         let (prefix, _) = self.refresh(value);
         if self.matches.len() == 1 {
+            // Cannot use strip_prefix() because it is case-sensitive and our matching
+            // logic is case-insensitive.
             self.matches[0]
-                .strip_prefix(&prefix.as_string())
-                .map(|s| s.to_string())
+                .char_indices()
+                .nth(prefix.as_string().chars().count())
+                .map(|(i, _)| self.matches[0][i..].to_string())
         } else {
             None
         }
