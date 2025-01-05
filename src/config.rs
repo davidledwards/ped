@@ -66,6 +66,7 @@ pub struct Theme {
     pub select_bg: u8,
     pub spotlight_bg: u8,
     pub whitespace_fg: u8,
+    pub accent_fg: u8,
     pub echo_fg: u8,
     pub prompt_fg: u8,
     pub banner_fg: u8,
@@ -75,7 +76,6 @@ pub struct Theme {
     pub text_color: Color,
     pub echo_color: Color,
     pub prompt_color: Color,
-    pub banner_color: Color,
     pub margin_color: Color,
 }
 
@@ -119,6 +119,9 @@ struct ExternalTheme {
 
     #[serde(rename = "whitespace-fg")]
     whitespace_fg: Option<ColorValue>,
+
+    #[serde(rename = "accent-fg")]
+    accent_fg: Option<ColorValue>,
 
     #[serde(rename = "echo-fg")]
     echo_fg: Option<ColorValue>,
@@ -179,6 +182,7 @@ impl Theme {
     const SELECT_BG: u8 = 19;
     const SPOTLIGHT_BG: u8 = 234;
     const WHITSPACE_FG: u8 = 243;
+    const ACCENT_FG: u8 = 45;
     const ECHO_FG: u8 = 214;
     const PROMPT_FG: u8 = 34;
     const BANNER_FG: u8 = 255;
@@ -206,6 +210,7 @@ impl Theme {
             self.select_bg = resolve(self.select_bg, &ext.select_bg, colors)?;
             self.spotlight_bg = resolve(self.spotlight_bg, &ext.spotlight_bg, colors)?;
             self.whitespace_fg = resolve(self.whitespace_fg, &ext.whitespace_fg, colors)?;
+            self.accent_fg = resolve(self.accent_fg, &ext.accent_fg, colors)?;
             self.echo_fg = resolve(self.echo_fg, &ext.echo_fg, colors)?;
             self.prompt_fg = resolve(self.prompt_fg, &ext.prompt_fg, colors)?;
             self.banner_fg = resolve(self.banner_fg, &ext.banner_fg, colors)?;
@@ -217,7 +222,6 @@ impl Theme {
             self.text_color = Color::new(self.text_fg, self.text_bg);
             self.echo_color.fg = self.echo_fg;
             self.prompt_color.fg = self.prompt_fg;
-            self.banner_color = Color::new(self.banner_fg, self.banner_bg);
             self.margin_color = Color::new(self.margin_fg, self.margin_bg);
         }
         Ok(())
@@ -238,6 +242,7 @@ impl Default for Theme {
             select_bg: Self::SELECT_BG,
             spotlight_bg: Self::SPOTLIGHT_BG,
             whitespace_fg: Self::WHITSPACE_FG,
+            accent_fg: Self::ACCENT_FG,
             echo_fg: echo_color.fg,
             prompt_fg: prompt_color.fg,
             banner_fg: banner_color.fg,
@@ -247,7 +252,6 @@ impl Default for Theme {
             text_color,
             echo_color,
             prompt_color,
-            banner_color,
             margin_color,
         }
     }

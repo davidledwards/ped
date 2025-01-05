@@ -159,3 +159,12 @@ pub fn canonicalize<P: AsRef<Path>>(path: P) -> PathBuf {
         .canonicalize()
         .unwrap_or_else(|_| path.as_ref().to_path_buf())
 }
+
+/// Returns the file name portion of `path`, or `path` itself if the file name cannot
+/// be extracted.
+pub fn file_name<P: AsRef<Path>>(path: P) -> String {
+    path.as_ref()
+        .file_name()
+        .map(|name| name.to_string_lossy().to_string())
+        .unwrap_or(path.as_ref().as_string())
+}

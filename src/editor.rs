@@ -618,12 +618,7 @@ impl Editor {
 
     pub fn name(&self) -> String {
         if self.is_persistent() {
-            let path = sys::pretty_path(&self.path);
-            if let Some(_) = self.timestamp {
-                path
-            } else {
-                format!("{path} (new)")
-            }
+            sys::pretty_path(&self.path)
         } else {
             self.path.clone()
         }
