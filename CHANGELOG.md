@@ -2,6 +2,18 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
+## [0.11.0](https://github.com/davidledwards/ped/tree/v0.11.0) - `2025-01-05`
+
+### Added
+
+- CLI option `--colors` to print color names and values
+- Key binding to open `@colors` editor
+- Custom color names in addition to ANSI standard colors
+
+### Changed
+
+- Default color theme
+
 ## [0.10.0](https://github.com/davidledwards/ped/tree/v0.10.0) - `2025-01-05`
 
 ### Added

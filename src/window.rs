@@ -147,7 +147,7 @@ impl Banner {
     fn draw_dirty(&mut self) {
         if let Some(col) = self.dirty_area {
             let c = if self.dirty { '*' } else { ' ' };
-            self.canvas.write_char(0, col, c, self.accent_color);
+            self.canvas.set(0, col, c, self.accent_color);
         }
     }
 

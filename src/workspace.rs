@@ -1,5 +1,6 @@
 //! An organization of the terminal display as a collection of views.
 
+use crate::color::Color;
 use crate::config::{Configuration, ConfigurationRef};
 use crate::size::{Point, Size};
 use crate::term;
@@ -53,6 +54,7 @@ pub struct Workspace {
     views_size: Size,
     shared_origin: Point,
     shared_size: Size,
+    shared_color: Color,
     id_seq: u32,
     views: Vec<View>,
 }
@@ -73,6 +75,7 @@ impl Workspace {
     /// Creates a workspace with the given `config` and consuming the entire terminal.
     pub fn new(config: Configuration) -> Workspace {
         let size = Self::query_size();
+        let shared_color = Color::new(config.theme.echo_fg, config.theme.text_bg);
         let mut this = Workspace {
             config: config.to_ref(),
             size,
@@ -80,6 +83,7 @@ impl Workspace {
             views_size: size - Self::VIEWS_SIZE_ADJUST,
             shared_origin: Point::ORIGIN + Size::rows(size.rows - 1),
             shared_size: Size::new(1, size.cols),
+            shared_color,
             id_seq: 0,
             views: vec![],
         };
@@ -323,7 +327,7 @@ impl Workspace {
 
     pub fn clear_shared(&mut self) {
         Writer::new_at(self.shared_origin)
-            .set_color(self.config.theme.echo_color)
+            .set_color(self.shared_color)
             .write_str(" ".repeat(self.size.cols as usize).as_str())
             .send();
     }

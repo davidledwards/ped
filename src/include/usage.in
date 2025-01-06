@@ -13,6 +13,7 @@ usage: ped OPTIONS [file...]
     --keys         : print available keys to stdout
     --ops          : print available operations to stdout
     --bindings     : print key bindings to stdout
+    --colors       : print color names to stdout
     --config FILE  : load configuration from FILE
     --syntax DIR   : load syntax configurations from DIR
     --bare         : ignore all forms of configuration

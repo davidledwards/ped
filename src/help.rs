@@ -11,6 +11,7 @@ use crate::key::{Key, KEY_MAPPINGS};
 use crate::op::OP_MAPPINGS;
 use crate::source::Source;
 use crate::{BUILD_DATE, BUILD_HASH, PACKAGE_NAME, PACKAGE_VERSION};
+use indexmap::IndexMap;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write;
 
@@ -18,6 +19,7 @@ pub const HELP_EDITOR_NAME: &str = "help";
 pub const KEYS_EDITOR_NAME: &str = "keys";
 pub const OPS_EDITOR_NAME: &str = "operations";
 pub const BINDINGS_EDITOR_NAME: &str = "bindings";
+pub const COLORS_EDITOR_NAME: &str = "colors";
 
 /// Returns an ephemeral editor, named `@help`, containing general help content.
 pub fn help_editor(config: ConfigurationRef) -> EditorRef {
@@ -138,7 +140,7 @@ pub fn bindings_editor(config: ConfigurationRef) -> EditorRef {
 
 /// Returns a formatted list of key bindings.
 pub fn bindings_content(bindings: &HashMap<Vec<Key>, String>) -> String {
-    let bindings = prepare_bindings(&bindings);
+    let bindings = prepare_bindings(bindings);
     let mut out = String::new();
     for (key_seq, op) in bindings {
         writeln!(out, "\"{key_seq}\", \"{op}\"");
@@ -151,7 +153,7 @@ fn bindings_buffer(bindings: &HashMap<Vec<Key>, String>) -> Buffer {
     const HEADER_OP: &str = "Operation";
 
     // Prettify and sort key sequences.
-    let bindings = prepare_bindings(&bindings);
+    let bindings = prepare_bindings(bindings);
 
     // Calculate maximum width of key sequences to align output.
     let key_width = bindings.keys().fold(HEADER_KEY_SEQ.len(), |width, k| {
@@ -182,6 +184,70 @@ fn prepare_bindings(bindings: &HashMap<Vec<Key>, String>) -> BTreeMap<String, St
         .iter()
         .map(|(keys, op)| (pretty_keys(keys).join(" "), op.to_string()))
         .collect::<BTreeMap<_, _>>()
+}
+
+/// Returns an ephemeral editor, named `@colors`, containing a list of color names
+/// and values.
+pub fn colors_editor(config: ConfigurationRef) -> EditorRef {
+    let buffer = colors_buffer(config.colors.colors());
+    Editor::new(
+        config,
+        Source::as_ephemeral(COLORS_EDITOR_NAME),
+        Some(buffer),
+    )
+    .to_ref()
+}
+
+/// Returns a formatted list of color names and values.
+pub fn colors_content(colors: &HashMap<String, u8>) -> String {
+    let colors = prepare_colors(colors);
+    let mut out = String::new();
+    for (name, color) in colors {
+        writeln!(out, "\"{name}\", {color}");
+    }
+    out
+}
+
+fn colors_buffer(colors: &HashMap<String, u8>) -> Buffer {
+    const HEADER_NAME: &str = "Color Name";
+    const HEADER_VALUE: &str = "Color Value";
+
+    // Calculate maximum width of color names to align output.
+    let colors = prepare_colors(colors);
+    let name_width = colors.keys().fold(HEADER_NAME.len(), |width, name| {
+        if name.len() > width {
+            name.len()
+        } else {
+            width
+        }
+    });
+
+    // Emit formatted colors.
+    let mut out = String::new();
+    writeln!(out, "{:<name_width$}   {}", HEADER_NAME, HEADER_VALUE);
+    writeln!(
+        out,
+        "{:<name_width$}   {}",
+        "-".repeat(HEADER_NAME.len()),
+        "-".repeat(HEADER_VALUE.len())
+    );
+    for (name, color) in colors {
+        writeln!(out, "{name:<name_width$}   {color}");
+    }
+    make_buffer(&out)
+}
+
+fn prepare_colors(colors: &HashMap<String, u8>) -> IndexMap<String, u8> {
+    // Sort by color value rather than color name.
+    let mut colors = colors.iter().collect::<Vec<_>>();
+    colors.sort_by(|a, b| a.1.cmp(b.1));
+
+    // Preserve insertion order such that iteration over resulting map will produce
+    // entries whose color values appear sorted.
+    colors
+        .iter()
+        .map(|(name, color)| (name.to_string(), **color))
+        .collect::<IndexMap<_, _>>()
 }
 
 /// Returns a vector of individual key names extracted from `keys`.

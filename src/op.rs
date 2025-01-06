@@ -234,11 +234,19 @@ fn help_bindings(env: &mut Environment) -> Option<Action> {
     })
 }
 
+/// Operation: `help-colors`
+fn help_colors(env: &mut Environment) -> Option<Action> {
+    toggle_help(env, help::COLORS_EDITOR_NAME, |config| {
+        help::colors_editor(config)
+    })
+}
+
 fn toggle_help<F>(env: &mut Environment, editor_name: &str, editor_fn: F) -> Option<Action>
 where
     F: Fn(ConfigurationRef) -> EditorRef,
 {
-    if let Some(editor_id) = env.find_editor_id(editor_name) {
+    let name = Source::as_ephemeral(editor_name).to_string();
+    if let Some(editor_id) = env.find_editor_id(&name) {
         if let Some(view_id) = env.find_editor_view_id(editor_id) {
             env.kill_window_for(view_id);
             None
@@ -1809,7 +1817,7 @@ fn base_dir(editor: &EditorRef) -> PathBuf {
 }
 
 /// Predefined mapping of editing operations to editing functions.
-pub const OP_MAPPINGS: [(&'static str, OpFn); 71] = [
+pub const OP_MAPPINGS: [(&'static str, OpFn); 72] = [
     // --- exit and cancellation ---
     ("quit", quit),
     // --- help ---
@@ -1817,6 +1825,7 @@ pub const OP_MAPPINGS: [(&'static str, OpFn); 71] = [
     ("help-keys", help_keys),
     ("help-ops", help_ops),
     ("help-bindings", help_bindings),
+    ("help-colors", help_colors),
     // --- navigation and selection ---
     ("move-backward", move_backward),
     ("move-backward-word", move_backward_word),

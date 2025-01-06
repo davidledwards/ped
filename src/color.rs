@@ -78,6 +78,10 @@ impl Colors {
         }
     }
 
+    pub fn colors(&self) -> &HashMap<String, u8> {
+        &self.color_map
+    }
+
     /// Returns a mapping of standard color names to color values.
     fn init_color_map() -> HashMap<String, u8> {
         let mut color_map = HashMap::new();
@@ -88,7 +92,8 @@ impl Colors {
     }
 
     /// Predefined mapping of standard color names to ANSI color values.
-    const COLOR_MAPPINGS: [(&str, u8); 16] = [
+    const COLOR_MAPPINGS: [(&str, u8); 26] = [
+        // --- ANSI colors ---
         ("black", 0),
         ("red", 1),
         ("green", 2),
@@ -105,6 +110,17 @@ impl Colors {
         ("bright-magenta", 13),
         ("bright-cyan", 14),
         ("bright-white", 15),
+        // --- custom colors ---
+        ("verdant-spring", 79),
+        ("sage-green", 102),
+        ("misty-aqua", 109),
+        ("crystal-cyan", 111),
+        ("twilight-blue", 117),
+        ("lavender-haze", 136),
+        ("seafoam-mist", 147),
+        ("orchid-bloom", 175),
+        ("peachy-orange", 216),
+        ("golden-glow", 223),
     ];
 }
 

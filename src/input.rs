@@ -8,7 +8,7 @@
 //! creation of arbitrarily sophisticated input mechanisms, such as file completion.
 
 use crate::canvas::Canvas;
-use crate::grid::Cell;
+use crate::color::Color;
 use crate::key::*;
 use crate::size::{Point, Size};
 use crate::user::{self, Completer};
@@ -19,6 +19,15 @@ use std::cmp;
 pub struct InputEditor {
     /// Associated workspace.
     workspace: WorkspaceRef,
+
+    /// Color of prompt.
+    prompt_color: Color,
+
+    /// Color of user input.
+    input_color: Color,
+
+    /// Color of hint.
+    hint_color: Color,
 
     /// Contains a prompt when the input editor is enabled, otherwise `None`.
     prompt: Option<String>,
@@ -67,8 +76,16 @@ impl InputEditor {
     const MIN_COLS: u32 = 2;
 
     pub fn new(workspace: WorkspaceRef) -> InputEditor {
+        let config = workspace.borrow().config().clone();
+        let prompt_color = Color::new(config.theme.prompt_fg, config.theme.text_bg);
+        let input_color = Color::new(config.theme.text_fg, config.theme.text_bg);
+        let hint_color = Color::new(config.theme.echo_fg, config.theme.text_bg);
+
         InputEditor {
             workspace,
+            prompt_color,
+            input_color,
+            hint_color,
             prompt: None,
             completer: user::null_completer(),
             prompt_cols: 0,
@@ -344,9 +361,8 @@ impl InputEditor {
                 .collect::<String>();
 
             let (origin, _) = self.workspace.borrow().shared_region();
-            let color = self.workspace.borrow().config().theme.prompt_color;
             Writer::new_at(origin)
-                .set_color(color)
+                .set_color(self.prompt_color)
                 .write_str(prompt.as_str())
                 .write(' ')
                 .send();
@@ -360,24 +376,20 @@ impl InputEditor {
 
         // Write user-provided section of text to canvas followed by optional hint,
         // since colors are distinct.
-        let color = self.workspace.borrow().config().theme.text_color;
         let user_end = cmp::min(end, self.len);
         for (col, c) in self.input[start..user_end].iter().enumerate() {
-            let cell = Cell::new(*c, color);
-            self.canvas.set_cell(0, col as u32, cell);
+            self.canvas.set(0, col as u32, *c, self.input_color);
         }
-        let color = self.workspace.borrow().config().theme.echo_color;
         let hint_ofs = user_end - start;
         for (col, c) in self.input[user_end..end].iter().enumerate() {
-            let cell = Cell::new(*c, color);
-            self.canvas.set_cell(0, (hint_ofs + col) as u32, cell);
+            self.canvas
+                .set(0, (hint_ofs + col) as u32, *c, self.hint_color);
         }
 
         // Clear unused area on canvas.
         let cols = (end - start) as u32;
         if cols < self.input_cols {
-            let cell = Cell::new(' ', self.workspace.borrow().config().theme.text_color);
-            self.canvas.fill_cell_from(0, cols, cell);
+            self.canvas.fill_from(0, cols, ' ', self.input_color);
         }
 
         // Send pending changes to canvas and set new cursor position.

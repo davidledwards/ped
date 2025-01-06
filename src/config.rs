@@ -20,7 +20,7 @@
 //! * `$HOME/.config/ped/pedrc`
 
 use crate::bind::Bindings;
-use crate::color::{Color, ColorValue, Colors};
+use crate::color::{ColorValue, Colors};
 use crate::error::{Error, Result};
 use crate::opt::Options;
 use crate::syntax::Registry;
@@ -73,10 +73,6 @@ pub struct Theme {
     pub banner_bg: u8,
     pub margin_fg: u8,
     pub margin_bg: u8,
-    pub text_color: Color,
-    pub echo_color: Color,
-    pub prompt_color: Color,
-    pub margin_color: Color,
 }
 
 #[derive(Deserialize)]
@@ -178,16 +174,16 @@ impl Default for Settings {
 
 impl Theme {
     const TEXT_FG: u8 = 252;
-    const TEXT_BG: u8 = 232;
-    const SELECT_BG: u8 = 19;
+    const TEXT_BG: u8 = 233;
+    const SELECT_BG: u8 = 237;
     const SPOTLIGHT_BG: u8 = 234;
     const WHITSPACE_FG: u8 = 243;
-    const ACCENT_FG: u8 = 45;
-    const ECHO_FG: u8 = 214;
-    const PROMPT_FG: u8 = 34;
-    const BANNER_FG: u8 = 255;
-    const BANNER_BG: u8 = 22;
-    const MARGIN_FG: u8 = 34;
+    const ACCENT_FG: u8 = 180;
+    const ECHO_FG: u8 = 216;
+    const PROMPT_FG: u8 = 102;
+    const BANNER_FG: u8 = 254;
+    const BANNER_BG: u8 = 60;
+    const MARGIN_FG: u8 = 61;
     const MARGIN_BG: u8 = 234;
 
     /// Applies the external theme `ext` on top of `self`.
@@ -217,12 +213,6 @@ impl Theme {
             self.banner_bg = resolve(self.banner_bg, &ext.banner_bg, colors)?;
             self.margin_fg = resolve(self.margin_fg, &ext.margin_fg, colors)?;
             self.margin_bg = resolve(self.margin_bg, &ext.margin_bg, colors)?;
-
-            // These are preconstructed colors combining fg/bg primarily as convenience.
-            self.text_color = Color::new(self.text_fg, self.text_bg);
-            self.echo_color.fg = self.echo_fg;
-            self.prompt_color.fg = self.prompt_fg;
-            self.margin_color = Color::new(self.margin_fg, self.margin_bg);
         }
         Ok(())
     }
@@ -230,29 +220,19 @@ impl Theme {
 
 impl Default for Theme {
     fn default() -> Theme {
-        let text_color = Color::new(Self::TEXT_FG, Self::TEXT_BG);
-        let echo_color = Color::new(Self::ECHO_FG, text_color.bg);
-        let prompt_color = Color::new(Self::PROMPT_FG, text_color.bg);
-        let banner_color = Color::new(Self::BANNER_FG, Self::BANNER_BG);
-        let margin_color = Color::new(Self::MARGIN_FG, Self::MARGIN_BG);
-
         Theme {
-            text_fg: text_color.fg,
-            text_bg: text_color.bg,
+            text_fg: Self::TEXT_FG,
+            text_bg: Self::TEXT_BG,
             select_bg: Self::SELECT_BG,
             spotlight_bg: Self::SPOTLIGHT_BG,
             whitespace_fg: Self::WHITSPACE_FG,
             accent_fg: Self::ACCENT_FG,
-            echo_fg: echo_color.fg,
-            prompt_fg: prompt_color.fg,
-            banner_fg: banner_color.fg,
-            banner_bg: banner_color.bg,
-            margin_fg: margin_color.fg,
-            margin_bg: margin_color.bg,
-            text_color,
-            echo_color,
-            prompt_color,
-            margin_color,
+            echo_fg: Self::ECHO_FG,
+            prompt_fg: Self::PROMPT_FG,
+            banner_fg: Self::BANNER_FG,
+            banner_bg: Self::BANNER_BG,
+            margin_fg: Self::MARGIN_FG,
+            margin_bg: Self::MARGIN_BG,
         }
     }
 }
@@ -324,7 +304,7 @@ impl Configuration {
         Bindings::new(&bindings).unwrap_or_else(|e| panic!("{e}: default bindings failed"))
     }
 
-    const DEFAULT_BINDINGS: [(&'static str, &'static str); 87] = [
+    const DEFAULT_BINDINGS: [(&'static str, &'static str); 88] = [
         // --- exit and cancellation ---
         ("C-q", "quit"),
         // --- help ---
@@ -332,6 +312,7 @@ impl Configuration {
         ("ESC:h:k", "help-keys"),
         ("ESC:h:o", "help-ops"),
         ("ESC:h:b", "help-bindings"),
+        ("ESC:h:c", "help-colors"),
         // --- navigation and selection ---
         ("C-b", "move-backward"),
         ("left", "move-backward"),

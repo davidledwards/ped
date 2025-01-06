@@ -82,3 +82,4 @@ Help
   M-h k             Toggle @keys window (available keys)
   M-h o             Toggle @operations window (available operations)
   M-h b             Toggle @bindings window (key bindings)
+  M-h c             Toggle @colors window (color names)

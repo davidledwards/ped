@@ -126,6 +126,9 @@ fn run_opts(opts: &Options) -> Result<()> {
     if opts.bindings {
         print!("{}", help::bindings_content(config.bindings.bindings()));
         Ok(())
+    } else if opts.colors {
+        print!("{}", help::colors_content(config.colors.colors()));
+        Ok(())
     } else {
         run_config(opts, config)
     }

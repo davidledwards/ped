@@ -182,6 +182,12 @@ struct Draw {
     /// Configuration that dictates colors and behaviors.
     config: ConfigurationRef,
 
+    /// Color of margin.
+    margin_color: Color,
+
+    /// Color of text with no special treatment.
+    text_color: Color,
+
     /// Current cursor position.
     cursor: Point,
 
@@ -352,6 +358,10 @@ impl Draw {
     const TAB_CHAR: char = '\u{2192}';
 
     fn new(editor: &Editor) -> Draw {
+        let config = editor.config.clone();
+        let margin_color = Color::new(config.theme.margin_fg, config.theme.margin_bg);
+        let text_color = Color::new(config.theme.text_fg, config.theme.text_bg);
+
         let select_span = editor
             .mark
             .map(|Mark(mark_pos, _)| {
@@ -364,7 +374,9 @@ impl Draw {
             .unwrap_or(0..0);
 
         Draw {
-            config: editor.config.clone(),
+            config,
+            margin_color,
+            text_color,
             cursor: editor.cursor(),
             select_span,
         }
@@ -373,13 +385,13 @@ impl Draw {
     /// Formats `c` using the margin color.
     #[inline]
     fn as_margin(&self, c: char) -> Cell {
-        Cell::new(c, self.config.theme.margin_color)
+        Cell::new(c, self.margin_color)
     }
 
     /// Formats ` ` (space) using the text color.
     #[inline]
     fn as_blank(&self) -> Cell {
-        Cell::new(' ', self.config.theme.text_color)
+        Cell::new(' ', self.text_color)
     }
 
     /// Formats `c` using a color depending on the current rendering context.

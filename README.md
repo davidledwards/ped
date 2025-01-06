@@ -25,10 +25,10 @@ brew install ped
 
 Releases can be downloaded directly from [GitHub](https://github.com/davidledwards/ped/releases).
 
-Alternatively, using the [GitHub CLI](https://cli.github.com/), releases can also be downloaded from the command line. For example, to download version `0.10.0`, run the following command.
+Alternatively, using the [GitHub CLI](https://cli.github.com/), releases can also be downloaded from the command line. For example, to download version `0.11.0`, run the following command.
 
 ```shell
-gh release download --repo https://github.com/davidledwards/ped v0.10.0
+gh release download --repo https://github.com/davidledwards/ped v0.11.0
 ```
 
 ## Usage
@@ -197,6 +197,7 @@ The following notation is used below when refering to keys.
 | `M-h k` | Toggle @keys window (available keys)             |
 | `M-h o` | Toggle @operations window (available operations) |
 | `M-h b` | Toggle @bindings window (key bindings)           |
+| `M-h c` | Toggle @colors window (color names)              |
 
 ## Design
 

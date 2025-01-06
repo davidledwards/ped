@@ -33,7 +33,7 @@ tab-size = 8
 # need to define them in this section unless the desire is to map a standard
 # color name to a different color value.
 #
-# Predefined colors:
+# Predefine ANSI colors:
 #   black = 0
 #   red = 1
 #   green = 2
@@ -51,29 +51,32 @@ tab-size = 8
 #   bright-cyan = 14
 #   bright-white = 15
 #
+# Additional custom colors have been predefined and may be listed by running
+# `ped --colors`.
+#
 [colors]
 "funky-red" = 196
 "charcoal" = 232
 "light-gray" = 234
 "medium-gray" = 237
 
-# This section allows the configuration of alternative color themes.
+# This section allows the configuration of alternative colors.
 #
 # Values from the [colors] section may be referenced here.
 #
-# Recognized color themes and default values:
-#   text-fg = 252
-#   text-bg = 232
-#   select-bg = 19
-#   spotlight-bg = 234
-#   whitespace-fg = 243
-#   accent-fg = 45
-#   echo-fg = 214
-#   prompt-fg = 34
-#   banner-fg = 255
-#   banner-bg = 22
-#   margin-fg = 34
-#   margin-bg = 234
+# Recognized color settings:
+#   text-fg
+#   text-bg
+#   select-bg
+#   spotlight-bg
+#   whitespace-fg
+#   accent-fg
+#   echo-fg
+#   prompt-fg
+#   banner-fg
+#   banner-bg
+#   margin-fg
+#   margin-bg
 #
 [theme]
 echo-fg = "funky-red"
