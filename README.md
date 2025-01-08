@@ -226,6 +226,14 @@ The concept of a _question_ is implemented using an _inquirer_ combined with a _
 
 The _workspace_ supports multiple windows that split vertically with equal allocation of screen real estate. This was an early decision to keep the windowing system simple, at least for now. The workspace also manages resizing of windows when a change in the terminal size is detected.
 
+## Colors
+
+The color mechanism in `ped` adheres to the [ANSI 8-bit color standard](https://en.wikipedia.org/wiki/ANSI_escape_code#8-bit). Where applicable in configuration files, colors can always be referred to by their numeric value in the range of `0` to `255`.
+
+However, in order to make configuration a bit more friendly, `ped` defines a set of names for standard colors in the range of `0` to `15`, as well as a few creatively named colors in the extended range of `16` to `255`. These colors can be enumerated by running `ped --colors`. The extended colors are likely to evolve over time, but there is no intention of producing an exhaustive list of names.
+
+As I was experimenting with different color combinations, I decided to write a CLI program [tcolor](https://github.com/davidledwards/tcolor) that shows what colors look like on the terminal. The program is quite simple but also effective in visually colors.
+
 ## Limitations
 
 `ped` currently has a few notable limitations or deficiencies that may be addressed in future versions.
