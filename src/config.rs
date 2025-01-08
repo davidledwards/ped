@@ -304,7 +304,7 @@ impl Configuration {
         Bindings::new(&bindings).unwrap_or_else(|e| panic!("{e}: default bindings failed"))
     }
 
-    const DEFAULT_BINDINGS: [(&'static str, &'static str); 88] = [
+    const DEFAULT_BINDINGS: [(&'static str, &'static str); 90] = [
         // --- exit and cancellation ---
         ("C-q", "quit"),
         // --- help ---
@@ -402,6 +402,9 @@ impl Configuration {
         ("ESC:<", "prev-window"),
         ("ESC:w:n", "next-window"),
         ("ESC:>", "next-window"),
+        // --- behaviors ---
+        ("C-t", "describe-editor"),
+        ("ESC:t:t", "tab-mode"),
     ];
 }
 

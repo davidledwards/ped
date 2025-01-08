@@ -25,10 +25,10 @@ brew install ped
 
 Releases can be downloaded directly from [GitHub](https://github.com/davidledwards/ped/releases).
 
-Alternatively, using the [GitHub CLI](https://cli.github.com/), releases can also be downloaded from the command line. For example, to download version `0.11.0`, run the following command.
+Alternatively, using the [GitHub CLI](https://cli.github.com/), releases can also be downloaded from the command line. For example, to download version `0.12.0`, run the following command.
 
 ```shell
-gh release download --repo https://github.com/davidledwards/ped v0.11.0
+gh release download --repo https://github.com/davidledwards/ped v0.12.0
 ```
 
 ## Usage
@@ -189,6 +189,13 @@ The following notation is used below when refering to keys.
 | `M-w p` `M-<` | Move to window above current window   |
 | `M-w n` `M->` | Move to window below current window   |
 
+### Behaviors
+
+| Key     | Command                              |
+| ------- | ------------------------------------ |
+| `C-t`   | Show position and size of editor     |
+| `M-t t` | Toggle between soft/hard tab inserts |
+
 ### Help
 
 | Key     | Command                                          |
@@ -221,9 +228,10 @@ The _workspace_ supports multiple windows that split vertically with equal alloc
 
 ## Limitations
 
-`ped` currently has a few notable limitations or deficiencies that will be addressed in future versions.
+`ped` currently has a few notable limitations or deficiencies that may be addressed in future versions.
 
 - An auto-save feature has not been implemented, so remember to save frequently.
+- TAB characters `\t` are not indented as one might expect, but rather as a special character `→`.
 - A target binary does not exist for Windows.
 
 ## Release

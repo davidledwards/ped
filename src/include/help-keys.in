@@ -77,6 +77,10 @@ Windows
   M-w p  M-<        Move to window above current window
   M-w n  M->        Move to window below current window
 
+Behaviors
+  C-t               Show position and size of editor
+  M-t t             Toggle between soft/hard tab inserts
+
 Help
   C-h               Toggle @help window (general help)
   M-h k             Toggle @keys window (available keys)

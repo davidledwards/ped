@@ -2,12 +2,23 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
+## [0.12.0](https://github.com/davidledwards/ped/tree/v0.12.0) - `2025-01-07`
+
+### Added
+
+- Key binding `C-t` to show position and size of editor, including Unicode value of the character under the cursor
+- Key binding `M-t t` to toggle between _soft_ and _hard_ tab inserts
+
+### Fixed
+
+- Control characters other than `\n` and `\t` are now shown as `¿` with a dimmed foreground
+
 ## [0.11.0](https://github.com/davidledwards/ped/tree/v0.11.0) - `2025-01-05`
 
 ### Added
 
 - CLI option `--colors` to print color names and values
-- Key binding to open `@colors` editor
+- Key binding `M-h c` to open `@colors` window
 - Custom color names in addition to ANSI standard colors
 
 ### Changed

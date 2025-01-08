@@ -354,8 +354,14 @@ impl Default for Line {
 }
 
 impl Draw {
+    // Special character shown for \n (newline) when visible.
     const EOL_CHAR: char = '\u{21b2}';
+
+    // Special character shown for \t (tab).
     const TAB_CHAR: char = '\u{2192}';
+
+    // Special character shown for all other ASCII control characters.
+    const CTRL_CHAR: char = '\u{00BF}';
 
     fn new(editor: &Editor) -> Draw {
         let config = editor.config.clone();
@@ -399,7 +405,7 @@ impl Draw {
         let fg = if let Some(fg) = render.syntax_cursor.color() {
             fg
         } else {
-            if (c == '\n' && self.config.settings.eol) || c == '\t' {
+            if (c == '\n' && self.config.settings.eol) || c.is_ascii_control() {
                 self.config.theme.whitespace_fg
             } else {
                 self.config.theme.text_fg
@@ -417,20 +423,20 @@ impl Draw {
         Cell::new(self.convert_char(c), Color::new(fg, bg))
     }
 
-    /// Converts `c`, if `\n`, to its displayable form, otherwise `c` is returned
-    /// unchanged.
+    /// Possibly converts `c` to an alternate display character.
     #[inline]
     fn convert_char(&self, c: char) -> char {
-        if c == '\n' {
-            if self.config.settings.eol {
-                Self::EOL_CHAR
-            } else {
-                ' '
+        match c {
+            '\n' => {
+                if self.config.settings.eol {
+                    Self::EOL_CHAR
+                } else {
+                    ' '
+                }
             }
-        } else if c == '\t' {
-            Self::TAB_CHAR
-        } else {
-            c
+            '\t' => Self::TAB_CHAR,
+            c if c.is_ascii_control() => Self::CTRL_CHAR,
+            c => c,
         }
     }
 }

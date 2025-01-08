@@ -27,6 +27,7 @@ use std::collections::HashMap;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
+use std::usize;
 
 /// A function type that implements an editing operation.
 pub type OpFn = fn(&mut Environment) -> Option<Action>;
@@ -637,7 +638,7 @@ fn insert_line(env: &mut Environment) -> Option<Action> {
 fn insert_tab(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
     editor.clear_mark();
-    if env.workspace().config().settings.tab_hard {
+    if env.is_tab_hard() {
         editor.insert_char('\t');
     } else {
         let tab_size = env.workspace().config().settings.tab_size;
@@ -1538,6 +1539,31 @@ impl Inquirer for SelectEditor {
     }
 }
 
+/// Operation: `describe-editor`
+fn describe_editor(env: &mut Environment) -> Option<Action> {
+    let editor = env.get_active_editor().borrow();
+    let buffer = editor.buffer();
+    let Point { row, col } = editor.location() + (1, 1);
+    let text = format!(
+        "char: \\u{:04x}, line: {}, col: {}, chars: {}, lines: {}",
+        buffer[editor.pos()] as u32,
+        row,
+        col,
+        buffer.size(),
+        buffer.line_of(usize::MAX) + 1,
+    );
+    Action::as_echo(&text)
+}
+
+/// Operation: `tab-mode`
+fn tab_mode(env: &mut Environment) -> Option<Action> {
+    if env.toggle_tab_hard() {
+        Action::as_echo("hard tabs enabled")
+    } else {
+        Action::as_echo("soft tabs enabled")
+    }
+}
+
 /// Scrolls the display down for the editor associated with `p`, which represents a
 /// point whose origin is the top-left position of the terminal display.
 pub fn track_up(env: &mut Environment, p: Point, select: bool) {
@@ -1817,7 +1843,7 @@ fn base_dir(editor: &EditorRef) -> PathBuf {
 }
 
 /// Predefined mapping of editing operations to editing functions.
-pub const OP_MAPPINGS: [(&'static str, OpFn); 72] = [
+pub const OP_MAPPINGS: [(&'static str, OpFn); 74] = [
     // --- exit and cancellation ---
     ("quit", quit),
     // --- help ---
@@ -1899,6 +1925,9 @@ pub const OP_MAPPINGS: [(&'static str, OpFn); 72] = [
     ("bottom-window", bottom_window),
     ("prev-window", prev_window),
     ("next-window", next_window),
+    // --- behaviors ---
+    ("describe-editor", describe_editor),
+    ("tab-mode", tab_mode),
 ];
 
 pub fn init_op_map() -> OpMap {
