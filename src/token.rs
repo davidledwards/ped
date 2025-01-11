@@ -245,40 +245,20 @@ impl Tokenizer {
         }
     }
 
-    /// Inserts a new span of `len` characters at the position of `cursor`, and returns
-    /// a cursor at the same position.
+    /// Inserts `len` characters at the position of `cursor` by expanding the length
+    /// of the underlying span, returning a new cursor at the same position.
     pub fn insert(&mut self, cursor: Cursor, len: usize) -> Cursor {
         if len > 0 {
             let token = &cursor.token;
-
-            let index = if cursor.pos > token.start_pos {
-                // Insertion occurs after start position of token, so truncate existing
-                // span, add span representing insertion, and add final span to
-                // represent suffix of original span that was truncated.
-                self.spans[token.index].len = cursor.pos - token.start_pos;
-                self.spans.insert(token.index + 1, Span::gap(len));
-                self.spans.insert(
-                    token.index + 2,
-                    Span::token(self.spans[token.index].id, token.end_pos - cursor.pos),
-                );
-                token.index + 1
-            } else {
-                // Insertion occurs at start position of token, so simply add span
-                // representing insertion.
-                self.spans.insert(token.index, Span::gap(len));
-                token.index
-            };
+            self.spans[token.index].len += len;
             self.chars += len;
 
-            // Resulting cursor points to token for newly inserted span.
             Cursor {
-                pos: cursor.pos,
                 token: Token {
-                    index,
-                    start_pos: cursor.pos,
-                    end_pos: cursor.pos + len,
+                    end_pos: token.end_pos + len,
+                    ..*token
                 },
-                color: None,
+                ..cursor
             }
         } else {
             cursor
@@ -286,7 +266,7 @@ impl Tokenizer {
     }
 
     /// Removes possibly many spans of `len` characters at the position of `cursor`,
-    /// and returns a cursor at the same position.
+    /// returning a new cursor at the same position.
     pub fn remove(&mut self, cursor: Cursor, len: usize) -> Cursor {
         if len > 0 {
             // Find cursor following removal of specified length, noting that actual
@@ -528,23 +508,15 @@ mod tests {
         assert_eq!(cursor.pos, POS);
         assert_eq!(cursor.token.start_pos, POS);
 
-        // Results in one new span.
+        // Expands span referenced by cursor token.
         let cursor = tz.insert(cursor, LEN);
         assert_eq!(tz.chars, chars + LEN);
-        assert_eq!(tz.spans.len(), SPANS.len() + 1);
+        assert_eq!(tz.spans.len(), SPANS.len());
 
-        // Verify that token at current position is newly inserted span.
+        // Verify that token at current position is expanded span.
         assert_eq!(cursor.pos, POS);
         assert_eq!(cursor.token.start_pos, POS);
-        assert_eq!(cursor.token.end_pos, POS + LEN);
-        assert_eq!(cursor.color, None);
-
-        // Verify that token following insertion is original span.
-        let pos = POS + LEN;
-        let cursor = tz.find(cursor, pos);
-        assert_eq!(cursor.pos, pos);
-        assert_eq!(cursor.token.start_pos, pos);
-        assert_eq!(cursor.token.end_pos, pos + len);
+        assert_eq!(cursor.token.end_pos, POS + len + LEN);
         assert_eq!(cursor.color, color_of(id));
     }
 
@@ -564,30 +536,15 @@ mod tests {
         assert_eq!(cursor.pos, POS);
         assert_eq!(cursor.token.start_pos, START_POS);
 
-        // Results in two new spans.
+        // Expands span referenced by cursor token.
         let cursor = tz.insert(cursor, LEN);
         assert_eq!(tz.chars, chars + LEN);
-        assert_eq!(tz.spans.len(), SPANS.len() + 2);
+        assert_eq!(tz.spans.len(), SPANS.len());
 
         // Verify that token at current position is newly inserted span.
         assert_eq!(cursor.pos, POS);
-        assert_eq!(cursor.token.start_pos, POS);
-        assert_eq!(cursor.token.end_pos, POS + LEN);
-        assert_eq!(cursor.color, None);
-
-        // Verify that prior token is prefix of original.
-        let cursor = tz.find(cursor, START_POS);
-        assert_eq!(cursor.pos, START_POS);
         assert_eq!(cursor.token.start_pos, START_POS);
-        assert_eq!(cursor.token.end_pos, POS);
-        assert_eq!(cursor.color, color_of(id));
-
-        // Verify that following token is suffix of original.
-        let pos = POS + LEN;
-        let cursor = tz.find(cursor, pos);
-        assert_eq!(cursor.pos, pos);
-        assert_eq!(cursor.token.start_pos, pos);
-        assert_eq!(cursor.token.end_pos, pos + (len - (POS - START_POS)));
+        assert_eq!(cursor.token.end_pos, START_POS + len + LEN);
         assert_eq!(cursor.color, color_of(id));
     }
 

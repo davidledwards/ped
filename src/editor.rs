@@ -30,6 +30,9 @@ pub struct Editor {
     /// Buffer containing the contents of this editor.
     buffer: BufferRef,
 
+    /// A logical clock that increments with each change to the buffer.
+    clock: u64,
+
     /// A stack containing changes to the buffer that can be *undone*.
     undo: Vec<Change>,
 
@@ -38,6 +41,9 @@ pub struct Editor {
 
     /// Tokenizes the buffer for syntax coloring.
     tokenizer: TokenizerRef,
+
+    /// The value of [`clock`](Self::clock) at the time of the last tokenization.
+    tokenize_clock: u64,
 
     /// A tokenization cursor that is always pointing to the top-left position on the
     /// display.
@@ -532,9 +538,11 @@ impl Editor {
             config,
             source,
             buffer,
+            clock: 0,
             undo: Vec::new(),
             redo: Vec::new(),
             tokenizer: tokenizer.to_ref(),
+            tokenize_clock: 0,
             syntax_cursor,
             dirty: false,
             cur_pos,
@@ -1070,10 +1078,11 @@ impl Editor {
             }
 
             // Update tokenizer with insertion range.
-            let cursor = self.tokenizer().find(self.syntax_cursor, self.cur_pos);
-            self.tokenizer_mut().insert(cursor, text.len());
-            let cursor = self.tokenizer_mut().tokenize(&self.buffer());
-            self.syntax_cursor = cursor;
+            self.syntax_cursor = {
+                let mut tokenizer = self.tokenizer_mut();
+                let cursor = tokenizer.find(self.syntax_cursor, self.cur_pos);
+                tokenizer.insert(cursor, text.len())
+            };
 
             // Update current line since insertion will have changed critical
             // information for navigation. New cursor location follows inserted text,
@@ -1095,6 +1104,7 @@ impl Editor {
             self.align_syntax();
             self.cursor = Point::new(row, col);
             self.dirty = true;
+            self.clock += 1;
         }
     }
 
@@ -1224,10 +1234,11 @@ impl Editor {
             }
 
             // Update tokenizer with removal range.
-            let cursor = self.tokenizer().find(self.syntax_cursor, from_pos);
-            self.tokenizer_mut().remove(cursor, text.len());
-            let cursor = self.tokenizer_mut().tokenize(&self.buffer());
-            self.syntax_cursor = cursor;
+            self.syntax_cursor = {
+                let mut tokenizer = self.tokenizer_mut();
+                let cursor = tokenizer.find(self.syntax_cursor, from_pos);
+                tokenizer.remove(cursor, text.len())
+            };
 
             // Removal of text requires current and top lines to be updated since may
             // have changed.
@@ -1239,6 +1250,7 @@ impl Editor {
             self.align_syntax();
             self.cursor = Point::new(row, col);
             self.dirty = true;
+            self.clock += 1;
             text
         }
     }
@@ -1660,6 +1672,22 @@ impl Editor {
         let line_pos = buffer.find_start_line(pos);
         let (next_pos, terminated) = buffer.find_next_line(pos);
         (line_pos, next_pos, terminated)
+    }
+
+    /// Tokenizes the buffer if changes occurred since the last tokenization, returning
+    /// `true` if tokenization occurred and `false` otherwise.
+    pub fn tokenize(&mut self) -> bool {
+        if self.tokenize_clock < self.clock {
+            self.syntax_cursor = {
+                let cursor = self.tokenizer_mut().tokenize(&self.buffer());
+                cursor
+            };
+            self.align_syntax();
+            self.tokenize_clock = self.clock;
+            true
+        } else {
+            false
+        }
     }
 
     /// Renders the contents of the editor.

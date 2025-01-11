@@ -268,6 +268,11 @@ impl Controller {
                 Some(time)
             }
         } else {
+            let mut editor = self.env.get_active_editor().borrow_mut();
+            if editor.tokenize() {
+                editor.render();
+                editor.show_cursor();
+            }
             None
         };
         Step::Continue
