@@ -2,6 +2,8 @@
 
 The *ped*estrian text editor.
 
+<img src="content/ped.png" style="zoom:25%;" />
+
 ![](content/ped-snapshot.png)
 
 ## Background
