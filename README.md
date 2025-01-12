@@ -25,10 +25,10 @@ brew install ped
 
 Releases can be downloaded directly from [GitHub](https://github.com/davidledwards/ped/releases).
 
-Alternatively, using the [GitHub CLI](https://cli.github.com/), releases can also be downloaded from the command line. For example, to download version `0.12.0`, run the following command.
+Alternatively, using the [GitHub CLI](https://cli.github.com/), releases can also be downloaded from the command line. For example, to download version `0.12.1`, run the following command.
 
 ```shell
-gh release download --repo https://github.com/davidledwards/ped v0.12.0
+gh release download --repo https://github.com/davidledwards/ped v0.12.1
 ```
 
 ## Usage
@@ -225,6 +225,8 @@ The entire editing experience is facilitated by a central _controller_, which in
 The concept of a _question_ is implemented using an _inquirer_ combined with a _completer_, both of which are abstractions that allow the controller to deal only with the general problem. This design allows the development of arbitrarily complex interactions, such as the _open file_ dialog that provides file completion assistance.
 
 The _workspace_ supports multiple windows that split vertically with equal allocation of screen real estate. This was an early decision to keep the windowing system simple, at least for now. The workspace also manages resizing of windows when a change in the terminal size is detected.
+
+The implementation of _syntax_ highlighting uses familiar constructs, such as regular expressions to define tokens, as well as external configuration files that are discovered and loaded at runtime. The algorithmic challenge that became evident quite early in the design process was how to apply color updates efficiently as changes were occurring in the buffer. The fundamental problem is that the insertion or removal of text requires some degree of rescanning because existing tokens may be invalidated and new tokens may be recognized. However, it is not immediately obvious where to start the rescanning process. A classic example that illustrates the problem is the multi-line comment. Suppose the comment is opened on line 1 with a `/*`, but never closed. This implies that the comment token is never recognized. Now, suppose the comment is closed on line 1000 with `*/`. The entire buffer would need to be rescanned to correctly tokenize the text. In the interest of simplicity, I chose to rescan the entire buffer when changes are made. The tokenization process produces a vector of _spans_ that map to recognized tokens in the buffer. This data structure is very efficient for navigation and scrolling even though it requires _O(n)_ time to move forward and backward. It also aligns well with the rendering process. Insertion and removal of text uses a clever trick, essentially expanding a span during insertion or collapsing spans upon removal. These operations are very efficient, executing in _O(1)_ time. More importantly, the rescanning process can be deferred while making the immediate rendering operation behave as one might expect even though coloring for a brief period of time may not be entirely accurate. The need to rescan is detected and executed in background processing, which occurs between keystrokes. It turns out that the CPU is sitting idle most of the time, which makes background processing the ideal place to perform this relatively costly tokenization. Despite the deferral of rescanning, this operation is being executed on the same thread as the controller, so the cost of tokenization must be sensitive to the perception of sluggish responsiveness to users.
 
 ## Colors
 

@@ -2,6 +2,12 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
+## [0.12.1](https://github.com/davidledwards/ped/tree/v0.12.1) - `2025-01-12`
+
+### Changed
+
+- Tokenization of buffer for syntax highlighting moved to background processing
+
 ## [0.12.0](https://github.com/davidledwards/ped/tree/v0.12.0) - `2025-01-07`
 
 ### Added
