@@ -2,7 +2,7 @@
 
 The *ped*estrian text editor.
 
-<img src="content/ped.png" style="zoom:25%;" />
+<img src="content/ped-small.png" style="zoom:25%;" />
 
 ![](content/ped-snapshot.png)
 
