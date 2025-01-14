@@ -32,14 +32,15 @@ pub fn help_editor(config: ConfigurationRef) -> EditorRef {
 }
 
 fn help_buffer() -> Buffer {
-    let mut out = String::new();
-    write!(out, include_str!("include/help-header.in"));
+    let mut buf = Buffer::new();
+    write!(buf, include_str!("include/help-header.in"));
     writeln!(
-        out,
+        buf,
         "\nBuild: {PACKAGE_NAME} {PACKAGE_VERSION} ({BUILD_HASH} {BUILD_DATE})\n"
     );
-    write!(out, include_str!("include/help-keys.in"));
-    make_buffer(&out)
+    write!(buf, include_str!("include/help-keys.in"));
+    buf.set_pos(0);
+    buf
 }
 
 /// Returns an ephemeral editor, named `@keys`, containing a list of available keys.
@@ -66,13 +67,14 @@ fn keys_buffer() -> Buffer {
     const HEADER: &str = "Keys";
 
     let keys = prepare_keys();
-    let mut out = String::new();
-    writeln!(out, "{HEADER}");
-    writeln!(out, "{:-<1$}", "", HEADER.len());
+    let mut buf = Buffer::new();
+    writeln!(buf, "{HEADER}");
+    writeln!(buf, "{:-<1$}", "", HEADER.len());
     for key_name in keys {
-        writeln!(out, "{key_name}");
+        writeln!(buf, "{key_name}");
     }
-    make_buffer(&out)
+    buf.set_pos(0);
+    buf
 }
 
 fn prepare_keys() -> Vec<String> {
@@ -109,13 +111,14 @@ fn ops_buffer() -> Buffer {
     const HEADER: &str = "Operations";
 
     let ops = prepare_ops();
-    let mut out = String::new();
-    writeln!(out, "{HEADER}");
-    writeln!(out, "{:-<1$}", "", HEADER.len());
+    let mut buf = Buffer::new();
+    writeln!(buf, "{HEADER}");
+    writeln!(buf, "{:-<1$}", "", HEADER.len());
     for op in ops {
-        writeln!(out, "{op}");
+        writeln!(buf, "{op}");
     }
-    make_buffer(&out)
+    buf.set_pos(0);
+    buf
 }
 
 fn prepare_ops() -> Vec<String> {
@@ -165,18 +168,19 @@ fn bindings_buffer(bindings: &HashMap<Vec<Key>, String>) -> Buffer {
     });
 
     // Emit formatted bindings.
-    let mut out = String::new();
-    writeln!(out, "{:<key_width$}   {}", HEADER_KEY_SEQ, HEADER_OP);
+    let mut buf = Buffer::new();
+    writeln!(buf, "{:<key_width$}   {}", HEADER_KEY_SEQ, HEADER_OP);
     writeln!(
-        out,
+        buf,
         "{:<key_width$}   {}",
         "_".repeat(HEADER_KEY_SEQ.len()),
         "_".repeat(HEADER_OP.len())
     );
     for (key_seq, op) in bindings {
-        writeln!(out, "{key_seq:<key_width$}   {op}");
+        writeln!(buf, "{key_seq:<key_width$}   {op}");
     }
-    make_buffer(&out)
+    buf.set_pos(0);
+    buf
 }
 
 fn prepare_bindings(bindings: &HashMap<Vec<Key>, String>) -> BTreeMap<String, String> {
@@ -223,18 +227,19 @@ fn colors_buffer(colors: &HashMap<String, u8>) -> Buffer {
     });
 
     // Emit formatted colors.
-    let mut out = String::new();
-    writeln!(out, "{:<name_width$}   {}", HEADER_NAME, HEADER_VALUE);
+    let mut buf = Buffer::new();
+    writeln!(buf, "{:<name_width$}   {}", HEADER_NAME, HEADER_VALUE);
     writeln!(
-        out,
+        buf,
         "{:<name_width$}   {}",
         "-".repeat(HEADER_NAME.len()),
         "-".repeat(HEADER_VALUE.len())
     );
     for (name, color) in colors {
-        writeln!(out, "{name:<name_width$}   {color}");
+        writeln!(buf, "{name:<name_width$}   {color}");
     }
-    make_buffer(&out)
+    buf.set_pos(0);
+    buf
 }
 
 fn prepare_colors(colors: &HashMap<String, u8>) -> IndexMap<String, u8> {
@@ -269,12 +274,4 @@ fn pretty_keys(keys: &Vec<Key>) -> Vec<String> {
         }
         _ => keys,
     }
-}
-
-/// Returns a buffer containing the contents of `out`.
-fn make_buffer(out: &str) -> Buffer {
-    let mut buffer = Buffer::new();
-    buffer.insert_str(out);
-    buffer.set_pos(0);
-    buffer
 }

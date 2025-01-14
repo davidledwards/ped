@@ -7,6 +7,7 @@
 use std::alloc::{self, Layout};
 use std::cell::RefCell;
 use std::cmp;
+use std::fmt;
 use std::io::{BufRead, Write};
 use std::ops::{ControlFlow, Index};
 use std::ptr::NonNull;
@@ -575,6 +576,13 @@ impl<'a> IntoIterator for &'a Buffer {
 
     fn into_iter(self) -> Self::IntoIter {
         self.forward(0)
+    }
+}
+
+impl fmt::Write for Buffer {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        self.insert_str(s);
+        Ok(())
     }
 }
 
