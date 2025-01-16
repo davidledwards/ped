@@ -625,6 +625,14 @@ impl Inquirer for GotoLine {
     }
 }
 
+pub fn insert_char(env: &mut Environment, c: char) -> Option<Action> {
+    let mut editor = env.get_active_editor().borrow_mut();
+    editor.clear_mark();
+    editor.insert_char(c);
+    editor.render();
+    None
+}
+
 /// Operation: `insert-line`
 fn insert_line(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
