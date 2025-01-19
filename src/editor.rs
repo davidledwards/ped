@@ -2073,7 +2073,7 @@ impl EditorKernel {
         }
     }
 
-    /// An unchecked version of [prev_line](Editor::prev_line) that assumes `line`
+    /// An unchecked version of [prev_line](EditorKernel::prev_line) that assumes `line`
     /// is not at the top of the buffer.
     fn prev_line_unchecked(&self, line: &Line) -> Line {
         self.prev_line(line)
@@ -2114,7 +2114,7 @@ impl EditorKernel {
         }
     }
 
-    /// An unchecked version of [next_line](Editor::next_line) that assumes `line`
+    /// An unchecked version of [next_line](EditorKernel::next_line) that assumes `line`
     /// is not at the bottom of the buffer.
     fn next_line_unchecked(&self, line: &Line) -> Line {
         self.next_line(line)
