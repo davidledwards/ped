@@ -4,7 +4,7 @@
 //! to the core [`Editor`]. A restricted set of functions is necessary not only to
 //! simplify operations, but more importantly, to enforce certain invariants.
 
-use crate::editor::{Align, Editor, EditorRef};
+use crate::editor::{Align, Editor, EditorRef, ImmutableEditor};
 use crate::search::Pattern;
 use crate::source::Source;
 use crate::window::WindowRef;
@@ -51,7 +51,7 @@ impl Environment {
         for (id, name) in Self::BUILTIN_EDITORS {
             editor_map.insert(
                 id,
-                Editor::new(
+                Editor::mutable(
                     workspace.borrow().config().clone(),
                     Source::Ephemeral(name.to_string()),
                     None,

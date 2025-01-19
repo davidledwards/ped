@@ -23,10 +23,10 @@ pub const COLORS_EDITOR_NAME: &str = "colors";
 
 /// Returns an ephemeral editor, named `@help`, containing general help content.
 pub fn help_editor(config: ConfigurationRef) -> EditorRef {
-    Editor::new(
+    Editor::readonly(
         config,
         Source::as_ephemeral(HELP_EDITOR_NAME),
-        Some(help_buffer()),
+        help_buffer(),
     )
     .to_ref()
 }
@@ -45,10 +45,10 @@ fn help_buffer() -> Buffer {
 
 /// Returns an ephemeral editor, named `@keys`, containing a list of available keys.
 pub fn keys_editor(config: ConfigurationRef) -> EditorRef {
-    Editor::new(
+    Editor::readonly(
         config,
         Source::as_ephemeral(KEYS_EDITOR_NAME),
-        Some(keys_buffer()),
+        keys_buffer(),
     )
     .to_ref()
 }
@@ -89,12 +89,7 @@ fn prepare_keys() -> Vec<String> {
 /// Returns an ephemeral editor, named `@operations`, containing a list of available
 /// editing operations.
 pub fn ops_editor(config: ConfigurationRef) -> EditorRef {
-    Editor::new(
-        config,
-        Source::as_ephemeral(OPS_EDITOR_NAME),
-        Some(ops_buffer()),
-    )
-    .to_ref()
+    Editor::readonly(config, Source::as_ephemeral(OPS_EDITOR_NAME), ops_buffer()).to_ref()
 }
 
 /// Returns a formatted list of available editing operations.
@@ -133,12 +128,7 @@ fn prepare_ops() -> Vec<String> {
 /// Returns an ephemeral editor, named `@bindings`, containing a list of key bindings.
 pub fn bindings_editor(config: ConfigurationRef) -> EditorRef {
     let buffer = bindings_buffer(config.bindings.bindings());
-    Editor::new(
-        config,
-        Source::as_ephemeral(BINDINGS_EDITOR_NAME),
-        Some(buffer),
-    )
-    .to_ref()
+    Editor::readonly(config, Source::as_ephemeral(BINDINGS_EDITOR_NAME), buffer).to_ref()
 }
 
 /// Returns a formatted list of key bindings.
@@ -194,12 +184,7 @@ fn prepare_bindings(bindings: &HashMap<Vec<Key>, String>) -> BTreeMap<String, St
 /// and values.
 pub fn colors_editor(config: ConfigurationRef) -> EditorRef {
     let buffer = colors_buffer(config.colors.colors());
-    Editor::new(
-        config,
-        Source::as_ephemeral(COLORS_EDITOR_NAME),
-        Some(buffer),
-    )
-    .to_ref()
+    Editor::readonly(config, Source::as_ephemeral(COLORS_EDITOR_NAME), buffer).to_ref()
 }
 
 /// Returns a formatted list of color names and values.

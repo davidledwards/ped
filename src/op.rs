@@ -11,7 +11,7 @@
 
 use crate::buffer::Buffer;
 use crate::config::ConfigurationRef;
-use crate::editor::{Align, Editor, EditorRef};
+use crate::editor::{Align, Editor, EditorRef, ImmutableEditor};
 use crate::env::{Environment, Focus};
 use crate::error::{Error, Result};
 use crate::help;
@@ -56,6 +56,22 @@ impl Action {
     fn as_question(inquirer: Box<dyn Inquirer>) -> Option<Action> {
         let action = Action::Question(inquirer);
         Some(action)
+    }
+
+    fn echo_readonly() -> Option<Action> {
+        Self::as_echo("editor is readonly")
+    }
+
+    fn echo_no_window() -> Option<Action> {
+        Self::as_echo("unable to create new window")
+    }
+
+    fn echo_cannot_close() -> Option<Action> {
+        Self::as_echo("cannot close only window")
+    }
+
+    fn echo_no_editors() -> Option<Action> {
+        Self::as_echo("no more editors")
     }
 }
 
@@ -256,7 +272,7 @@ where
                 env.set_active(Focus::To(view_id));
                 None
             } else {
-                Action::as_echo("unable to create window")
+                Action::echo_no_window()
             }
         }
     } else {
@@ -267,7 +283,7 @@ where
             env.set_active(Focus::To(view_id));
             None
         } else {
-            Action::as_echo("unable to create window")
+            Action::echo_no_window()
         }
     }
 }
@@ -627,50 +643,67 @@ impl Inquirer for GotoLine {
 
 pub fn insert_char(env: &mut Environment, c: char) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
-    editor.clear_mark();
-    editor.insert_char(c);
-    editor.render();
-    None
+    if let Some(editor) = editor.modify() {
+        editor.clear_mark();
+        editor.insert_char(c);
+        editor.render();
+        None
+    } else {
+        Action::echo_readonly()
+    }
 }
 
 /// Operation: `insert-line`
 fn insert_line(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
-    editor.clear_mark();
-    editor.insert_char('\n');
-    editor.render();
-    None
+    if let Some(editor) = editor.modify() {
+        editor.clear_mark();
+        editor.insert_char('\n');
+        editor.render();
+        None
+    } else {
+        Action::echo_readonly()
+    }
 }
 
 /// Operation: `insert-tab`
 fn insert_tab(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
-    editor.clear_mark();
-    if env.is_tab_hard() {
-        editor.insert_char('\t');
+    if let Some(editor) = editor.modify() {
+        editor.clear_mark();
+        if env.is_tab_hard() {
+            editor.insert_char('\t');
+        } else {
+            let tab_size = env.workspace().config().settings.tab_size;
+            let n = tab_size - (editor.location().col as usize % tab_size);
+            editor.insert_str(&" ".repeat(n));
+        }
+        editor.render();
+        None
     } else {
-        let tab_size = env.workspace().config().settings.tab_size;
-        let n = tab_size - (editor.location().col as usize % tab_size);
-        editor.insert_str(&" ".repeat(n));
+        Action::echo_readonly()
     }
-    editor.render();
-    None
 }
 
 /// Operation: `remove-before`
 fn remove_before(env: &mut Environment) -> Option<Action> {
     let text = {
         let mut editor = env.get_active_editor().borrow_mut();
-        let maybe_mark = editor.clear_mark();
-        if let Some(mark) = maybe_mark {
-            let text = editor.remove_mark(mark);
-            Some(text)
+        if let Some(editor) = editor.modify() {
+            let maybe_mark = editor.clear_mark();
+            let text = if let Some(mark) = maybe_mark {
+                let text = editor.remove_mark(mark);
+                Some(text)
+            } else {
+                editor.remove_before();
+                None
+            };
+            editor.render();
+            text
         } else {
-            editor.remove_before();
             None
         }
     };
-    env.get_active_editor().borrow_mut().render();
     if let Some(text) = text {
         env.set_clipboard(text);
     }
@@ -680,28 +713,40 @@ fn remove_before(env: &mut Environment) -> Option<Action> {
 /// Operation: `remove-after`
 fn remove_after(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
-    editor.clear_mark();
-    editor.remove_after();
-    editor.render();
-    None
+    if let Some(editor) = editor.modify() {
+        editor.clear_mark();
+        editor.remove_after();
+        editor.render();
+        None
+    } else {
+        Action::echo_readonly()
+    }
 }
 
 /// Operation: `remove-start`
 fn remove_start(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
-    editor.clear_mark();
-    editor.remove_start();
-    editor.render();
-    None
+    if let Some(editor) = editor.modify() {
+        editor.clear_mark();
+        editor.remove_start();
+        editor.render();
+        None
+    } else {
+        Action::echo_readonly()
+    }
 }
 
 /// Operation: `remove-end`
 fn remove_end(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
-    editor.clear_mark();
-    editor.remove_end();
-    editor.render();
-    None
+    if let Some(editor) = editor.modify() {
+        editor.clear_mark();
+        editor.remove_end();
+        editor.render();
+        None
+    } else {
+        Action::echo_readonly()
+    }
 }
 
 /// Operation: `undo`
@@ -744,29 +789,44 @@ fn copy(env: &mut Environment) -> Option<Action> {
 
 /// Operation: `paste`
 fn paste(env: &mut Environment) -> Option<Action> {
-    let maybe_text = env.get_clipboard();
-    if let Some(text) = maybe_text {
-        let mut editor = env.get_active_editor().borrow_mut();
-        editor.insert(text);
-        editor.render();
+    let mut editor = env.get_active_editor().borrow_mut();
+    if let Some(editor) = editor.modify() {
+        let maybe_text = env.get_clipboard();
+        if let Some(text) = maybe_text {
+            editor.insert(text);
+            editor.render();
+        }
+        None
+    } else {
+        Action::echo_readonly()
     }
-    None
 }
 
 /// Operation: `cut`
 fn cut(env: &mut Environment) -> Option<Action> {
     let text = {
         let mut editor = env.get_active_editor().borrow_mut();
-        let maybe_mark = editor.clear_mark();
-        if let Some(mark) = maybe_mark {
-            editor.remove_mark(mark)
+        if let Some(editor) = editor.modify() {
+            let text = {
+                let maybe_mark = editor.clear_mark();
+                if let Some(mark) = maybe_mark {
+                    editor.remove_mark(mark)
+                } else {
+                    editor.remove_line()
+                }
+            };
+            editor.render();
+            Some(text)
         } else {
-            editor.remove_line()
+            None
         }
     };
-    env.get_active_editor().borrow_mut().render();
-    env.set_clipboard(text);
-    None
+    if let Some(text) = text {
+        env.set_clipboard(text);
+        None
+    } else {
+        Action::echo_readonly()
+    }
 }
 
 /// Operation: `search`
@@ -1001,7 +1061,7 @@ impl Open {
                         env.set_active(Focus::To(view_id));
                         None
                     } else {
-                        Action::as_echo("unable to create new window")
+                        Action::echo_no_window()
                     }
                 } else {
                     env.set_editor(editor, Align::Auto);
@@ -1238,7 +1298,7 @@ fn kill_window(env: &mut Environment) -> Option<Action> {
                 None
             }
         } else {
-            Action::as_echo("cannot close only window")
+            Action::echo_cannot_close()
         }
     }
 }
@@ -1377,7 +1437,7 @@ fn close_window(env: &mut Environment) -> Option<Action> {
     if let Some(_) = env.close_window() {
         None
     } else {
-        Action::as_echo("cannot close only window")
+        Action::echo_cannot_close()
     }
 }
 
@@ -1426,7 +1486,7 @@ fn select_editor(env: &mut Environment) -> Option<Action> {
     if editors.len() > 0 {
         SelectEditor::question(editors, None)
     } else {
-        Action::as_echo("only editor")
+        Action::echo_no_editors()
     }
 }
 
@@ -1436,7 +1496,7 @@ fn select_editor_top(env: &mut Environment) -> Option<Action> {
     if editors.len() > 0 {
         SelectEditor::question(editors, Some(Placement::Top))
     } else {
-        Action::as_echo("only editor")
+        Action::echo_no_editors()
     }
 }
 
@@ -1446,7 +1506,7 @@ fn select_editor_bottom(env: &mut Environment) -> Option<Action> {
     if editors.len() > 0 {
         SelectEditor::question(editors, Some(Placement::Bottom))
     } else {
-        Action::as_echo("only editor")
+        Action::echo_no_editors()
     }
 }
 
@@ -1456,7 +1516,7 @@ fn select_editor_above(env: &mut Environment) -> Option<Action> {
     if editors.len() > 0 {
         SelectEditor::question(editors, Some(Placement::Above(env.get_active_view_id())))
     } else {
-        Action::as_echo("only editor")
+        Action::echo_no_editors()
     }
 }
 
@@ -1466,7 +1526,7 @@ fn select_editor_below(env: &mut Environment) -> Option<Action> {
     if editors.len() > 0 {
         SelectEditor::question(editors, Some(Placement::Below(env.get_active_view_id())))
     } else {
-        Action::as_echo("only editor")
+        Action::echo_no_editors()
     }
 }
 
@@ -1532,7 +1592,7 @@ impl Inquirer for SelectEditor {
                         env.set_active(Focus::To(view_id));
                         None
                     } else {
-                        Action::as_echo("unable to create new window")
+                        Action::echo_no_window()
                     }
                 } else {
                     env.switch_editor(editor_id, Align::Auto);
@@ -1696,7 +1756,7 @@ pub fn open_editor(config: ConfigurationRef, path: &str) -> Result<EditorRef> {
 
     // Create file buffer with position set at top.
     buffer.set_pos(0);
-    let editor = Editor::new(config, Source::as_file(path, time), Some(buffer));
+    let editor = Editor::mutable(config, Source::as_file(path, time), Some(buffer));
     Ok(editor.to_ref())
 }
 

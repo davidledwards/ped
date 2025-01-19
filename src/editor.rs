@@ -19,8 +19,292 @@ use std::cmp;
 use std::ops::Range;
 use std::rc::Rc;
 
-/// An editing controller with an underlying [`Buffer`] and an attachable [`Window`].
+/// An editing session containing a [`kernel`](EditorKernel) that carries out most
+/// operations.
 pub struct Editor {
+    /// The kernel where all operations are implemented.
+    kernel: EditorKernel,
+
+    /// A value of `true` implies that _mutable_ operations are not allowed.
+    readonly: bool,
+}
+
+pub type EditorRef = Rc<RefCell<Editor>>;
+
+/// A collection of _immutable_ operations that can be performed on an [`Editor`].
+///
+/// The notion of immutability in this context is not strictly defined, but rather
+/// seen from the perspective of the kinds of operations that can be performed
+/// regardless of whether the underlying buffer can be mutated. Hence, some of these
+/// operations actually require mutable references even though they are logically
+/// immutable.
+pub trait ImmutableEditor {
+    /// Returns a partial clone of this editor using `source`.
+    ///
+    /// Specifically, the buffer is cloned as well as the current buffer position and
+    /// cursor values. All other attributes are initialized as if a new editor were
+    /// being created.
+    fn clone_as(&self, source: Source) -> Editor;
+
+    /// Returns a reference to the source.
+    fn source(&self) -> &Source;
+
+    /// Changes the `source` associated with this editor.
+    fn assume(&mut self, source: Source);
+
+    /// Returns a reference to the underlying buffer.
+    fn buffer(&self) -> Ref<'_, Buffer>;
+
+    /// Returns `true` if the buffer has changed.
+    fn is_dirty(&self) -> bool;
+
+    /// Makes this editor _not_ dirty.
+    fn clear_dirty(&mut self);
+
+    /// Returns the cursor position on the display in terms of _row_ and _column_.
+    ///
+    /// The _row_ and _column_ values are `0`-based and exclusively bounded by
+    /// [`size()`](Self::size).
+    fn cursor(&self) -> Point;
+
+    /// Returns the location of the cursor position in the buffer in terms of _line_
+    /// and _column_.
+    ///
+    /// The _line_ and _column_ values are `0`-based. Note that neither of these values
+    /// are bounded by the size of the display, which is the case with
+    /// [`cursor`](Self::cursor).
+    fn location(&self) -> Point;
+
+    /// Returns the number of rows available on the editor canvas.
+    fn rows(&self) -> u32;
+
+    /// Returns the size of the editor canvas.
+    fn size(&self) -> Size;
+
+    /// Returns the buffer position corresponding to the [`cursor`](Self::cursor).
+    fn pos(&self) -> usize;
+
+    /// Sets the cursor location and corresponding buffer position to `cursor`, though
+    /// the final cursor location is constrained by end-of-line and end-of-buffer
+    /// boundaries.
+    ///
+    /// This function was designed for responding to _mouse click_ events where the
+    /// position of the click is captured in `cursor`.
+    ///
+    /// The coordinates in `cursor` are presumed to be relative to the origin of the
+    /// editor canvas.
+    fn set_focus(&mut self, cursor: Point);
+
+    /// Attaches the `window` to this editor.
+    fn attach(&mut self, window: WindowRef, align: Align);
+
+    /// Detaches the existing window from this editor.
+    fn detach(&mut self);
+
+    /// Sets the position of the cursor based on the alignment objective `align`.
+    fn align_cursor(&mut self, align: Align);
+
+    /// Draws the canvas and banner regardless of whether any updates have occurred.
+    fn draw(&mut self);
+
+    /// Makes the cursor visible.
+    fn show_cursor(&mut self);
+
+    /// Tries to move the cursor _backward_ from the current buffer position by `len`
+    /// characters.
+    fn move_backward(&mut self, len: usize);
+
+    /// Tries to move the cursor _forward_ from the current buffer position by `len`
+    /// characters.
+    fn move_forward(&mut self, len: usize);
+
+    /// Tries to move the cursor _backward_ by one word from the current buffer
+    /// position.
+    fn move_backward_word(&mut self);
+
+    /// Tries to move the cursor _forward_ by one word from the current buffer
+    /// position.
+    fn move_forward_word(&mut self);
+
+    /// Tries to move the cursor _up_ by the specified number of `try_rows`.
+    ///
+    /// If `pin` is `true`, then the cursor will remain on the current row if the
+    /// resulting display makes it possible. Pinning is useful when _paging up_.
+    ///
+    /// If `pin` is `false`, then the cursor will move up in tandem with `try_rows`,
+    /// though not to extend beyond the top of the display.
+    fn move_up(&mut self, try_rows: u32, pin: bool);
+
+    /// Tries to move the cursor _down_ by the specified number of `try_rows`.
+    ///
+    /// If `pin` is `true`, then the cursor will remain on the current row. Pinning is
+    /// useful when _paging down_.
+    ///
+    /// If `pin` is `false`, then the cursor will move down in tandem with `try_rows`,
+    /// though not to extend beyond the bottom of the display.
+    fn move_down(&mut self, try_rows: u32, pin: bool);
+
+    /// Moves the cursor to the _start_ of the current row.
+    fn move_start(&mut self);
+
+    /// Moves the cursor to the _end_ of the current row.
+    fn move_end(&mut self);
+
+    /// Moves the cursor to the _top_ of the buffer.
+    fn move_top(&mut self);
+
+    /// Moves the cursor to the _bottom_ of the buffer.
+    fn move_bottom(&mut self);
+
+    /// Moves the buffer position to the first character of `line` and places the
+    /// cursor on the display according to the `align` objective.
+    fn move_line(&mut self, line: u32, align: Align);
+
+    /// Moves the current buffer position to `pos` and places the cursor on the
+    /// display according to the `align` objective.
+    ///
+    /// When [`Align::Auto`] is specified, the placement of the cursor depends on
+    /// the target `pos` relative to the current buffer position. Specifically, it
+    /// behaves as follows:
+    /// - _when `pos` is above the current line but still visible on the display_:
+    ///   aligns the cursor on the target row above the current line, though not to
+    ///   extend beyond the top row
+    /// - _when `pos` is on the current line_: aligns the cursor on the current row
+    /// - _when `pos` is beyond the current line_: aligns the cursor on the target
+    ///   row below the current line, though not to extend beyond the borrom row
+    fn move_to(&mut self, pos: usize, align: Align);
+
+    /// Tries scrolling _up_ the contents of the display by the specified number of
+    /// `try_rows` while preserving the cursor position, which also means the cursor
+    /// moves _up_ as the contents scroll.
+    fn scroll_up(&mut self, try_rows: u32);
+
+    /// Tries scrolling _down_ the contents of the display by the specified number of
+    /// `try_rows` while preserving the cursor position, which also means the cursor
+    /// moves _down_ as the contents scroll.
+    fn scroll_down(&mut self, try_rows: u32);
+
+    /// Sets a _hard_ mark at the current buffer position and returns the previous
+    /// mark if set.
+    fn set_hard_mark(&mut self) -> Option<Mark>;
+
+    /// Sets a _soft_ mark at the current buffer position unless a _soft_ mark was
+    /// previously set.
+    ///
+    /// Note that if a _hard_ mark was previously set, the _soft_ mark will replace
+    /// it.
+    ///
+    /// Returns the previous _hard_ mark if set, otherwise `None`.
+    fn set_soft_mark(&mut self) -> Option<Mark>;
+
+    /// Sets a _soft_ mark at buffer position `pos` unless a _soft_ mark was previously
+    /// set.
+    ///
+    /// Note that if a _hard_ mark was previously set, the _soft_ mark will replace
+    /// it.
+    ///
+    /// Returns the previous _hard_ mark if set, otherwise `None`.
+    fn set_soft_mark_at(&mut self, pos: usize) -> Option<Mark>;
+
+    /// Clears and returns the mark if _soft_, otherwise `None` is returned.
+    fn clear_soft_mark(&mut self) -> Option<Mark>;
+
+    /// Clears and returns the mark.
+    fn clear_mark(&mut self) -> Option<Mark>;
+
+    /// Returns the text between the current buffer position and `mark`.
+    fn copy_mark(&self, mark: Mark) -> Vec<char>;
+
+    /// Returns the text of the line on which the current buffer position rests.
+    fn copy_line(&self) -> Vec<char>;
+
+    /// Returns the text between `from_pos` and `end_pos`.
+    ///
+    /// Specifically, the range of characters is bounded _inclusively below_ and
+    /// _exclusively above_. If `from_pos` is less than `to_pos`, then the range is
+    /// [`from_pos`, `to_pos`), otherwise it is [`to_pos`, `from_pos`).
+    ///
+    /// This function will return an empty vector if `from_pos` is equal to `to_pos`.
+    fn copy(&self, from_pos: usize, to_pos: usize) -> Vec<char>;
+
+    /// Reverts the last change to the buffer, if any, and makes that change eligible
+    /// to be reapplied via [`redo`](Editor::redo).
+    ///
+    /// Returns `true` if the change was reverted and `false` if the _undo_ stack is
+    /// empty.
+    fn undo(&mut self) -> bool;
+
+    /// Applies the last change to the buffer, if any, that was reverted via
+    /// [`undo`](Editor::undo).
+    ///
+    /// Returns `true` if the change was applies and `false` if the _redo_ stack is
+    /// empty.
+    fn redo(&mut self) -> bool;
+
+    /// Tokenizes the buffer if changes occurred since the last tokenization, returning
+    /// `true` if tokenization occurred and `false` otherwise.
+    fn tokenize(&mut self) -> bool;
+
+    /// Renders the contents of the editor.
+    fn render(&mut self);
+}
+
+/// A collection of _mutable_ operations that can be performed on an [`Editor`].
+///
+/// The notion of mutability in this context simply implies the ability to change the
+/// underlying buffer.
+///
+/// This trait also inherits immutable operations, as these operations are typically
+/// interleaved with mutable operations.
+pub trait MutableEditor: ImmutableEditor {
+    /// Inserts the character `c` at the current buffer position.
+    fn insert_char(&mut self, c: char);
+
+    /// Inserts the string slice `str` at the current buffer position.
+    fn insert_str(&mut self, text: &str);
+
+    /// Inserts the array of `text` at the current buffer position.
+    fn insert(&mut self, text: &[char]);
+
+    /// Removes and returns the character before the current buffer position.
+    ///
+    /// An empty vector is returned if the current position is already at the top
+    /// of the buffer.
+    fn remove_before(&mut self) -> Vec<char>;
+
+    /// Removes and returns the character after the current buffer position.
+    ///
+    /// An empty vector is returned if the current position is already at the
+    /// bottom of the buffer.
+    fn remove_after(&mut self) -> Vec<char>;
+
+    /// Removes and returns the text between the current buffer position and `mark`.
+    fn remove_mark(&mut self, mark: Mark) -> Vec<char>;
+
+    /// Removes and returns the text of the line on which the current buffer position
+    /// rests.
+    fn remove_line(&mut self) -> Vec<char>;
+
+    /// Removes and returns the text between the start of the current line and the
+    /// current buffer position.
+    fn remove_start(&mut self) -> Vec<char>;
+
+    /// Removes and returns the text between the current buffer position and the end
+    /// of the current line.
+    fn remove_end(&mut self) -> Vec<char>;
+
+    /// Removes and returns the text between the current buffer position and `pos`.
+    ///
+    /// Specifically, the range of characters is bounded _inclusively below_ and
+    /// _exclusively above_. If `pos` is less than the current buffer position, then
+    /// the range is [`pos`, `cur_pos`), otherwise it is [`cur_pos`, `pos`).
+    ///
+    /// This function will return an empty vector if `pos` is equal to `cur_pos`.
+    fn remove(&mut self, pos: usize) -> Vec<char>;
+}
+
+/// An editing kernel with an underlying [`Buffer`] and an attachable [`Window`].
+struct EditorKernel {
     /// Global configuration.
     config: ConfigurationRef,
 
@@ -33,10 +317,10 @@ pub struct Editor {
     /// A logical clock that increments with each change to the buffer.
     clock: u64,
 
-    /// A stack containing changes to the buffer that can be *undone*.
+    /// A stack containing changes to the buffer that can be _undone_.
     undo: Vec<Change>,
 
-    /// A stack containing changes to the buffer that can be *redone*.
+    /// A stack containing changes to the buffer that can be _redone_.
     redo: Vec<Change>,
 
     /// Tokenizes the buffer for syntax coloring.
@@ -61,7 +345,7 @@ pub struct Editor {
     /// Line on the display representing the cursor row.
     cur_line: Line,
 
-    /// An optional column to which the cursor should *snap* when moving up and down.
+    /// An optional column to which the cursor should _snap_ when moving up and down.
     snap_col: Option<u32>,
 
     /// Position of the cursor in the window.
@@ -86,9 +370,7 @@ pub struct Editor {
     margin_cols: u32,
 }
 
-pub type EditorRef = Rc<RefCell<Editor>>;
-
-/// The distinct types of changes to a buffer recorded in the *undo* and *redo* stacks.
+/// The distinct types of changes to a buffer recorded in the _undo_ and _redo_ stacks.
 enum Change {
     /// Represents the insertion of text, where values are defined as:
     /// - buffer position prior to insertion
@@ -126,13 +408,13 @@ enum Log {
     Normal,
 
     /// Indicates that a selection was active when the change was made, where the
-    /// value is `true` if it was a *soft* mark and `false` if a *hard* mark.
+    /// value is `true` if it was a _soft_ mark and `false` if a _hard_ mark.
     Selection(bool),
 }
 
 /// Represents contextual information for a line on the display.
 ///
-/// A *line* in this context should not be confused with the characterization of
+/// A _line_ in this context should not be confused with the characterization of
 /// a line in [Buffer], which could conceivably span more than one line on the
 /// display.
 #[derive(Clone)]
@@ -179,7 +461,7 @@ pub enum Align {
 /// Marks the starting point of a selection in the buffer.
 ///
 /// The first value is the buffer position, and the second value is `true` if the
-/// mark is *soft*, and `false` if *hard*.
+/// mark is _soft_, and `false` if _hard_.
 #[derive(Copy, Clone)]
 pub struct Mark(pub usize, pub bool);
 
@@ -369,7 +651,7 @@ impl Draw {
     // Special character shown for all other ASCII control characters.
     const CTRL_CHAR: char = '\u{00BF}';
 
-    fn new(editor: &Editor) -> Draw {
+    fn new(editor: &EditorKernel) -> Draw {
         let config = editor.config.clone();
         let margin_color = Color::new(config.theme.margin_fg, config.theme.margin_bg);
         let text_color = Color::new(config.theme.text_fg, config.theme.text_bg);
@@ -449,7 +731,7 @@ impl Draw {
 
 impl Render {
     /// Creates an initial rendering context from `editor`.
-    fn new(editor: &Editor) -> Render {
+    fn new(editor: &EditorKernel) -> Render {
         Render {
             pos: editor.top_line.row_pos,
             row: 0,
@@ -505,57 +787,30 @@ impl Render {
 }
 
 impl Editor {
-    /// Number of columns allocated to the margin.
-    const MARGIN_COLS: u32 = 6;
-
-    /// Exclusive upper bound on line numbers that can be displayed in the margin.
-    const LINE_LIMIT: u32 = 10_u32.pow(Self::MARGIN_COLS - 1);
-
-    /// Creates a new editor using `source` and an optional `buffer`.
+    /// Creates a readonly editor using `source` and `buffer`.
     ///
-    /// If `buffer` is `None`, then an empty buffer is created.
-    pub fn new(config: ConfigurationRef, source: Source, buffer: Option<Buffer>) -> Editor {
-        let buffer = buffer.unwrap_or_else(|| Buffer::new()).to_ref();
-        let cur_pos = buffer.borrow().get_pos();
+    /// A readonly editor is not permitted to obtain a mutable interface.
+    pub fn readonly(config: ConfigurationRef, source: Source, buffer: Buffer) -> Editor {
+        Self::new(config, source, Some(buffer), true)
+    }
 
-        // Constructs syntax configuration based on type of buffer and file extension,
-        // if applicable.
-        let syntax = if let Source::File(path, _) = &source {
-            config
-                .registry
-                .find(path)
-                .map(|syntax| syntax.clone())
-                .unwrap_or_else(|| Syntax::default())
-        } else {
-            Syntax::default()
-        };
+    /// Creates a mutable editor using `source` and an optional `buffer`, which if
+    /// `None` automatically creates an empty buffer.
+    ///
+    /// A mutable editor is permitted to obtain a mutable interface.
+    pub fn mutable(config: ConfigurationRef, source: Source, buffer: Option<Buffer>) -> Editor {
+        Self::new(config, source, buffer, false)
+    }
 
-        // Tokenize buffer.
-        let mut tokenizer = Tokenizer::new(syntax);
-        let syntax_cursor = tokenizer.tokenize(&buffer.borrow());
-
+    fn new(
+        config: ConfigurationRef,
+        source: Source,
+        buffer: Option<Buffer>,
+        readonly: bool,
+    ) -> Editor {
         Editor {
-            config,
-            source,
-            buffer,
-            clock: 0,
-            undo: Vec::new(),
-            redo: Vec::new(),
-            tokenizer: tokenizer.to_ref(),
-            tokenize_clock: 0,
-            syntax_cursor,
-            dirty: false,
-            cur_pos,
-            top_line: Line::default(),
-            cur_line: Line::default(),
-            snap_col: None,
-            cursor: Point::ORIGIN,
-            mark: None,
-            canvas: Canvas::zero().to_ref(),
-            banner: Banner::none().to_ref(),
-            rows: 0,
-            cols: 0,
-            margin_cols: 0,
+            kernel: EditorKernel::new(config, source, buffer),
+            readonly,
         }
     }
 
@@ -564,99 +819,286 @@ impl Editor {
         Rc::new(RefCell::new(self))
     }
 
-    /// Returns a partial clone of this editor using `source`.
-    ///
-    /// Specifically, the buffer is cloned as well as the current buffer position and
-    /// cursor values. All other attributes are initialized as if a new editor were
-    /// being created.
-    pub fn clone_as(&self, source: Source) -> Editor {
-        let mut buffer = self.buffer().clone();
-        buffer.set_pos(self.cur_pos);
-        let mut editor = Self::new(self.config.clone(), source, Some(buffer));
-        editor.cursor = self.cursor;
-        editor
+    /// Returns a mutable editor if not classified as _readonly_, otherwise `None`.
+    pub fn modify(&mut self) -> Option<&mut dyn MutableEditor> {
+        if self.readonly {
+            None
+        } else {
+            Some(&mut self.kernel)
+        }
+    }
+}
+
+impl ImmutableEditor for Editor {
+    #[inline]
+    fn clone_as(&self, source: Source) -> Editor {
+        self.kernel.clone_as(source)
     }
 
-    pub fn source(&self) -> &Source {
+    #[inline]
+    fn source(&self) -> &Source {
+        self.kernel.source()
+    }
+
+    #[inline]
+    fn assume(&mut self, source: Source) {
+        self.kernel.assume(source);
+    }
+
+    #[inline]
+    fn buffer(&self) -> Ref<'_, Buffer> {
+        self.kernel.buffer()
+    }
+
+    #[inline]
+    fn is_dirty(&self) -> bool {
+        self.kernel.is_dirty()
+    }
+
+    #[inline]
+    fn clear_dirty(&mut self) {
+        self.kernel.clear_dirty();
+    }
+
+    #[inline]
+    fn cursor(&self) -> Point {
+        self.kernel.cursor()
+    }
+
+    #[inline]
+    fn location(&self) -> Point {
+        self.kernel.location()
+    }
+
+    #[inline(always)]
+    fn rows(&self) -> u32 {
+        self.kernel.rows()
+    }
+
+    #[inline]
+    fn size(&self) -> Size {
+        self.kernel.size()
+    }
+
+    #[inline]
+    fn pos(&self) -> usize {
+        self.kernel.pos()
+    }
+
+    #[inline]
+    fn set_focus(&mut self, cursor: Point) {
+        self.kernel.set_focus(cursor);
+    }
+
+    #[inline]
+    fn attach(&mut self, window: WindowRef, align: Align) {
+        self.kernel.attach(window, align);
+    }
+
+    #[inline]
+    fn detach(&mut self) {
+        self.kernel.detach();
+    }
+
+    #[inline]
+    fn align_cursor(&mut self, align: Align) {
+        self.kernel.align_cursor(align);
+    }
+
+    #[inline]
+    fn draw(&mut self) {
+        self.kernel.draw();
+    }
+
+    #[inline]
+    fn show_cursor(&mut self) {
+        self.kernel.show_cursor();
+    }
+
+    #[inline]
+    fn move_backward(&mut self, len: usize) {
+        self.kernel.move_backward(len);
+    }
+
+    #[inline]
+    fn move_forward(&mut self, len: usize) {
+        self.kernel.move_forward(len);
+    }
+
+    #[inline]
+    fn move_backward_word(&mut self) {
+        self.kernel.move_backward_word();
+    }
+
+    #[inline]
+    fn move_forward_word(&mut self) {
+        self.kernel.move_forward_word();
+    }
+
+    #[inline]
+    fn move_up(&mut self, try_rows: u32, pin: bool) {
+        self.kernel.move_up(try_rows, pin);
+    }
+
+    #[inline]
+    fn move_down(&mut self, try_rows: u32, pin: bool) {
+        self.kernel.move_down(try_rows, pin);
+    }
+
+    #[inline]
+    fn move_start(&mut self) {
+        self.kernel.move_start();
+    }
+
+    #[inline]
+    fn move_end(&mut self) {
+        self.kernel.move_end();
+    }
+
+    #[inline]
+    fn move_top(&mut self) {
+        self.kernel.move_top();
+    }
+
+    #[inline]
+    fn move_bottom(&mut self) {
+        self.kernel.move_bottom();
+    }
+
+    #[inline]
+    fn move_line(&mut self, line: u32, align: Align) {
+        self.kernel.move_line(line, align);
+    }
+
+    #[inline]
+    fn move_to(&mut self, pos: usize, align: Align) {
+        self.kernel.move_to(pos, align);
+    }
+
+    #[inline]
+    fn scroll_up(&mut self, try_rows: u32) {
+        self.kernel.scroll_up(try_rows);
+    }
+
+    #[inline]
+    fn scroll_down(&mut self, try_rows: u32) {
+        self.kernel.scroll_down(try_rows);
+    }
+
+    #[inline]
+    fn set_hard_mark(&mut self) -> Option<Mark> {
+        self.kernel.set_hard_mark()
+    }
+
+    #[inline]
+    fn set_soft_mark(&mut self) -> Option<Mark> {
+        self.kernel.set_soft_mark()
+    }
+
+    #[inline]
+    fn set_soft_mark_at(&mut self, pos: usize) -> Option<Mark> {
+        self.kernel.set_soft_mark_at(pos)
+    }
+
+    #[inline]
+    fn clear_soft_mark(&mut self) -> Option<Mark> {
+        self.kernel.clear_soft_mark()
+    }
+
+    #[inline]
+    fn clear_mark(&mut self) -> Option<Mark> {
+        self.kernel.clear_mark()
+    }
+
+    #[inline]
+    fn copy_mark(&self, mark: Mark) -> Vec<char> {
+        self.kernel.copy_mark(mark)
+    }
+
+    #[inline]
+    fn copy_line(&self) -> Vec<char> {
+        self.kernel.copy_line()
+    }
+
+    #[inline]
+    fn copy(&self, from_pos: usize, to_pos: usize) -> Vec<char> {
+        self.kernel.copy(from_pos, to_pos)
+    }
+
+    #[inline]
+    fn undo(&mut self) -> bool {
+        self.kernel.undo()
+    }
+
+    #[inline]
+    fn redo(&mut self) -> bool {
+        self.kernel.redo()
+    }
+
+    #[inline]
+    fn tokenize(&mut self) -> bool {
+        self.kernel.tokenize()
+    }
+
+    #[inline]
+    fn render(&mut self) {
+        self.kernel.render();
+    }
+}
+
+impl ImmutableEditor for EditorKernel {
+    fn clone_as(&self, source: Source) -> Editor {
+        Editor {
+            kernel: self.clone_kernel(source),
+            readonly: false,
+        }
+    }
+
+    fn source(&self) -> &Source {
         &self.source
     }
 
-    pub fn assume(&mut self, source: Source) {
+    fn assume(&mut self, source: Source) {
         self.source = source;
     }
 
     #[inline]
-    pub fn buffer(&self) -> Ref<'_, Buffer> {
+    fn buffer(&self) -> Ref<'_, Buffer> {
         self.buffer.borrow()
     }
 
-    #[inline]
-    fn buffer_mut(&self) -> RefMut<'_, Buffer> {
-        self.buffer.borrow_mut()
-    }
-
-    #[inline]
-    fn tokenizer(&self) -> Ref<'_, Tokenizer> {
-        self.tokenizer.borrow()
-    }
-
-    #[inline]
-    fn tokenizer_mut(&self) -> RefMut<'_, Tokenizer> {
-        self.tokenizer.borrow_mut()
-    }
-
-    pub fn is_dirty(&self) -> bool {
+    fn is_dirty(&self) -> bool {
         self.dirty
     }
 
-    pub fn clear_dirty(&mut self) {
+    fn clear_dirty(&mut self) {
         self.dirty = false;
         self.show_banner();
     }
 
-    /// Returns the cursor position on the display in terms of *row* and *column*.
-    ///
-    /// The *row* and *column* values are `0`-based and exclusively bounded by
-    /// [`rows`](Self::rows) and [`cols`](Self::cols), respectively.
-    pub fn cursor(&self) -> Point {
+    #[inline]
+    fn cursor(&self) -> Point {
         self.cursor
     }
 
-    /// Returns the location of the cursor position in the buffer in terms of *line*
-    /// and *column*.
-    ///
-    /// The *line* and *column* values are `0`-based. Note that neither of these values
-    /// are bounded by the size of the display, which is the case with
-    /// [`cursor`](Self::cursor).
-    pub fn location(&self) -> Point {
+    #[inline]
+    fn location(&self) -> Point {
         Point::new(self.cur_line.line, self.cur_line.line_col(self.cursor.col))
     }
 
-    #[inline(always)]
-    pub fn rows(&self) -> u32 {
+    fn rows(&self) -> u32 {
         self.rows
     }
 
-    /// Returns the size of the editor canvas.
-    pub fn size(&self) -> Size {
+    fn size(&self) -> Size {
         (self.rows, self.cols).into()
     }
 
-    /// Returns the buffer position corresponding to the [`cursor`](Self::cursor).
-    pub fn pos(&self) -> usize {
+    fn pos(&self) -> usize {
         self.cur_pos
     }
 
-    /// Sets the cursor location and corresponding buffer position to `cursor`, though
-    /// the final cursor location is constrained by end-of-line and end-of-buffer
-    /// boundaries.
-    ///
-    /// This function was designed for responding to *mouse click* events where the
-    /// position of the click is captured in `cursor`.
-    ///
-    /// The coordinates in `cursor` are presumed to be relative to the origin of the
-    /// editor canvas.
-    pub fn set_focus(&mut self, cursor: Point) {
+    fn set_focus(&mut self, cursor: Point) {
         // Ensure target cursor is bounded by effective area of canvas, which takes
         // into account left margin if enabled.
         let try_row = cmp::min(cursor.row, self.rows);
@@ -676,8 +1118,7 @@ impl Editor {
         self.cursor = Point::new(row, col);
     }
 
-    /// Attaches the `window` to this editor.
-    pub fn attach(&mut self, window: WindowRef, align: Align) {
+    fn attach(&mut self, window: WindowRef, align: Align) {
         let is_zombie = window.borrow().is_zombie();
         self.canvas = window.borrow().canvas().clone();
         self.banner = window.borrow().banner().clone();
@@ -699,12 +1140,11 @@ impl Editor {
         }
     }
 
-    /// Detaches the existing window from this editor.
-    pub fn detach(&mut self) {
+    fn detach(&mut self) {
         self.attach(Window::zombie().to_ref(), Align::Auto);
     }
 
-    pub fn align_cursor(&mut self, align: Align) {
+    fn align_cursor(&mut self, align: Align) {
         // Determine ideal row where cursor would like to be focused, though this should
         // be considered a hint.
         let try_row = match align {
@@ -725,20 +1165,13 @@ impl Editor {
         self.cursor = Point::new(row, col);
     }
 
-    fn align_syntax(&mut self) {
-        self.syntax_cursor = self
-            .tokenizer
-            .borrow()
-            .find(self.syntax_cursor, self.top_line.row_pos);
-    }
-
-    pub fn draw(&mut self) {
+    fn draw(&mut self) {
         self.canvas.borrow_mut().clear();
         self.show_banner();
         self.render();
     }
 
-    pub fn show_cursor(&mut self) {
+    fn show_cursor(&mut self) {
         let cursor = if self.margin_cols > 0 {
             self.cursor + Size::cols(self.margin_cols)
         } else {
@@ -747,84 +1180,35 @@ impl Editor {
         self.canvas.borrow_mut().set_cursor(cursor);
     }
 
-    fn show_banner(&mut self) {
-        self.banner
-            .borrow_mut()
-            .set_dirty(self.dirty)
-            .set_source(self.source.clone())
-            .set_syntax(self.tokenizer().syntax().name.clone())
-            .set_location(self.location())
-            .draw();
-    }
-
-    /// Tries to move the cursor *backward* from the current buffer position by `len`
-    /// characters.
-    pub fn move_backward(&mut self, len: usize) {
+    fn move_backward(&mut self, len: usize) {
         let pos = self.cur_pos - cmp::min(len, self.cur_pos);
         if pos < self.cur_pos {
             self.move_to(pos, Align::Auto);
         }
     }
 
-    /// Tries to move the cursor *forward* from the current buffer position by `len`
-    /// characters.
-    pub fn move_forward(&mut self, len: usize) {
+    fn move_forward(&mut self, len: usize) {
         let pos = cmp::min(self.cur_pos + len, self.buffer().size());
         if pos > self.cur_pos {
             self.move_to(pos, Align::Auto);
         }
     }
 
-    /// Tries to move the cursor *backward* by one word from the current buffer
-    /// position.
-    pub fn move_backward_word(&mut self) {
+    fn move_backward_word(&mut self) {
         let pos = self.find_word_before(self.cur_pos);
         if pos < self.cur_pos {
             self.move_to(pos, Align::Auto);
         }
     }
 
-    /// Tries to move the cursor *forward* by one word from the current buffer
-    /// position.
-    pub fn move_forward_word(&mut self) {
+    fn move_forward_word(&mut self) {
         let pos = self.find_word_after(self.cur_pos);
         if pos > self.cur_pos {
             self.move_to(pos, Align::Auto);
         }
     }
 
-    /// Returns the position of the word that comes before `pos`.
-    fn find_word_before(&self, pos: usize) -> usize {
-        self.buffer()
-            .backward(pos)
-            .index()
-            .skip_while(|(_, c)| c.is_whitespace())
-            .skip_while(|(_, c)| !c.is_whitespace())
-            .next()
-            .map(|(pos, _)| pos + 1)
-            .unwrap_or(0)
-    }
-
-    /// Returns the position of the word that follows after `pos`.
-    fn find_word_after(&self, pos: usize) -> usize {
-        self.buffer()
-            .forward(pos)
-            .index()
-            .skip_while(|(_, c)| !c.is_whitespace())
-            .skip_while(|(_, c)| c.is_whitespace())
-            .next()
-            .map(|(pos, _)| pos)
-            .unwrap_or(self.buffer().size())
-    }
-
-    /// Tries to move the cursor *up* by the specified number of `try_rows`.
-    ///
-    /// If `pin` is `true`, then the cursor will remain on the current row if the
-    /// resulting display makes it possible. Pinning is useful when *paging up*.
-    ///
-    /// If `pin` is `false`, then the cursor will move up in tandem with `try_rows`,
-    /// though not to extend beyond the top of the display.
-    pub fn move_up(&mut self, try_rows: u32, pin: bool) {
+    fn move_up(&mut self, try_rows: u32, pin: bool) {
         let rows = self.up_cur_line(try_rows);
         if rows > 0 {
             let row = if pin {
@@ -855,14 +1239,7 @@ impl Editor {
         }
     }
 
-    /// Tries to move the cursor *down* by the specified number of `try_rows`.
-    ///
-    /// If `pin` is `true`, then the cursor will remain on the current row. Pinning is
-    /// useful when *paging down*.
-    ///
-    /// If `pin` is `false`, then the cursor will move down in tandem with `try_rows`,
-    /// though not to extend beyond the bottom of the display.
-    pub fn move_down(&mut self, try_rows: u32, pin: bool) {
+    fn move_down(&mut self, try_rows: u32, pin: bool) {
         let rows = self.down_cur_line(try_rows);
         if rows > 0 {
             let row = if pin {
@@ -888,8 +1265,7 @@ impl Editor {
         }
     }
 
-    /// Moves the cursor to the *start* of the current row.
-    pub fn move_start(&mut self) {
+    fn move_start(&mut self) {
         if self.cursor.col > 0 {
             self.cur_pos = self.cur_line.row_pos;
             self.cursor.col = 0;
@@ -897,8 +1273,7 @@ impl Editor {
         self.snap_col = None;
     }
 
-    /// Moves the cursor to the *end* of the current row.
-    pub fn move_end(&mut self) {
+    fn move_end(&mut self) {
         let end_col = self.cur_line.end_col(self.cols);
         if self.cursor.col < end_col {
             self.cur_pos = self.cur_line.pos_of(end_col);
@@ -907,37 +1282,21 @@ impl Editor {
         self.snap_col = None;
     }
 
-    /// Moves the cursor to the *top* of the buffer.
-    pub fn move_top(&mut self) {
+    fn move_top(&mut self) {
         self.move_to(0, Align::Top);
     }
 
-    /// Moves the cursor to the *bottom* of the buffer.
-    pub fn move_bottom(&mut self) {
+    fn move_bottom(&mut self) {
         let pos = self.buffer().size();
         self.move_to(pos, Align::Bottom);
     }
 
-    /// Moves the buffer position to the first character of `line` and places the
-    /// cursor on the display according to the `align` objective.
-    pub fn move_line(&mut self, line: u32, align: Align) {
+    fn move_line(&mut self, line: u32, align: Align) {
         let pos = self.buffer().find_line(line);
         self.move_to(pos, align);
     }
 
-    /// Moves the current buffer position to `pos` and places the cursor on the
-    /// display according to the `align` objective.
-    ///
-    /// When [`Align::Auto`] is specified, the placement of the cursor depends on
-    /// the target `pos` relative to the current buffer position. Specifically, it
-    /// behaves as follows:
-    /// - *when `pos` is above the current line but still visible on the display*:
-    ///   aligns the cursor on the target row above the current line, though not to
-    ///   extend beyond the top row
-    /// - *when `pos` is on the current line*: aligns the cursor on the current row
-    /// - *when `pos` is beyond the current line*: aligns the cursor on the target
-    ///   row below the current line, though not to extend beyond the borrom row
-    pub fn move_to(&mut self, pos: usize, align: Align) {
+    fn move_to(&mut self, pos: usize, align: Align) {
         let row = if pos < self.top_line.row_pos {
             self.find_up_cur_line(pos);
             let rows = match align {
@@ -992,10 +1351,7 @@ impl Editor {
         self.cursor = Point::new(row, col);
     }
 
-    /// Tries scrolling *up* the contents of the display by the specified number of
-    /// `try_rows` while preserving the cursor position, which also means the cursor
-    /// moves *up* as the contents scroll.
-    pub fn scroll_up(&mut self, try_rows: u32) {
+    fn scroll_up(&mut self, try_rows: u32) {
         let rows = self.down_top_line(try_rows);
         if rows > 0 {
             let (row, col) = if rows > self.cursor.row {
@@ -1016,10 +1372,7 @@ impl Editor {
         }
     }
 
-    /// Tries scrolling *down* the contents of the display by the specified number of
-    /// `try_rows` while preserving the cursor position, which also means the cursor
-    /// moves *down* as the contents scroll.
-    pub fn scroll_down(&mut self, try_rows: u32) {
+    fn scroll_down(&mut self, try_rows: u32) {
         let rows = self.up_top_line(try_rows);
         if rows > 0 {
             let row = self.cursor.row + rows;
@@ -1041,26 +1394,309 @@ impl Editor {
         }
     }
 
-    /// Inserts the character `c` at the current buffer position.
-    pub fn insert_char(&mut self, c: char) {
+    fn set_hard_mark(&mut self) -> Option<Mark> {
+        self.mark.replace(Mark(self.cur_pos, false))
+    }
+
+    fn set_soft_mark(&mut self) -> Option<Mark> {
+        if let Some(mark @ Mark(_, soft)) = self.mark {
+            if soft {
+                None
+            } else {
+                self.mark = Some(Mark(self.cur_pos, true));
+                Some(mark)
+            }
+        } else {
+            self.mark = Some(Mark(self.cur_pos, true));
+            None
+        }
+    }
+
+    fn set_soft_mark_at(&mut self, pos: usize) -> Option<Mark> {
+        let pos = cmp::min(pos, self.buffer().size());
+        if let Some(mark @ Mark(_, soft)) = self.mark {
+            if soft {
+                None
+            } else {
+                self.mark = Some(Mark(pos, true));
+                Some(mark)
+            }
+        } else {
+            self.mark = Some(Mark(pos, true));
+            None
+        }
+    }
+
+    fn clear_soft_mark(&mut self) -> Option<Mark> {
+        if let Some(Mark(_, true)) = self.mark {
+            self.clear_mark()
+        } else {
+            None
+        }
+    }
+
+    fn clear_mark(&mut self) -> Option<Mark> {
+        self.mark.take()
+    }
+
+    fn copy_mark(&self, mark: Mark) -> Vec<char> {
+        let Range { start, end } = self.get_mark_range(mark);
+        self.copy(start, end)
+    }
+
+    fn copy_line(&self) -> Vec<char> {
+        let Range { start, end } = self.cur_line.line_range();
+        self.copy(start, end)
+    }
+
+    fn copy(&self, from_pos: usize, to_pos: usize) -> Vec<char> {
+        self.buffer().copy(from_pos, to_pos)
+    }
+
+    fn undo(&mut self) -> bool {
+        if let Some(change) = self.undo.pop() {
+            self.undo_change(&change);
+            self.redo.push(change);
+            true
+        } else {
+            false
+        }
+    }
+
+    fn redo(&mut self) -> bool {
+        if let Some(change) = self.redo.pop() {
+            self.redo_change(&change);
+            self.undo.push(change);
+            true
+        } else {
+            false
+        }
+    }
+
+    fn tokenize(&mut self) -> bool {
+        if self.tokenize_clock < self.clock {
+            self.syntax_cursor = {
+                let cursor = self.tokenizer_mut().tokenize(&self.buffer());
+                cursor
+            };
+            self.align_syntax();
+            self.tokenize_clock = self.clock;
+            true
+        } else {
+            false
+        }
+    }
+
+    fn render(&mut self) {
+        // Renders visible buffer content.
+        let draw = Draw::new(&self);
+        let render = Render::new(&self);
+        let rest = self
+            .buffer
+            .borrow()
+            .forward(render.pos)
+            .try_fold(render, |render, c| self.render_cell(&draw, render, c));
+        if let Some(render) = rest {
+            self.render_rest(&draw, render);
+        }
+        self.canvas.borrow_mut().draw();
+
+        // Renders additional information.
+        self.banner
+            .borrow_mut()
+            .set_dirty(self.dirty)
+            .set_location(self.location())
+            .draw();
+    }
+}
+
+impl MutableEditor for EditorKernel {
+    fn insert_char(&mut self, c: char) {
         self.insert_normal(&[c])
     }
 
-    /// Inserts the string slice `str` at the current buffer position.
-    pub fn insert_str(&mut self, text: &str) {
+    fn insert_str(&mut self, text: &str) {
         self.insert_normal(&text.chars().collect::<Vec<_>>())
     }
 
-    /// Inserts the array of `text` at the current buffer position.
-    pub fn insert(&mut self, text: &[char]) {
+    fn insert(&mut self, text: &[char]) {
         self.insert_normal(text);
     }
 
+    fn remove_before(&mut self) -> Vec<char> {
+        if self.cur_pos > 0 {
+            self.remove(self.cur_pos - 1)
+        } else {
+            vec![]
+        }
+    }
+
+    fn remove_after(&mut self) -> Vec<char> {
+        if self.cur_pos < self.buffer().size() {
+            self.remove(self.cur_pos + 1)
+        } else {
+            vec![]
+        }
+    }
+
+    fn remove_mark(&mut self, mark: Mark) -> Vec<char> {
+        let Mark(pos, soft) = mark;
+        self.remove_internal(pos, Some(Log::Selection(soft)))
+    }
+
+    fn remove_line(&mut self) -> Vec<char> {
+        let Range { start, end } = self.cur_line.line_range();
+        self.move_to(start, Align::Auto);
+        self.remove(end)
+    }
+
+    fn remove_start(&mut self) -> Vec<char> {
+        if self.cur_pos == self.cur_line.line_pos {
+            self.remove_before()
+        } else {
+            self.remove(self.cur_line.line_pos)
+        }
+    }
+
+    fn remove_end(&mut self) -> Vec<char> {
+        self.remove(self.cur_line.line_pos + self.cur_line.line_len)
+    }
+
+    fn remove(&mut self, pos: usize) -> Vec<char> {
+        self.remove_internal(pos, Some(Log::Normal))
+    }
+}
+
+impl EditorKernel {
+    /// Number of columns allocated to the margin.
+    const MARGIN_COLS: u32 = 6;
+
+    /// Exclusive upper bound on line numbers that can be displayed in the margin.
+    const LINE_LIMIT: u32 = 10_u32.pow(Self::MARGIN_COLS - 1);
+
+    /// Creates a new editor using `source` and an optional `buffer`, which if `None`
+    /// automatically creates an empty buffer.
+    fn new(config: ConfigurationRef, source: Source, buffer: Option<Buffer>) -> EditorKernel {
+        let buffer = buffer.unwrap_or_else(|| Buffer::new()).to_ref();
+        let cur_pos = buffer.borrow().get_pos();
+
+        // Constructs syntax configuration based on type of buffer and file extension,
+        // if applicable.
+        let syntax = if let Source::File(path, _) = &source {
+            config
+                .registry
+                .find(path)
+                .map(|syntax| syntax.clone())
+                .unwrap_or_else(|| Syntax::default())
+        } else {
+            Syntax::default()
+        };
+
+        // Tokenize buffer.
+        let mut tokenizer = Tokenizer::new(syntax);
+        let syntax_cursor = tokenizer.tokenize(&buffer.borrow());
+
+        EditorKernel {
+            config,
+            source,
+            buffer,
+            clock: 0,
+            undo: Vec::new(),
+            redo: Vec::new(),
+            tokenizer: tokenizer.to_ref(),
+            tokenize_clock: 0,
+            syntax_cursor,
+            dirty: false,
+            cur_pos,
+            top_line: Line::default(),
+            cur_line: Line::default(),
+            snap_col: None,
+            cursor: Point::ORIGIN,
+            mark: None,
+            canvas: Canvas::zero().to_ref(),
+            banner: Banner::none().to_ref(),
+            rows: 0,
+            cols: 0,
+            margin_cols: 0,
+        }
+    }
+
+    /// Returns a partial clone of this kernel using `source`.
+    fn clone_kernel(&self, source: Source) -> EditorKernel {
+        let mut buffer = self.buffer().clone();
+        buffer.set_pos(self.cur_pos);
+        let mut editor = Self::new(self.config.clone(), source, Some(buffer));
+        editor.cursor = self.cursor;
+        editor
+    }
+
+    #[inline]
+    fn buffer_mut(&self) -> RefMut<'_, Buffer> {
+        self.buffer.borrow_mut()
+    }
+
+    #[inline]
+    fn tokenizer(&self) -> Ref<'_, Tokenizer> {
+        self.tokenizer.borrow()
+    }
+
+    #[inline]
+    fn tokenizer_mut(&self) -> RefMut<'_, Tokenizer> {
+        self.tokenizer.borrow_mut()
+    }
+
+    /// Aligns the syntax cursor with the top line.
+    fn align_syntax(&mut self) {
+        self.syntax_cursor = self
+            .tokenizer
+            .borrow()
+            .find(self.syntax_cursor, self.top_line.row_pos);
+    }
+
+    /// Sets the values of all banner attributes and draws it.
+    fn show_banner(&mut self) {
+        self.banner
+            .borrow_mut()
+            .set_dirty(self.dirty)
+            .set_source(self.source.clone())
+            .set_syntax(self.tokenizer().syntax().name.clone())
+            .set_location(self.location())
+            .draw();
+    }
+
+    /// Returns the position of the word that comes before `pos`.
+    fn find_word_before(&self, pos: usize) -> usize {
+        self.buffer()
+            .backward(pos)
+            .index()
+            .skip_while(|(_, c)| c.is_whitespace())
+            .skip_while(|(_, c)| !c.is_whitespace())
+            .next()
+            .map(|(pos, _)| pos + 1)
+            .unwrap_or(0)
+    }
+
+    /// Returns the position of the word that follows after `pos`.
+    fn find_word_after(&self, pos: usize) -> usize {
+        self.buffer()
+            .forward(pos)
+            .index()
+            .skip_while(|(_, c)| !c.is_whitespace())
+            .skip_while(|(_, c)| c.is_whitespace())
+            .next()
+            .map(|(pos, _)| pos)
+            .unwrap_or(self.buffer().size())
+    }
+
+    /// Inserts `text` such that the change is recorded in the undo stack.
     fn insert_normal(&mut self, text: &[char]) {
         self.insert_internal(text, Some(Log::Normal));
     }
 
-    /// An internal workhorse to which all *insertion* functions delegate.
+    /// An internal workhorse to which all _insertion_ functions delegate.
+    ///
+    /// A `log` value of `None` indicates that the change is not recorded in the undo
+    /// stack.
     fn insert_internal(&mut self, text: &[char], log: Option<Log>) {
         if text.len() > 0 {
             // Most common use case is single-character insertions, so favor use of
@@ -1108,72 +1744,10 @@ impl Editor {
         }
     }
 
-    /// Removes and returns the character before the current buffer position.
+    /// An internal workhorse to which all _removal_ functions delegate.
     ///
-    /// An empty vector is returned if the current position is already at the top
-    /// of the buffer.
-    pub fn remove_before(&mut self) -> Vec<char> {
-        if self.cur_pos > 0 {
-            self.remove(self.cur_pos - 1)
-        } else {
-            vec![]
-        }
-    }
-
-    /// Removes and returns the character after the current buffer position.
-    ///
-    /// An empty vector is returned if the current position is already at the
-    /// bottom of the buffer.
-    pub fn remove_after(&mut self) -> Vec<char> {
-        if self.cur_pos < self.buffer().size() {
-            self.remove(self.cur_pos + 1)
-        } else {
-            vec![]
-        }
-    }
-
-    /// Removes and returns the text between the current buffer position and `mark`.
-    pub fn remove_mark(&mut self, mark: Mark) -> Vec<char> {
-        let Mark(pos, soft) = mark;
-        self.remove_internal(pos, Some(Log::Selection(soft)))
-    }
-
-    /// Removes and returns the text of the line on which the current buffer position
-    /// rests.
-    pub fn remove_line(&mut self) -> Vec<char> {
-        let Range { start, end } = self.cur_line.line_range();
-        self.move_to(start, Align::Auto);
-        self.remove(end)
-    }
-
-    /// Removes and returns the text between the start of the current line and the
-    /// current buffer position.
-    pub fn remove_start(&mut self) -> Vec<char> {
-        if self.cur_pos == self.cur_line.line_pos {
-            self.remove_before()
-        } else {
-            self.remove(self.cur_line.line_pos)
-        }
-    }
-
-    /// Removes and returns the text between the current buffer position and the end
-    /// of the current line.
-    pub fn remove_end(&mut self) -> Vec<char> {
-        self.remove(self.cur_line.line_pos + self.cur_line.line_len)
-    }
-
-    /// Removes and returns the text between the current buffer position and `pos`.
-    ///
-    /// Specifically, the range of characters is bounded *inclusively below* and
-    /// *exclusively above*. If `pos` is less than the current buffer position, then
-    /// the range is [`pos`, `cur_pos`), otherwise it is [`cur_pos`, `pos`).
-    ///
-    /// This function will return an empty vector if `pos` is equal to `cur_pos`.
-    pub fn remove(&mut self, pos: usize) -> Vec<char> {
-        self.remove_internal(pos, Some(Log::Normal))
-    }
-
-    /// An internal workhorse to which all *removal* functions delegate.
+    /// A `log` value of `None` indicates that the change is not recorded in the undo
+    /// stack.
     fn remove_internal(&mut self, pos: usize, log: Option<Log>) -> Vec<char> {
         if pos == self.cur_pos {
             vec![]
@@ -1255,128 +1829,12 @@ impl Editor {
         }
     }
 
-    /// Sets a *hard* mark at the current buffer position and returns the previous
-    /// mark if set.
-    pub fn set_hard_mark(&mut self) -> Option<Mark> {
-        self.mark.replace(Mark(self.cur_pos, false))
-    }
-
-    /// Sets a *soft* mark at the current buffer position unless a *soft* mark was
-    /// previously set.
-    ///
-    /// Note that if a *hard* mark was previously set, the *soft* mark will replace
-    /// it.
-    ///
-    /// Returns the previous *hard* mark if set, otherwise `None`.
-    pub fn set_soft_mark(&mut self) -> Option<Mark> {
-        if let Some(mark @ Mark(_, soft)) = self.mark {
-            if soft {
-                None
-            } else {
-                self.mark = Some(Mark(self.cur_pos, true));
-                Some(mark)
-            }
-        } else {
-            self.mark = Some(Mark(self.cur_pos, true));
-            None
-        }
-    }
-
-    /// Sets a *soft* mark at buffer position `pos` unless a *soft* mark was previously
-    /// set.
-    ///
-    /// Note that if a *hard* mark was previously set, the *soft* mark will replace
-    /// it.
-    ///
-    /// Returns the previous *hard* mark if set, otherwise `None`.
-    pub fn set_soft_mark_at(&mut self, pos: usize) -> Option<Mark> {
-        let pos = cmp::min(pos, self.buffer().size());
-        if let Some(mark @ Mark(_, soft)) = self.mark {
-            if soft {
-                None
-            } else {
-                self.mark = Some(Mark(pos, true));
-                Some(mark)
-            }
-        } else {
-            self.mark = Some(Mark(pos, true));
-            None
-        }
-    }
-
-    /// Clears and returns the mark if *soft*, otherwise `None` is returned.
-    pub fn clear_soft_mark(&mut self) -> Option<Mark> {
-        if let Some(Mark(_, true)) = self.mark {
-            self.clear_mark()
-        } else {
-            None
-        }
-    }
-
-    /// Clears and returns the mark.
-    pub fn clear_mark(&mut self) -> Option<Mark> {
-        self.mark.take()
-    }
-
     fn get_mark_range(&self, mark: Mark) -> Range<usize> {
         let Mark(pos, _) = mark;
         if pos < self.cur_pos {
             pos..self.cur_pos
         } else {
             self.cur_pos..pos
-        }
-    }
-
-    /// Returns the text between the current buffer position and `mark`.
-    pub fn copy_mark(&self, mark: Mark) -> Vec<char> {
-        let Range { start, end } = self.get_mark_range(mark);
-        self.copy(start, end)
-    }
-
-    /// Returns the text of the line on which the current buffer position rests.
-    pub fn copy_line(&self) -> Vec<char> {
-        let Range { start, end } = self.cur_line.line_range();
-        self.copy(start, end)
-    }
-
-    /// Returns the text between `from_pos` and `end_pos`.
-    ///
-    /// Specifically, the range of characters is bounded *inclusively below* and
-    /// *exclusively above*. If `from_pos` is less than `to_pos`, then the range is
-    /// [`from_pos`, `to_pos`), otherwise it is [`to_pos`, `from_pos`).
-    ///
-    /// This function will return an empty vector if `from_pos` is equal to `to_pos`.
-    pub fn copy(&self, from_pos: usize, to_pos: usize) -> Vec<char> {
-        self.buffer().copy(from_pos, to_pos)
-    }
-
-    /// Reverts the last change to the buffer, if any, and makes that change eligible
-    /// to be reapplied via [`redo`](Editor::redo).
-    ///
-    /// Returns `true` if the change was reverted and `false` if the *undo* stack is
-    /// empty.
-    pub fn undo(&mut self) -> bool {
-        if let Some(change) = self.undo.pop() {
-            self.undo_change(&change);
-            self.redo.push(change);
-            true
-        } else {
-            false
-        }
-    }
-
-    /// Applies the last change to the buffer, if any, that was reverted via
-    /// [`undo`](Editor::undo).
-    ///
-    /// Returns `true` if the change was applies and `false` if the *redo* stack is
-    /// empty.
-    pub fn redo(&mut self) -> bool {
-        if let Some(change) = self.redo.pop() {
-            self.redo_change(&change);
-            self.undo.push(change);
-            true
-        } else {
-            false
         }
     }
 
@@ -1452,7 +1910,7 @@ impl Editor {
         }
     }
 
-    /// Logs `change` by pushing it onto the *undo* stack and clearing the *redo*
+    /// Logs `change` by pushing it onto the _undo_ stack and clearing the _redo_
     /// stack.
     fn log(&mut self, change: Change) {
         const UNDO_SOFT_LIMIT: usize = 1024;
@@ -1672,45 +2130,6 @@ impl Editor {
         let line_pos = buffer.find_start_line(pos);
         let (next_pos, terminated) = buffer.find_next_line(pos);
         (line_pos, next_pos, terminated)
-    }
-
-    /// Tokenizes the buffer if changes occurred since the last tokenization, returning
-    /// `true` if tokenization occurred and `false` otherwise.
-    pub fn tokenize(&mut self) -> bool {
-        if self.tokenize_clock < self.clock {
-            self.syntax_cursor = {
-                let cursor = self.tokenizer_mut().tokenize(&self.buffer());
-                cursor
-            };
-            self.align_syntax();
-            self.tokenize_clock = self.clock;
-            true
-        } else {
-            false
-        }
-    }
-
-    /// Renders the contents of the editor.
-    pub fn render(&mut self) {
-        // Renders visible buffer content.
-        let draw = Draw::new(&self);
-        let render = Render::new(&self);
-        let rest = self
-            .buffer
-            .borrow()
-            .forward(render.pos)
-            .try_fold(render, |render, c| self.render_cell(&draw, render, c));
-        if let Some(render) = rest {
-            self.render_rest(&draw, render);
-        }
-        self.canvas.borrow_mut().draw();
-
-        // Renders additional information.
-        self.banner
-            .borrow_mut()
-            .set_dirty(self.dirty)
-            .set_location(self.location())
-            .draw();
     }
 
     /// Renders an individual cell for the character `c`, returning the next rendering

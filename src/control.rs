@@ -9,7 +9,7 @@
 
 use crate::config::ConfigurationRef;
 use crate::echo::Echo;
-use crate::editor::Align;
+use crate::editor::{Align, ImmutableEditor};
 use crate::env::{Environment, Focus};
 use crate::error::Result;
 use crate::input::{Directive, InputEditor};
@@ -158,8 +158,10 @@ impl Controller {
         if let Some(c) = self.possible_char(&key) {
             // Inserting text is statistically most prevalent scenario, so this short
             // circuits detection and bypasses normal indirection of key binding.
-            self.clear_echo();
-            op::insert_char(&mut self.env, c);
+            match op::insert_char(&mut self.env, c) {
+                Some(Action::Echo(text)) => self.set_echo(text.as_str()),
+                _ => self.clear_echo(),
+            }
         } else if key == CTRL_G {
             self.clear_echo();
             if !self.clear_keys() {
