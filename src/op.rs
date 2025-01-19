@@ -1612,13 +1612,19 @@ fn describe_editor(env: &mut Environment) -> Option<Action> {
     let editor = env.get_active_editor().borrow();
     let buffer = editor.buffer();
     let Point { row, col } = editor.location() + (1, 1);
+    let c = buffer[editor.pos()];
     let text = format!(
-        "char: \\u{:04x}, line: {}, col: {}, chars: {}, lines: {}",
-        buffer[editor.pos()] as u32,
+        "line/col: {}/{} ∙ size: {} ∙ lines: {} ∙ char: {}\\u{:04x}",
         row,
         col,
         buffer.size(),
         buffer.line_of(usize::MAX) + 1,
+        if c.is_control() {
+            "".to_string()
+        } else {
+            format!("'{c}' ")
+        },
+        c as u32,
     );
     Action::as_echo(&text)
 }

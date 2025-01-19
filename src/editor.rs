@@ -649,7 +649,7 @@ impl Draw {
     const TAB_CHAR: char = '\u{2192}';
 
     // Special character shown for all other ASCII control characters.
-    const CTRL_CHAR: char = '\u{00BF}';
+    const CTRL_CHAR: char = '\u{00bf}';
 
     fn new(editor: &EditorKernel) -> Draw {
         let config = editor.config.clone();
