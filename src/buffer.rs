@@ -298,20 +298,20 @@ impl Buffer {
     }
 
     /// Returns a tuple containing the position of the next line relative to `pos` and
-    /// whether or not the prior line was terminated with `\n`.
+    /// a boolean indicating if the end of buffer has been reached.
     ///
     /// Specifically, this function returns the position following the first `\n`
     /// encountered when scanning forward from `pos`, or returns the end of buffer
     /// position if reached first. The end-of-buufer scenario is the only condition which
-    /// would cause the second tuple value to return `false`.
+    /// would cause the second tuple value to return `true`.
     ///
     /// Note that when scanning forward, `pos` is an _inclusive_ bound.
     pub fn find_next_line(&self, pos: usize) -> (usize, bool) {
         self.forward(pos)
             .index()
             .find(|&(_, c)| c == '\n')
-            .map(|(_pos, _)| (_pos + 1, true))
-            .unwrap_or((self.size, false))
+            .map(|(_pos, _)| (_pos + 1, false))
+            .unwrap_or((self.size, true))
     }
 
     /// Reads characters from `reader` until EOF is encountered, inserting those
@@ -939,16 +939,16 @@ mod tests {
 
         // All chars in `def\n` range should find the same next line.
         for pos in 4..8 {
-            let (p, term) = buf.find_next_line(pos);
+            let (p, eob) = buf.find_next_line(pos);
             assert_eq!(p, 8);
-            assert!(term);
+            assert!(!eob);
         }
 
         // All chars in `ghi` range should yield the end of buffer position.
         for pos in 8..11 {
-            let (p, term) = buf.find_next_line(pos);
+            let (p, eob) = buf.find_next_line(pos);
             assert_eq!(p, 11);
-            assert!(!term);
+            assert!(eob);
         }
     }
 }

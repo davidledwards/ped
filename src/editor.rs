@@ -2011,7 +2011,7 @@ impl EditorKernel {
 
     /// Finds and returns the display line corresponding to `pos`.
     fn find_line(&self, pos: usize) -> Line {
-        let (line_pos, next_pos, terminated) = self.find_line_bounds(pos);
+        let (line_pos, next_pos, line_bottom) = self.find_line_bounds(pos);
         let line_len = next_pos - line_pos;
         let row_pos = pos - ((pos - line_pos) % self.cols as usize);
         let row_len = cmp::min(line_len - (row_pos - line_pos), self.cols as usize);
@@ -2021,7 +2021,7 @@ impl EditorKernel {
             line_pos,
             line_len,
             line: self.buffer().line_of(line_pos),
-            line_bottom: !terminated,
+            line_bottom,
         }
     }
 
@@ -2035,7 +2035,7 @@ impl EditorKernel {
     /// always relative to the current line, and that such a change would never
     /// alter the values noted above.
     fn update_line(&self, line: &Line) -> Line {
-        let (next_pos, terminated) = self.buffer().find_next_line(line.line_pos);
+        let (next_pos, line_bottom) = self.buffer().find_next_line(line.line_pos);
         let line_len = next_pos - line.line_pos;
         let row_len = cmp::min(
             line_len - (line.row_pos - line.line_pos),
@@ -2044,7 +2044,7 @@ impl EditorKernel {
         Line {
             row_len,
             line_len,
-            line_bottom: !terminated,
+            line_bottom,
             ..*line
         }
     }
@@ -2063,7 +2063,7 @@ impl EditorKernel {
             Some(l)
         } else {
             let pos = line.line_pos - 1;
-            let (line_pos, next_pos, terminated) = self.find_line_bounds(pos);
+            let (line_pos, next_pos, line_bottom) = self.find_line_bounds(pos);
             let line_len = next_pos - line_pos;
             let row_pos = pos - ((pos - line_pos) % self.cols as usize);
             let row_len = cmp::min(line_len - (row_pos - line_pos), self.cols as usize);
@@ -2073,7 +2073,7 @@ impl EditorKernel {
                 line_pos,
                 line_len,
                 line: line.line - 1,
-                line_bottom: !terminated,
+                line_bottom,
             };
             Some(l)
         }
@@ -2105,7 +2105,7 @@ impl EditorKernel {
             Some(l)
         } else {
             let line_pos = line.line_pos + line.line_len;
-            let (next_pos, terminated) = self.buffer().find_next_line(line_pos);
+            let (next_pos, line_bottom) = self.buffer().find_next_line(line_pos);
             let line_len = next_pos - line_pos;
             let row_len = cmp::min(line_len, self.cols as usize);
             let l = Line {
@@ -2114,7 +2114,7 @@ impl EditorKernel {
                 line_pos,
                 line_len,
                 line: line.line + 1,
-                line_bottom: !terminated,
+                line_bottom,
             };
             Some(l)
         }
@@ -2129,13 +2129,13 @@ impl EditorKernel {
 
     /// Returns a tuple, relative to the buffer line corresponding to `pos`, containing
     /// the position of the first character on that line, the position of the first
-    /// character of the next line, and a boolean value indicating if that the line was
-    /// terminated with `\n`.
+    /// character of the next line, and a boolean value indicating if the end of buffer
+    /// has been reached.
     fn find_line_bounds(&self, pos: usize) -> (usize, usize, bool) {
         let buffer = self.buffer.borrow();
         let line_pos = buffer.find_start_line(pos);
-        let (next_pos, terminated) = buffer.find_next_line(pos);
-        (line_pos, next_pos, terminated)
+        let (next_pos, line_bottom) = buffer.find_next_line(pos);
+        (line_pos, next_pos, line_bottom)
     }
 
     /// Renders an individual cell for the character `c`, returning the next rendering
