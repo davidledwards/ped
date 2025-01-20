@@ -1588,6 +1588,12 @@ impl EditorKernel {
                 .find(path)
                 .map(|syntax| syntax.clone())
                 .unwrap_or_else(|| Syntax::default())
+        } else if let Source::Ephemeral(_) = &source {
+            config
+                .registry
+                .find(source.to_string())
+                .map(|syntax| syntax.clone())
+                .unwrap_or_else(|| Syntax::default())
         } else {
             Syntax::default()
         };

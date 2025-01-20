@@ -64,12 +64,11 @@ pub fn keys_content() -> String {
 }
 
 fn keys_buffer() -> Buffer {
-    const HEADER: &str = "Keys";
+    const HEADER: &str = "[Keys]";
 
     let keys = prepare_keys();
     let mut buf = Buffer::new();
     writeln!(buf, "{HEADER}");
-    writeln!(buf, "{:-<1$}", "", HEADER.len());
     for key_name in keys {
         writeln!(buf, "{key_name}");
     }
@@ -103,12 +102,11 @@ pub fn ops_content() -> String {
 }
 
 fn ops_buffer() -> Buffer {
-    const HEADER: &str = "Operations";
+    const HEADER: &str = "[Operations]";
 
     let ops = prepare_ops();
     let mut buf = Buffer::new();
     writeln!(buf, "{HEADER}");
-    writeln!(buf, "{:-<1$}", "", HEADER.len());
     for op in ops {
         writeln!(buf, "{op}");
     }
@@ -136,20 +134,20 @@ pub fn bindings_content(bindings: &HashMap<Vec<Key>, String>) -> String {
     let bindings = prepare_bindings(bindings);
     let mut out = String::new();
     for (key_seq, op) in bindings {
-        writeln!(out, "\"{key_seq}\", \"{op}\"");
+        writeln!(out, "\"{key_seq}\", {op}");
     }
     out
 }
 
 fn bindings_buffer(bindings: &HashMap<Vec<Key>, String>) -> Buffer {
-    const HEADER_KEY_SEQ: &str = "Key Sequence";
-    const HEADER_OP: &str = "Operation";
+    const HEADER_KEY: &str = "[Key]";
+    const HEADER_OP: &str = "[Operation]";
 
     // Prettify and sort key sequences.
     let bindings = prepare_bindings(bindings);
 
     // Calculate maximum width of key sequences to align output.
-    let key_width = bindings.keys().fold(HEADER_KEY_SEQ.len(), |width, k| {
+    let key_width = bindings.keys().fold(HEADER_KEY.len(), |width, k| {
         if k.len() > width {
             k.len()
         } else {
@@ -159,13 +157,7 @@ fn bindings_buffer(bindings: &HashMap<Vec<Key>, String>) -> Buffer {
 
     // Emit formatted bindings.
     let mut buf = Buffer::new();
-    writeln!(buf, "{:<key_width$}   {}", HEADER_KEY_SEQ, HEADER_OP);
-    writeln!(
-        buf,
-        "{:<key_width$}   {}",
-        "_".repeat(HEADER_KEY_SEQ.len()),
-        "_".repeat(HEADER_OP.len())
-    );
+    writeln!(buf, "{:<key_width$}   {}", HEADER_KEY, HEADER_OP);
     for (key_seq, op) in bindings {
         writeln!(buf, "{key_seq:<key_width$}   {op}");
     }
@@ -198,8 +190,8 @@ pub fn colors_content(colors: &HashMap<String, u8>) -> String {
 }
 
 fn colors_buffer(colors: &HashMap<String, u8>) -> Buffer {
-    const HEADER_NAME: &str = "Color Name";
-    const HEADER_VALUE: &str = "Color Value";
+    const HEADER_NAME: &str = "[Name]";
+    const HEADER_VALUE: &str = "[Value]";
 
     // Calculate maximum width of color names to align output.
     let colors = prepare_colors(colors);
@@ -214,12 +206,6 @@ fn colors_buffer(colors: &HashMap<String, u8>) -> Buffer {
     // Emit formatted colors.
     let mut buf = Buffer::new();
     writeln!(buf, "{:<name_width$}   {}", HEADER_NAME, HEADER_VALUE);
-    writeln!(
-        buf,
-        "{:<name_width$}   {}",
-        "-".repeat(HEADER_NAME.len()),
-        "-".repeat(HEADER_VALUE.len())
-    );
     for (name, color) in colors {
         writeln!(buf, "{name:<name_width$}   {color}");
     }

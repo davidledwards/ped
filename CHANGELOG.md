@@ -2,11 +2,12 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
-## [0.13.0](https://github.com/davidledwards/ped/tree/v0.12.0) - `2025-01-19`
+## [0.13.0](https://github.com/davidledwards/ped/tree/v0.13.0) - `2025-01-19`
 
 ### Added
 
-- Enforcement of readonly editors, particularly ephemerals such `@help`
+- Enforcement of readonly editors, particularly ephemerals such as `@help`
+- Syntax highlighting of help editors: `@help`, `@keys`, `@operations`, `@bindings`, and `@colors`
 
 ## [0.12.1](https://github.com/davidledwards/ped/tree/v0.12.1) - `2025-01-12`
 
