@@ -19,10 +19,10 @@ pub enum Placement {
     /// Place at the bottom of the workspace.
     Bottom,
 
-    /// Place directly above the view referenced by the contained *id*.
+    /// Place directly above the view referenced by the contained _id_.
     Above(u32),
 
-    /// Place directly below the view referenced by the contained *id*.
+    /// Place directly below the view referenced by the contained _id_.
     Below(u32),
 }
 
@@ -105,7 +105,7 @@ impl Workspace {
     }
 
     /// Opens a new view in the workspace whose placement is based on `place`, returning
-    /// the *id* of the view or `None` if the view could not be created.
+    /// the _id_ of the view or `None` if the view could not be created.
     ///
     /// Existing views will be resized as a side effect of opening a new view. However,
     /// the view will not be created, and resizing will not occur, if the resulting
@@ -146,7 +146,7 @@ impl Workspace {
         }
     }
 
-    /// Closes the view referenced by `id` from the workspace, returning the *id* of
+    /// Closes the view referenced by `id` from the workspace, returning the _id_ of
     /// the view above or `None` if the view could not be closed.
     ///
     /// Remaining views will be resized as a side effect of removal. However, the view
@@ -187,7 +187,7 @@ impl Workspace {
     }
 
     /// Resizes the workspace if the terminal size has changed and returns a vector of
-    /// view *ids* removed due to minimum size constraints of the workspace.
+    /// view _ids_ removed due to minimum size constraints of the workspace.
     ///
     /// Under most circumstances, the vector is empty. However, if one or more views
     /// needs to be removed, the selection starts at the bottom and proceeds up.

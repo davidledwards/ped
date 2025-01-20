@@ -1,8 +1,8 @@
 //! Contains everything related to configuration.
 //!
 //! All default values for configurable aspects of the editor are defined in this
-//! module, including but not necessarily exclusive to *settings*, *colors*, and
-//! *key bindings*.
+//! module, including but not necessarily exclusive to _settings_, _colors_, and
+//! _key bindings*_.
 //!
 //! At a minimum, [`Configuration::default()`] is sufficient for initializing the
 //! editor. However, the normal process is to apply multiple tiers of configuration,

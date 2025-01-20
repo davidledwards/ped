@@ -61,7 +61,7 @@ pub struct InputEditor {
     /// The position of the cursor on the visible canvas.
     cursor: u32,
 
-    /// An optional *hint* that is appended to the user-provided portion of `input`.
+    /// An optional _hint_ that is appended to the user-provided portion of `input`.
     hint: Option<String>,
 }
 
@@ -299,7 +299,7 @@ impl InputEditor {
         }
     }
 
-    /// Sets column sizes for the *prompt* and *input* areas, and allocates an
+    /// Sets column sizes for the _prompt_ and _input_ areas, and allocates an
     /// appropriately-sized canvas.
     fn set_sizes(&mut self) {
         if let Some(ref prompt) = self.prompt {

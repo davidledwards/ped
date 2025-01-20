@@ -5,7 +5,7 @@
 //! of soliciting input from the user. It also detects changes in the terminal size and
 //! resizes the workspace accordingly.
 //!
-//! The controller is essentially a loop that runs until a *quit* directive is given.
+//! The controller is essentially a loop that runs until a _quit_ directive is given.
 
 use crate::config::ConfigurationRef;
 use crate::echo::Echo;

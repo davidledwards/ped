@@ -2,7 +2,7 @@
 //! rendering of terminal output.
 //!
 //! Of particular note, ANSI sequences related to cursor positioning are `1`-based,
-//! so functions in this module that accept *row* and *column* are presumed to be
+//! so functions in this module that accept _row_ and _column*_ are presumed to be
 //! `0`-based and silently add `1` to values.
 
 use crate::color::Color;

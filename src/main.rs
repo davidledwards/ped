@@ -1,4 +1,4 @@
-//! The *ped*estrian text editor.
+//! The _ped_estrian text editor.
 //!
 //! Copyright 2024 David Edwards
 //!

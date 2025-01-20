@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::fmt::{self, Display, Formatter};
 use std::result;
 
-/// A combination of *foreground* and *background* color.
+/// A combination of _foreground_ and _background_ color.
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct Color {
     pub fg: u8,

@@ -88,17 +88,17 @@ impl Environment {
         }
     }
 
-    /// Returns the id of the *active* view.
+    /// Returns the id of the _active_ view.
     pub fn get_active_view_id(&self) -> u32 {
         self.active_view_id
     }
 
-    /// Returns the id of the *active* editor.
+    /// Returns the id of the _active_ editor.
     pub fn get_active_editor_id(&self) -> u32 {
         self.get_view_editor_id_unchecked(self.active_view_id)
     }
 
-    /// Returns a reference to the *active* editor.
+    /// Returns a reference to the _active_ editor.
     pub fn get_active_editor(&self) -> &EditorRef {
         self.get_view_editor_unchecked(self.active_view_id)
     }
@@ -108,7 +108,7 @@ impl Environment {
         self.get_view_editor_unchecked(view_id)
     }
 
-    /// Sets the *active* view based on `focus` and returns the view id.
+    /// Sets the _active_ view based on `focus` and returns the view id.
     pub fn set_active(&mut self, focus: Focus) -> u32 {
         self.active_view_id = match focus {
             Focus::Top => self.workspace().top_view().id,
@@ -224,7 +224,7 @@ impl Environment {
     }
 
     /// Closes the window of `view_id`, detaches the associated editor, and returns
-    /// the id of the new *active* view.
+    /// the id of the new _active_ view.
     ///
     /// This function returns `None` if the workspace is unable to close the window,
     /// which happens when it is the only remaining window.
@@ -243,7 +243,7 @@ impl Environment {
     }
 
     /// Closes the window of `view_id`, detaches and possibly removes the associated
-    /// editor, and returns the id of the new *active* view.
+    /// editor, and returns the id of the new _active_ view.
     ///
     /// The associated editor is removed only if it is not a builtin.
     ///

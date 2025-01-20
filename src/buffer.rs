@@ -736,8 +736,7 @@ mod tests {
         const TEXT: &str = "abcdefghijklmnopqrstuvwxyz";
 
         let mut buf = Buffer::new();
-        let text = TEXT.chars().collect::<Vec<_>>();
-        let _ = buf.insert(&text);
+        let _ = buf.insert_str(TEXT);
 
         // Test copy range when entirely before gap.
         buf.set_pos(10);
@@ -759,6 +758,10 @@ mod tests {
         // Test copy with range outside of actual size.
         let cs = buf.copy(0, usize::MAX);
         assert_eq!(cs, TEXT.chars().collect::<Vec<_>>());
+
+        // Test copy as string value.
+        let s = buf.copy_as_string(6, 15);
+        assert_eq!(s, "ghijklmno");
     }
 
     #[test]
@@ -781,7 +784,7 @@ mod tests {
         const TEXT: &str = "ųų!)EÝ×vĶǑǟ²ȋØWÚųțòWůĪĎɎ«ƿǎǓC±ţOƹǅĠ/9ŷŌȈïĚſ°ǼȎ¢2^ÁǑī0ÄgŐĢśŧ¶";
 
         let mut buf = Buffer::new();
-        let _ = buf.insert(&TEXT.chars().collect::<Vec<_>>());
+        let _ = buf.insert_str(TEXT);
         let mut writer = Cursor::new(Vec::new());
 
         let n = buf.write(&mut writer).unwrap();
@@ -866,12 +869,52 @@ mod tests {
     }
 
     #[test]
+    fn line_of() {
+        const TEXT: &str = "Lorem\nipsum\ndolor\nsit\namet,\nconsectetur\nporttitor";
+
+        let mut buf = Buffer::new();
+        buf.insert_str(TEXT);
+
+        // Line number of beginning of buffer is always 0.
+        let line = buf.line_of(0);
+        assert_eq!(line, 0);
+
+        // Check somewhere in middle of buffer.
+        let line = buf.line_of(14);
+        assert_eq!(line, 2);
+
+        // Positions beyond end of buffer and bounded, so this always yields largest
+        // line number.
+        let line = buf.line_of(usize::MAX);
+        assert_eq!(line, 6);
+    }
+
+    #[test]
+    fn find_line() {
+        const TEXT: &str = "Lorem\nipsum\ndolor\nsit\namet,\nconsectetur\nporttitor";
+
+        let mut buf = Buffer::new();
+        buf.insert_str(TEXT);
+
+        // Position of first line is always beginning of buffer.
+        let pos = buf.find_line(0);
+        assert_eq!(pos, 0);
+
+        // Check line in middle of buffer.
+        let pos = buf.find_line(4);
+        assert_eq!(pos, 22);
+
+        // Line numbers beyond end of buffer always yield position at end of buffer.
+        let pos = buf.find_line(u32::MAX);
+        assert_eq!(pos, buf.size());
+    }
+
+    #[test]
     fn find_start_line() {
         const TEXT: &str = "abc\ndef\nghi";
 
         let mut buf = Buffer::new();
-        let cs = TEXT.chars().collect::<Vec<_>>();
-        let _ = buf.insert(&cs);
+        buf.insert_str(TEXT);
 
         // All chars in `def\n` range should find the same beginning of line.
         for pos in 4..8 {
@@ -884,6 +927,28 @@ mod tests {
         for pos in 0..4 {
             let p = buf.find_start_line(pos);
             assert_eq!(p, 0);
+        }
+    }
+
+    #[test]
+    fn find_next_line() {
+        const TEXT: &str = "abc\ndef\nghi";
+
+        let mut buf = Buffer::new();
+        buf.insert_str(TEXT);
+
+        // All chars in `def\n` range should find the same next line.
+        for pos in 4..8 {
+            let (p, term) = buf.find_next_line(pos);
+            assert_eq!(p, 8);
+            assert!(term);
+        }
+
+        // All chars in `ghi` range should yield the end of buffer position.
+        for pos in 8..11 {
+            let (p, term) = buf.find_next_line(pos);
+            assert_eq!(p, 11);
+            assert!(!term);
         }
     }
 }

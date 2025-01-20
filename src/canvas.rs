@@ -1,12 +1,12 @@
 //! An abstraction over the terminal display that represents the visible area as a
 //! grid of cells.
 //!
-//! A canvas is comprised of a *front* and *back* grid, where the front faithfully
+//! A canvas is comprised of a _front_ and _back_ grid, where the front faithfully
 //! represents what is visible on the display and the back contains pending updates
 //! not yet visible.
 //!
-//! Updates to the canvas are always written to the *back* grid first, then reconciled
-//! with the *front* grid to essentially produce an intermediate diff, which is then
+//! Updates to the canvas are always written to the _back_ grid first, then reconciled
+//! with the _front_ grid to essentially produce an intermediate diff, which is then
 //! used to generate the terminal output.
 
 use crate::color::Color;
@@ -19,9 +19,9 @@ use std::ops::Range;
 use std::rc::Rc;
 
 /// An abstraction over the terminal display.
-///
-/// A canvas is defined by its *origin*, which is relative to the top-left corner of
-/// the display, and its *size*, which is the number of rows and columns.
+///s
+/// A canvas is defined by its _origin_, which is relative to the top-left corner of
+/// the display, and its _size_, which is the number of rows and columns.
 pub struct Canvas {
     origin: Point,
     size: Size,

@@ -1,7 +1,7 @@
 //! A representation of a window.
 //!
-//! A window contains a *canvas*, which is the area comprised of editor text, and a
-//! *banner* for displaying other relevant bits of information.
+//! A window contains a _canvas_, which is the area comprised of editor text, and a
+//! _banner_ for displaying other relevant bits of information.
 
 use crate::canvas::{Canvas, CanvasRef};
 use crate::color::Color;

@@ -80,7 +80,7 @@ fn quit(env: &mut Environment) -> Option<Action> {
     Quit::start(env)
 }
 
-/// An inquirer that orchestrates the *quit* process, which may involve saving dirty
+/// An inquirer that orchestrates the _quit_ process, which may involve saving dirty
 /// editors.
 struct Quit {
     /// List of dirty editors.
@@ -1811,7 +1811,7 @@ fn stale_editor(editor: &EditorRef) -> Result<bool> {
     Ok(stale)
 }
 
-/// Returns an ordered collection of *dirty* editors.
+/// Returns an ordered collection of _dirty_ editors.
 fn dirty_editors(env: &Environment) -> Vec<EditorRef> {
     env.editor_map()
         .iter()
