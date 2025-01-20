@@ -19,14 +19,20 @@ use std::ops::Range;
 use std::rc::Rc;
 
 /// An abstraction over the terminal display.
-///s
-/// A canvas is defined by its _origin_, which is relative to the top-left corner of
-/// the display, and its _size_, which is the number of rows and columns.
 pub struct Canvas {
+    /// The point of origin relative to the top-left corner of the terminal.
     origin: Point,
+
+    /// The number of rows and columns.
     size: Size,
+
+    /// A grid where terminal updates are staged.
     back: Grid,
+
+    /// A grid that faithfully represents what the uses sees on the terminal.
     front: Grid,
+
+    /// A terminal writer that buffers output.
     writer: Writer,
 }
 
