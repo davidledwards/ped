@@ -13,8 +13,8 @@ function build() {
     local __BIN="$__BIN_DIR/$__PROG"
 
     echo "$__TARGET: building target"
-    cargo test --release
     cargo build --release --target=${__TARGET}
+    cargo test --release
     if [ $? -ne 0 ]; then
         echo "$__BIN: build failure"
         exit 1
