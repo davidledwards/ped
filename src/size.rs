@@ -3,7 +3,7 @@
 use std::fmt::{self, Display, Formatter};
 use std::ops::{Add, Sub};
 
-/// Represents the size of a 2-dimensional space expressed as `rows` and `cols`.
+/// Represents the size of a 2-dimensional space expressed as _rows_ and _columns_.
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct Size {
     pub rows: u32,
@@ -11,16 +11,20 @@ pub struct Size {
 }
 
 impl Size {
+    /// A size of (`0`, `0`).
     pub const ZERO: Size = Size::new(0, 0);
 
+    /// Creates a size of (`rows`, `cols`).
     pub const fn new(rows: u32, cols: u32) -> Size {
         Size { rows, cols }
     }
 
+    /// Creates a size of (`rows`, `0`).
     pub const fn rows(rows: u32) -> Size {
         Size { rows, cols: 0 }
     }
 
+    /// Creates a size of (`0`, `cols`).
     pub const fn cols(cols: u32) -> Size {
         Size { rows: 0, cols }
     }
@@ -46,7 +50,7 @@ impl Sub<Size> for Size {
     }
 }
 
-/// Represent a point in a 2-dimensional space expressed as `row` and `col`.
+/// Represent a point in a 2-dimensional space expressed as _row_ and _column_.
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct Point {
     pub row: u32,
@@ -54,8 +58,10 @@ pub struct Point {
 }
 
 impl Point {
+    /// A point of (`0`, `0`).
     pub const ORIGIN: Point = Point::new(0, 0);
 
+    /// Creates a point of (`row`, `col`).
     pub const fn new(row: u32, col: u32) -> Point {
         Point { row, col }
     }
