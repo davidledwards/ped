@@ -47,4 +47,6 @@ usage: ped OPTIONS [file...]
     searching in the standard directories above.
 
     Syntax configuration files are formatted using the TOML syntax and must
-    contain the `.toml` extension. All other files types are ignored.
+    contain the `.toml` extension. All other files types are ignored. A
+    predefined set of syntax configuration files with instructions can be found
+    at <https://github.com/davidledwards/ped-syntax>.
