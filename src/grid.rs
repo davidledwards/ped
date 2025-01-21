@@ -9,16 +9,26 @@ pub struct Grid {
     content: Vec<Cell>,
 }
 
-/// A pair containing a [`char`] and a [`Color`].
+/// A combination of a _character_ and a _color_ that, in principle, occupies a cell
+/// on the terminal display.
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct Cell {
+    /// A Unicode character.
     pub value: char,
+
+    /// The foreground and background color of the character.
     pub color: Color,
 }
 
 impl Cell {
+    /// An empty cell that can be used for initialization, although there is nothing
+    /// particularly special about this combination other than the unlikely use of the
+    /// Unicode `NULL` character and a color whose foreground and background are both
+    /// `0`.
     pub const EMPTY: Cell = Cell::new('\0', Color::ZERO);
 
+    /// Creates a new cell from `value` and `color`.
+    #[inline(always)]
     pub const fn new(value: char, color: Color) -> Cell {
         Cell { value, color }
     }
@@ -108,6 +118,9 @@ mod tests {
     const GRID_COLS: u32 = 3;
     const GRID_SIZE: Size = Size::new(GRID_ROWS, GRID_COLS);
 
+    const EMPTY_CONTENT: [Cell; (GRID_ROWS * GRID_COLS) as usize] =
+        [Cell::EMPTY; (GRID_SIZE.rows * GRID_SIZE.cols) as usize];
+
     const ZIG_CONTENT: [char; (GRID_ROWS * GRID_COLS) as usize] =
         ['z', 'i', 'g', 'Z', 'i', 'g', 'z', 'I', 'g'];
 
@@ -124,10 +137,7 @@ mod tests {
     fn new_grid() {
         let grid = empty_grid();
         assert_eq!(grid.size, GRID_SIZE);
-        assert_eq!(
-            grid.content,
-            vec![Cell::EMPTY; (GRID_SIZE.rows * GRID_SIZE.cols) as usize]
-        )
+        assert_eq!(grid.content, EMPTY_CONTENT)
     }
 
     #[test]
@@ -162,6 +172,17 @@ mod tests {
 
         // Verify that both grids are now equivalent.
         assert_eq!(this_grid.content, that_grid.content);
+    }
+
+    #[test]
+    fn clear_grid() {
+        // Verify that grid is something other than empty.
+        let mut grid = zig_grid();
+        assert_ne!(grid.content, EMPTY_CONTENT);
+
+        // Verify that grid is empty.
+        grid.clear();
+        assert_eq!(grid.content, EMPTY_CONTENT);
     }
 
     fn empty_grid() -> Grid {
