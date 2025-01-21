@@ -29,15 +29,15 @@ brew install ped
 
 Releases can be downloaded directly from [GitHub](https://github.com/davidledwards/ped/releases).
 
-Alternatively, using the [GitHub CLI](https://cli.github.com/), releases can also be downloaded from the command line. For example, to download version `0.12.1`, run the following command.
+Alternatively, using the [GitHub CLI](https://cli.github.com/), releases can also be downloaded from the command line. For example, to download version `0.13.1`, run the following command.
 
 ```shell
-gh release download --repo https://github.com/davidledwards/ped v0.12.1
+gh release download --repo https://github.com/davidledwards/ped v0.13.1
 ```
 
 ## Usage
 
-Run `ped --help` to print a description of all available options.
+Run `ped --help` (or `ped -h`) to print a description of all available options.
 
 Edit a file.
 
@@ -57,7 +57,7 @@ ped foo.rs bar.rs
 - `$HOME/.ped/pedrc`
 - `$HOME/.config/ped/pedrc`
 
-Alternatively, a configuration file can be specified on the command line using the `--config` option.
+Alternatively, a configuration file can be specified on the command line using the `--config` (or `-C`) option.
 
 ```shell
 ped --config ~/alt/.pedrc README.md
@@ -70,13 +70,13 @@ See [.pedrc](.pedrc) for a detailed explanation of configuration settings. In th
 - `$HOME/.ped/syntax`
 - `$HOME/.config/ped/syntax`
 
-Alternatively, a directory containing syntax configurations can be specified using the `--syntax` option.
+Alternatively, a directory containing syntax configurations can be specified using the `--syntax` (or `-S`) option.
 
 ```shell
 ped --syntax ~/alt/syntax README.md
 ```
 
-`ped` can also be instructed to ignore all configuration files, including syntax configurations, using the `--bare` and `--bare-syntax` options, respectively. This is useful in circumstances where configuration files contain errors, which will cause `ped` to exit prematurely.
+`ped` can also be instructed to ignore all configuration files, including syntax configurations, using the `--bare` (or `-b`) and `--bare-syntax` (or `-B`) options, respectively. This is useful in circumstances where configuration files contain errors, which will cause `ped` to exit prematurely.
 
 This ignores _all_ configurations.
 

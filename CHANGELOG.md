@@ -2,6 +2,13 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
+## [0.13.1](https://github.com/davidledwards/ped/tree/v0.13.1) - `2025-01-20`
+
+### Added
+
+- Single-character variants for some CLI options
+- Support for `--` CLI option to forcibly stop interpretation of further options
+
 ## [0.13.0](https://github.com/davidledwards/ped/tree/v0.13.0) - `2025-01-19`
 
 ### Added
