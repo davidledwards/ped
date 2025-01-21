@@ -4,21 +4,22 @@ usage: ped OPTIONS [file...]
   The pedestrian text editor.
 
   OPTIONS
-    --spotlight    : highlight cursor row
-    --lines        : show line numbers in left margin
-    --eol          : make \n visible with special character
-    --tab-hard     : insert tabs as \t
-    --tab-soft     : insert tabs as spaces (default)
-    --tab-size N   : tab stop size when --tab-soft (default: 4)
-    --keys         : print available keys to stdout
-    --ops          : print available operations to stdout
-    --bindings     : print key bindings to stdout
-    --colors       : print color names to stdout
-    --config FILE  : load configuration from FILE
-    --syntax DIR   : load syntax configurations from DIR
-    --bare         : ignore all forms of configuration
-    --bare-syntax  : ignore syntax configurations
-    --version      : print version information
+    --spotlight        : highlight cursor row
+    --lines            : show line numbers in left margin
+    --eol              : make \n visible with special character
+    --tab-hard         : insert tabs as \t
+    --tab-soft         : insert tabs as spaces (default)
+    --tab-size, -t N   : tab stop size when --tab-soft (default: 4)
+    --keys             : print available keys to stdout
+    --ops              : print available operations to stdout
+    --bindings         : print key bindings to stdout
+    --colors           : print color names to stdout
+    --config, -C FILE  : load configuration from FILE
+    --syntax, -S DIR   : load syntax configurations from DIR
+    --bare, -b         : ignore all forms of configuration
+    --bare-syntax, -B  : ignore syntax configurations
+    --version, -v      : print version information
+    --help, -h         : print this information
 
   CONFIGURATION
     An optional configuration file is loaded if present in one of the following

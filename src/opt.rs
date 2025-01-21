@@ -1,9 +1,9 @@
-//! Options parser.
-
-use std::str::FromStr;
+//! A simple parser for CLI options.
 
 use crate::error::{Error, Result};
+use std::str::FromStr;
 
+/// Represents all potential CLI options.
 pub struct Options {
     pub help: bool,
     pub version: bool,
@@ -55,30 +55,41 @@ impl Options {
         let mut it = args.into_iter();
         while let Some(arg) = it.next() {
             match arg.as_str() {
-                "--help" => opts.help = true,
-                "--version" => opts.version = true,
+                "--help" | "-h" => opts.help = true,
+                "--version" | "-v" => opts.version = true,
                 "--spotlight" => opts.spotlight = Some(true),
                 "--lines" => opts.lines = Some(true),
                 "--eol" => opts.eol = Some(true),
                 "--tab-hard" => opts.tab_hard = Some(true),
                 "--tab-soft" => opts.tab_hard = Some(false),
-                "--tab-size" => opts.tab_size = Some(parse_arg(&arg, it.next())?),
+                "--tab-size" | "-t" => opts.tab_size = Some(parse_arg(&arg, it.next())?),
                 "--keys" => opts.keys = true,
                 "--ops" => opts.ops = true,
                 "--bindings" => opts.bindings = true,
                 "--colors" => opts.colors = true,
-                "--config" => opts.config_path = Some(expect_value(&arg, it.next())?),
-                "--syntax" => opts.syntax_dir = Some(expect_value(&arg, it.next())?),
-                "--bare" => opts.bare = true,
-                "--bare-syntax" => opts.bare_syntax = true,
-                arg if arg.starts_with("--") => return Err(Error::unexpected_arg(arg)),
-                _ => opts.files.push(arg),
+                "--config" | "-C" => opts.config_path = Some(expect_value(&arg, it.next())?),
+                "--syntax" | "-S" => opts.syntax_dir = Some(expect_value(&arg, it.next())?),
+                "--bare" | "-b" => opts.bare = true,
+                "--bare-syntax" | "-B" => opts.bare_syntax = true,
+                "--" => {
+                    // All arguments following `--` are interpreted as files.
+                    opts.files.extend(it);
+                    break;
+                }
+                arg if arg.starts_with("--") || arg.starts_with("-") => {
+                    return Err(Error::unexpected_arg(arg))
+                }
+                _ => {
+                    // Any other match is presumed to be a file.
+                    opts.files.push(arg)
+                }
             }
         }
         Ok(opts)
     }
 }
 
+/// Parses `next_arg`, which is presumed to be the value that follows `arg`.
 fn parse_arg<T>(arg: &str, next_arg: Option<String>) -> Result<T>
 where
     T: FromStr,
@@ -92,6 +103,8 @@ where
     }
 }
 
+/// Verifies that `next_arg` is present, which is presumed to be the value that
+/// follows `arg`.
 fn expect_value(arg: &str, next_arg: Option<String>) -> Result<String> {
     next_arg.ok_or_else(|| Error::expected_value(arg))
 }
