@@ -1482,7 +1482,7 @@ fn next_window(env: &mut Environment) -> Option<Action> {
 
 /// Operation: `select-editor`
 fn select_editor(env: &mut Environment) -> Option<Action> {
-    let editors = unattached_editors(env);
+    let editors = unattached_editors(env, true);
     if editors.len() > 0 {
         SelectEditor::question(editors, None)
     } else {
@@ -1492,7 +1492,7 @@ fn select_editor(env: &mut Environment) -> Option<Action> {
 
 /// Operation: `select-editor-top`
 fn select_editor_top(env: &mut Environment) -> Option<Action> {
-    let editors = unattached_editors(env);
+    let editors = unattached_editors(env, true);
     if editors.len() > 0 {
         SelectEditor::question(editors, Some(Placement::Top))
     } else {
@@ -1502,7 +1502,7 @@ fn select_editor_top(env: &mut Environment) -> Option<Action> {
 
 /// Operation: `select-editor-bottom`
 fn select_editor_bottom(env: &mut Environment) -> Option<Action> {
-    let editors = unattached_editors(env);
+    let editors = unattached_editors(env, true);
     if editors.len() > 0 {
         SelectEditor::question(editors, Some(Placement::Bottom))
     } else {
@@ -1512,7 +1512,7 @@ fn select_editor_bottom(env: &mut Environment) -> Option<Action> {
 
 /// Operation: `select-editor-above`
 fn select_editor_above(env: &mut Environment) -> Option<Action> {
-    let editors = unattached_editors(env);
+    let editors = unattached_editors(env, true);
     if editors.len() > 0 {
         SelectEditor::question(editors, Some(Placement::Above(env.get_active_view_id())))
     } else {
@@ -1522,7 +1522,7 @@ fn select_editor_above(env: &mut Environment) -> Option<Action> {
 
 /// Operation: `select-editor-below`
 fn select_editor_below(env: &mut Environment) -> Option<Action> {
-    let editors = unattached_editors(env);
+    let editors = unattached_editors(env, true);
     if editors.len() > 0 {
         SelectEditor::question(editors, Some(Placement::Below(env.get_active_view_id())))
     } else {
@@ -1822,11 +1822,14 @@ fn dirty_editors(env: &Environment) -> Vec<EditorRef> {
 
 /// Returns an ordered collection of editor ids and editors for those editors that are
 /// not attached to a window.
-fn unattached_editors(env: &Environment) -> Vec<(u32, EditorRef)> {
+///
+/// When `ephemerals` is `true`, the collection also contains ephemeral editors,
+/// otherwise they are filtered out.
+fn unattached_editors(env: &Environment, ephemerals: bool) -> Vec<(u32, EditorRef)> {
     let attached = env.view_map().values().cloned().collect::<Vec<_>>();
     env.editor_map()
         .iter()
-        .filter(|(id, _)| !attached.contains(id))
+        .filter(|(id, e)| !attached.contains(id) && (is_file(e) || is_ephemeral(e) == ephemerals))
         .map(|(id, e)| (*id, e.clone()))
         .collect()
 }
@@ -1834,7 +1837,7 @@ fn unattached_editors(env: &Environment) -> Vec<(u32, EditorRef)> {
 /// Returns the editor id and editor of the previous unattached editor relative to the
 /// editor in the current window, or `None` if all editors are attached.
 fn prev_unattached_editor(env: &Environment) -> Option<(u32, EditorRef)> {
-    let editors = unattached_editors(env);
+    let editors = unattached_editors(env, false);
     if editors.len() > 0 {
         let editor_id = env.get_active_editor_id();
         let index = editors
@@ -1851,7 +1854,7 @@ fn prev_unattached_editor(env: &Environment) -> Option<(u32, EditorRef)> {
 /// Returns the editor id and editor of the next unattached editor relative to the
 /// editor in the current window, or `None` if all editors are attached.
 fn next_unattached_editor(env: &Environment) -> Option<(u32, EditorRef)> {
-    let editors = unattached_editors(env);
+    let editors = unattached_editors(env, false);
     if editors.len() > 0 {
         let editor_id = env.get_active_editor_id();
         let index = editors
@@ -1881,6 +1884,11 @@ fn source_of(editor: &EditorRef) -> String {
 /// Returns `true` if source of `editor` is a _file_.
 fn is_file(editor: &EditorRef) -> bool {
     editor.borrow().source().is_file()
+}
+
+/// Returns `true` if source of `editor` is an _ephemeral_.
+fn is_ephemeral(editor: &EditorRef) -> bool {
+    editor.borrow().source().is_ephemeral()
 }
 
 /// Returns `true` if source of `editor` is a _file_ and is dirty.

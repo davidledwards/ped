@@ -33,6 +33,13 @@ impl Source {
             _ => false,
         }
     }
+
+    pub fn is_ephemeral(&self) -> bool {
+        match self {
+            Self::Ephemeral(_) => true,
+            _ => false,
+        }
+    }
 }
 
 impl Display for Source {
