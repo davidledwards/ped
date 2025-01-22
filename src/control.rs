@@ -141,7 +141,7 @@ impl Controller {
     }
 
     fn show_cursor(&mut self) {
-        if let None = self.question {
+        if self.question.is_none() {
             self.env.get_active_editor().borrow_mut().show_cursor();
         }
     }
@@ -221,7 +221,11 @@ impl Controller {
             action
         } else {
             match self.input.process_key(&key) {
-                Directive::Continue => None,
+                Directive::Continue => {
+                    let value = self.input.value();
+                    inquirer.react(&mut self.env, &value);
+                    None
+                }
                 Directive::Accept => {
                     let value = self.input.value();
                     let action = inquirer.respond(&mut self.env, Some(&value));

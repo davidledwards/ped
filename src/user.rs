@@ -13,6 +13,14 @@ pub trait Inquirer {
     /// Returns the [`Completer`] implementation attached to the inquirer.
     fn completer(&self) -> Box<dyn Completer>;
 
+    /// Allows the inquirer to react to a partial input `value` that is not yet
+    /// committed or cancelled.
+    ///
+    /// Unless the inquirer is interacting with the editing environment, this method
+    /// is not necessary, hence the default implementation that does nothing.
+    #[allow(unused_variables)]
+    fn react(&mut self, env: &mut Environment, value: &str) {}
+
     /// Delegates processing of the user-provided response in `value`, returning an
     /// action to be taken by the controller.
     ///
