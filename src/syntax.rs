@@ -86,7 +86,7 @@ struct ExternalSyntax {
 
 impl Syntax {
     /// Name of default syntax.
-    const DEFAULT_NAME: &str = "Default";
+    const DEFAULT_NAME: &str = "Text";
 
     /// A regular expression that never matches, which is used when no tokens are
     /// provided.
