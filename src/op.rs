@@ -1,6 +1,6 @@
 //! A collection of functions intended to be associated with names of editing
-//! operations. These functions serve as the glue between [`Key`](crate::key::Key)s and
-//! respective actions in the context of the editing experience.
+//! operations. These functions serve as the glue between [`Key`]s and respective
+//! actions in the context of the editing experience.
 //!
 //! Editing operations are designed to be callable only indirectly through [`OpMap`]
 //! instances created by [`init_op_map`]. The mapping of names to functions is captured
@@ -884,18 +884,26 @@ struct Search {
     capture: Capture,
     using_regex: bool,
     case_strict: bool,
+    buf_cache: Option<String>,
     last_match: Option<(usize, Box<dyn Pattern>)>,
 }
 
 impl Search {
     fn question(editor: EditorRef, using_regex: bool, case_strict: bool) -> Option<Action> {
         let capture = editor.borrow().capture();
+        let buf_cache = if using_regex {
+            let buf = editor.borrow().buffer().iter().collect::<String>();
+            Some(buf)
+        } else {
+            None
+        };
         Action::as_question(
             Search {
                 editor,
                 capture,
                 using_regex,
                 case_strict,
+                buf_cache,
                 last_match: None,
             }
             .to_box(),
@@ -952,7 +960,12 @@ impl Inquirer for Search {
             };
 
             // Find next match and highlight if found.
-            let found = pattern.find(&self.editor.borrow().buffer(), pos);
+            let found = if let Some(buf) = &self.buf_cache {
+                pattern.find_str(buf, pos)
+            } else {
+                pattern.find(&self.editor.borrow().buffer(), pos)
+            };
+
             if let Some((start_pos, end_pos)) = found {
                 let mut editor = self.editor.borrow_mut();
                 editor.move_to(start_pos, Align::Center);
@@ -974,14 +987,11 @@ impl Inquirer for Search {
     fn respond(&mut self, env: &mut Environment, value: Option<&str>) -> Option<Action> {
         match value {
             Some(value) if value.len() > 0 => {
-                // Keep most recent match for possible continuation.
                 if let Some((pos, pattern)) = self.last_match.take() {
                     env.set_last_match(pos, pattern);
                 }
             }
-            _ => {
-                self.restore();
-            }
+            _ => self.restore(),
         }
         None
     }

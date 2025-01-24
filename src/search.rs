@@ -22,6 +22,10 @@ pub trait Pattern {
     /// A return value of `None` indicates that `buffer` does not contain a match for
     /// the pattern.
     fn find(&self, buffer: &Buffer, pos: usize) -> Option<(usize, usize)>;
+
+    /// Equivalent to [`find`](Self::find) with the exception that `buffer` is an
+    /// `&str` type.
+    fn find_str(&self, buffer: &str, pos: usize) -> Option<(usize, usize)>;
 }
 
 /// Returns a pattern-matching algorithm using `term` as the search string, and
@@ -37,6 +41,11 @@ pub fn using_regex(regex: Regex) -> Box<dyn Pattern> {
 
 /// A term-oriented pattern-matching algorithm implemented using the Boyer-Moore
 /// algorithm.
+///
+/// The most efficient method of search is [`find()`](Pattern::find) because the
+/// algorithm is able to work directly with [`Buffer`]s. Using
+/// [`find_str()`](Pattern::find_str) requires an intermediate conversion from
+/// `&str` to [`Buffer`].
 struct TermPattern {
     /// The term provided during construction.
     term: String,
@@ -143,9 +152,19 @@ impl Pattern for TermPattern {
             }
         })
     }
+
+    fn find_str(&self, buffer: &str, pos: usize) -> Option<(usize, usize)> {
+        let mut buf = Buffer::new();
+        buf.insert_str(buffer);
+        self.find(&buf, pos)
+    }
 }
 
 /// A regex-oriented pattern-matching algorithm.
+///
+/// The most efficient method of search is [`find_str()`](Pattern::find_str) because
+/// the algorithm only works directly with `&str` types. Using [`find()`](Pattern::find)
+/// requires an intermediate converstion from [`Buffer`] to `&str`.
 struct RegexPattern {
     regex: Regex,
 }
@@ -181,7 +200,16 @@ impl Pattern for RegexPattern {
         // Entire buffer must be converted to string since regex library only works
         // with &str as opposed to iterators.
         let buf = buffer.iter().collect::<String>();
-        self.search(&buf, pos)
-            .or_else(|| if pos > 0 { self.search(&buf, 0) } else { None })
+        self.find_str(&buf, pos)
+    }
+
+    fn find_str(&self, buffer: &str, pos: usize) -> Option<(usize, usize)> {
+        self.search(buffer, pos).or_else(|| {
+            if pos > 0 {
+                self.search(buffer, 0)
+            } else {
+                None
+            }
+        })
     }
 }
