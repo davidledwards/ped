@@ -18,6 +18,7 @@ use std::cell::{Ref, RefCell, RefMut};
 use std::cmp;
 use std::ops::Range;
 use std::rc::Rc;
+use std::time::Instant;
 
 /// An editing session containing a [`kernel`](EditorKernel) that carries out most
 /// operations.
@@ -334,6 +335,9 @@ struct EditorKernel {
 
     /// Tokenizes the buffer for syntax coloring.
     tokenizer: TokenizerRef,
+
+    /// The number of milliseconds spent performing the last tokenization.
+    tokenize_cost: u128,
 
     /// The value of [`clock`](Self::clock) at the time of the last tokenization.
     tokenize_clock: u64,
@@ -1520,12 +1524,7 @@ impl ImmutableEditor for EditorKernel {
 
     fn tokenize(&mut self) -> bool {
         if self.tokenize_clock < self.clock {
-            self.syntax_cursor = {
-                let cursor = self.tokenizer_mut().tokenize(&self.buffer());
-                cursor
-            };
-            self.align_syntax();
-            self.tokenize_clock = self.clock;
+            self.possibly_tokenize(true);
             true
         } else {
             false
@@ -1619,6 +1618,10 @@ impl EditorKernel {
     /// Exclusive upper bound on line numbers that can be displayed in the margin.
     const LINE_LIMIT: u32 = 10_u32.pow(Self::MARGIN_COLS - 1);
 
+    /// An upper bound on the tolerable number of milliseconds to tokenize the
+    /// buffer in real-time, otherwise the operation is deferred.
+    const TOKENIZE_COST_LIMIT: u128 = 50;
+
     /// Creates a new editor using `source` and an optional `buffer`, which if `None`
     /// automatically creates an empty buffer.
     fn new(config: ConfigurationRef, source: Source, buffer: Option<Buffer>) -> EditorKernel {
@@ -1645,7 +1648,9 @@ impl EditorKernel {
 
         // Tokenize buffer.
         let mut tokenizer = Tokenizer::new(syntax);
+        let timer = Instant::now();
         let syntax_cursor = tokenizer.tokenize(&buffer.borrow());
+        let tokenize_cost = timer.elapsed().as_millis();
 
         EditorKernel {
             config,
@@ -1655,6 +1660,7 @@ impl EditorKernel {
             undo: Vec::new(),
             redo: Vec::new(),
             tokenizer: tokenizer.to_ref(),
+            tokenize_cost,
             tokenize_clock: 0,
             syntax_cursor,
             dirty: false,
@@ -1788,10 +1794,10 @@ impl EditorKernel {
             self.cur_pos = cur_pos;
             let col = self.cur_line.col_of(self.cur_pos);
             self.snap_col = None;
-            self.align_syntax();
             self.cursor = Point::new(row, col);
             self.dirty = true;
             self.clock += 1;
+            self.possibly_tokenize(false);
         }
     }
 
@@ -1872,12 +1878,27 @@ impl EditorKernel {
             self.cur_pos = from_pos;
             let col = self.cur_line.col_of(self.cur_pos);
             self.snap_col = None;
-            self.align_syntax();
             self.cursor = Point::new(row, col);
             self.dirty = true;
             self.clock += 1;
+            self.possibly_tokenize(false);
             text
         }
+    }
+
+    /// Tokenizes the buffer if either the prior tokenization fell below the real-time
+    /// limit or `force` is `true`, otherwise the operation is not performed.
+    fn possibly_tokenize(&mut self, force: bool) {
+        if force || self.tokenize_cost < Self::TOKENIZE_COST_LIMIT {
+            self.syntax_cursor = {
+                let timer = Instant::now();
+                let cursor = self.tokenizer_mut().tokenize(&self.buffer());
+                self.tokenize_cost = timer.elapsed().as_millis();
+                cursor
+            };
+            self.tokenize_clock = self.clock;
+        }
+        self.align_syntax();
     }
 
     fn get_mark_range(&self, mark: Mark) -> Range<usize> {
