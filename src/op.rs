@@ -631,7 +631,9 @@ impl Inquirer for GotoLine {
         if let Some(s) = value {
             if let Ok(line) = s.parse::<u32>() {
                 let line = if line > 0 { line - 1 } else { line };
-                self.editor.borrow_mut().move_line(line, Align::Center);
+                let mut editor = self.editor.borrow_mut();
+                editor.move_line(line, Align::Center);
+                editor.render();
                 None
             } else {
                 Action::as_echo(&format!("{s}: invalid line number"))
