@@ -241,6 +241,15 @@ pub trait ImmutableEditor {
     /// empty.
     fn redo(&mut self) -> bool;
 
+    /// Returned the captured state of the editor.
+    fn capture(&self) -> Capture;
+
+    /// Restores the editor to the captured state in `capture`.
+    ///
+    /// Note that if the editor changes after state has been captured, there is no
+    /// guarantee that said state will be restored precisely as it was.
+    fn restore(&mut self, capture: &Capture);
+
     /// Tokenizes the buffer if changes occurred since the last tokenization, returning
     /// `true` if tokenization occurred and `false` otherwise.
     fn tokenize(&mut self) -> bool;
@@ -464,6 +473,14 @@ pub enum Align {
 /// mark is _soft_, and `false` if _hard_.
 #[derive(Copy, Clone)]
 pub struct Mark(pub usize, pub bool);
+
+/// A means of capturing the visual state of an editor for the purpose of possible
+/// restoration.
+pub struct Capture {
+    pub pos: usize,
+    pub cursor: Point,
+    pub mark: Option<Mark>,
+}
 
 /// A drawing context provided to rendering functions.
 struct Draw {
@@ -1036,6 +1053,16 @@ impl ImmutableEditor for Editor {
     }
 
     #[inline]
+    fn capture(&self) -> Capture {
+        self.kernel.capture()
+    }
+
+    #[inline]
+    fn restore(&mut self, capture: &Capture) {
+        self.kernel.restore(capture);
+    }
+
+    #[inline]
     fn tokenize(&mut self) -> bool {
         self.kernel.tokenize()
     }
@@ -1470,6 +1497,24 @@ impl ImmutableEditor for EditorKernel {
             true
         } else {
             false
+        }
+    }
+
+    fn capture(&self) -> Capture {
+        Capture {
+            pos: self.cur_pos,
+            cursor: self.cursor,
+            mark: self.mark.clone(),
+        }
+    }
+
+    fn restore(&mut self, capture: &Capture) {
+        self.move_to(capture.pos, Align::Row(capture.cursor.row));
+        if let Some(Mark(pos, soft)) = capture.mark {
+            let pos = cmp::min(pos, self.buffer().size());
+            self.mark = Some(Mark(pos, soft));
+        } else {
+            self.mark = None;
         }
     }
 

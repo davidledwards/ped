@@ -304,7 +304,7 @@ impl Configuration {
         Bindings::new(&bindings).unwrap_or_else(|e| panic!("{e}: default bindings failed"))
     }
 
-    const DEFAULT_BINDINGS: [(&'static str, &'static str); 90] = [
+    const DEFAULT_BINDINGS: [(&'static str, &'static str); 92] = [
         // --- exit and cancellation ---
         ("C-q", "quit"),
         // --- help ---
@@ -374,7 +374,9 @@ impl Configuration {
         ("C-x", "cut"),
         // --- search next ---
         ("C-\\", "search"),
+        ("ESC:C-\\", "search-case"),
         ("ESC:\\", "search-regex"),
+        ("ESC:ESC:\\", "search-regex-case"),
         ("C-]", "search-next"),
         // --- file handling ---
         ("C-o", "open-file"),

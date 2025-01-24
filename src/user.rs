@@ -1,6 +1,7 @@
 //! A collection of types and implementations for interfacing with users.
 
 use crate::env::Environment;
+use crate::key::Key;
 use crate::op::Action;
 use crate::sys::{self, AsString};
 use std::path::{Path, PathBuf};
@@ -11,15 +12,21 @@ pub trait Inquirer {
     fn prompt(&self) -> String;
 
     /// Returns the [`Completer`] implementation attached to the inquirer.
-    fn completer(&self) -> Box<dyn Completer>;
-
-    /// Allows the inquirer to react to a partial input `value` that is not yet
-    /// committed or cancelled.
     ///
-    /// Unless the inquirer is interacting with the editing environment, this method
-    /// is not necessary, hence the default implementation that does nothing.
+    /// The default implementation returns a [`null_completer()`].
+    fn completer(&self) -> Box<dyn Completer> {
+        null_completer()
+    }
+
+    /// Allows the inquirer to react to a partial input `value` following the
+    /// processing of `key` that is not yet committed or cancelled, returning an
+    /// optional _hint_.
+    ///
+    /// The default implementation does nothing and returns `None`.
     #[allow(unused_variables)]
-    fn react(&mut self, env: &mut Environment, value: &str) {}
+    fn react(&mut self, env: &mut Environment, value: &str, key: &Key) -> Option<String> {
+        None
+    }
 
     /// Delegates processing of the user-provided response in `value`, returning an
     /// action to be taken by the controller.
@@ -90,17 +97,6 @@ pub fn list_completer(accepted: Vec<String>) -> Box<dyn Completer> {
 /// Returns an implementation of [`Completer`] that navigates files and directories.
 pub fn file_completer(dir: PathBuf) -> Box<dyn Completer> {
     Box::new(FileCompleter::new(dir))
-}
-
-/// Returns an implementation of [`Completer`] that selects case-sensitivity.
-///
-/// Values returned by this completer are adorned with the following character prefixes
-/// based on selected case-sensitivity:
-///
-/// - `'!'`: case-sensitive
-/// - `'~'`: case-insensitive
-pub fn case_completer() -> Box<dyn Completer> {
-    Box::new(CaseCompleter::new())
 }
 
 /// A completer that does nothing.
@@ -489,46 +485,5 @@ impl Completer for FileCompleter {
 
     fn accept(&mut self, value: &str) -> Option<String> {
         Some(value.to_string())
-    }
-}
-
-/// A completer that selects case-sensitivity.
-struct CaseCompleter {
-    case_strict: bool,
-}
-
-impl CaseCompleter {
-    fn new() -> CaseCompleter {
-        CaseCompleter { case_strict: false }
-    }
-}
-
-impl Completer for CaseCompleter {
-    fn prepare(&mut self) -> Option<String> {
-        None
-    }
-
-    fn evaluate(&mut self, _: &str) -> Option<String> {
-        None
-    }
-
-    fn suggest(&mut self, _: &str) -> (Option<String>, Option<String>) {
-        self.case_strict = !self.case_strict;
-        let hint = if self.case_strict {
-            " (case-sensitive)"
-        } else {
-            " (case-insensitive)"
-        };
-        (None, Some(hint.to_string()))
-    }
-
-    fn accept(&mut self, value: &str) -> Option<String> {
-        let value = if value.len() > 0 {
-            let prefix = if self.case_strict { "!" } else { "~" };
-            prefix.to_string() + value
-        } else {
-            value.to_string()
-        };
-        Some(value)
     }
 }

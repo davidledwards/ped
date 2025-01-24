@@ -223,9 +223,13 @@ impl Controller {
             match self.input.process_key(&key) {
                 Directive::Continue => {
                     let value = self.input.value();
-                    inquirer.react(&mut self.env, &value);
+                    if let Some(hint) = inquirer.react(&mut self.env, &value, &key) {
+                        self.input.set_hint(hint);
+                    }
+                    self.input.show_cursor();
                     None
                 }
+                Directive::Ignore => None,
                 Directive::Accept => {
                     let value = self.input.value();
                     let action = inquirer.respond(&mut self.env, Some(&value));

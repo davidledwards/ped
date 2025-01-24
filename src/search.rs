@@ -9,6 +9,7 @@ use std::ops::Range;
 /// Defines an interface for a pattern-matching algorithm.
 pub trait Pattern {
     /// Returns the pattern.
+    #[allow(dead_code)]
     fn pattern(&self) -> &str;
 
     /// Searches `buffer` starting at `pos` for the first pattern match, returning a

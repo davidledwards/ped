@@ -228,21 +228,19 @@ fn prepare_colors(colors: &HashMap<String, u8>) -> IndexMap<String, u8> {
 
 /// Returns a vector of individual key names extracted from `keys`.
 ///
-/// A sequence beginning with `ESC` `<key>` is replaced with `M-<key>`.
+/// Sequences of `ESC` + `<key>` are replaced with `M-<key>`.
 fn pretty_keys(keys: &Vec<Key>) -> Vec<String> {
-    let keys = keys.iter().map(|key| key.to_string()).collect::<Vec<_>>();
-    match keys.get(0) {
-        Some(key) if key == "ESC" => {
-            if let Some(next_key) = keys.get(1) {
-                let mut alt_keys = vec![format!("M-{next_key}")];
-                for key in keys.iter().skip(2) {
-                    alt_keys.push(key.clone());
-                }
-                alt_keys
-            } else {
-                keys
+    let mut keys = keys.iter().map(|key| key.to_string()).collect::<Vec<_>>();
+    if keys.len() > 1 {
+        let mut i = keys.len() - 1;
+        while i > 0 {
+            if keys[i - 1] == "ESC" {
+                let key = format!("M-{}", keys[i]);
+                keys.drain(i - 1..=i);
+                keys.insert(i - 1, key);
             }
+            i -= 1;
         }
-        _ => keys,
     }
+    keys
 }

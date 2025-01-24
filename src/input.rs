@@ -65,9 +65,20 @@ pub struct InputEditor {
     hint: Option<String>,
 }
 
+/// A directive produced after processing a [`key`](Key).
 pub enum Directive {
+    /// Indicates that the key was recognized and that processing of keys should
+    /// _continue_.
     Continue,
+
+    /// Indicates that the key was _ignored_ but that processing of keys should
+    /// continue.
+    Ignore,
+
+    /// Indicates that the input has been _accepted_.
     Accept,
+
+    /// Indicates the the input has been _cancelled_.
     Cancel,
 }
 
@@ -133,6 +144,7 @@ impl InputEditor {
         self.input.iter().take(self.len).collect()
     }
 
+    /// Draws the prompt and input areas.
     pub fn draw(&mut self) {
         if let Some(_) = self.prompt {
             self.draw_prompt();
@@ -142,6 +154,11 @@ impl InputEditor {
         }
     }
 
+    /// Shows the cursor.
+    pub fn show_cursor(&mut self) {
+        self.canvas.set_cursor(Point::new(0, self.cursor));
+    }
+
     /// Resizes the input editor by reprobing the associated workspace.
     pub fn resize(&mut self) {
         self.set_sizes();
@@ -149,6 +166,20 @@ impl InputEditor {
         self.draw();
     }
 
+    /// Sets the `hint`.
+    ///
+    /// Hints are normally captured as a byproduct of interacting with the
+    /// [`completer`](Self::completer), but this method provides a means of finer
+    /// control.
+    pub fn set_hint(&mut self, hint: String) {
+        self.input.truncate(self.len);
+        self.input.extend(hint.chars());
+        self.hint = Some(hint);
+        self.draw_input();
+    }
+
+    /// Processes `key` and returns a directive that conveys the next step that
+    /// should be taken.
     pub fn process_key(&mut self, key: &Key) -> Directive {
         match *key {
             Key::Char(c) => {
@@ -243,7 +274,9 @@ impl InputEditor {
             CTRL_G => {
                 return Directive::Cancel;
             }
-            _ => (),
+            _ => {
+                return Directive::Ignore;
+            }
         }
         Directive::Continue
     }
@@ -394,6 +427,6 @@ impl InputEditor {
 
         // Send pending changes to canvas and set new cursor position.
         self.canvas.draw();
-        self.canvas.set_cursor(Point::new(0, self.cursor));
+        self.show_cursor();
     }
 }

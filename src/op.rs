@@ -11,12 +11,13 @@
 
 use crate::buffer::Buffer;
 use crate::config::ConfigurationRef;
-use crate::editor::{Align, Editor, EditorRef, ImmutableEditor};
+use crate::editor::{Align, Capture, Editor, EditorRef, ImmutableEditor};
 use crate::env::{Environment, Focus};
 use crate::error::{Error, Result};
 use crate::help;
 use crate::io;
-use crate::search;
+use crate::key::{Key, TAB};
+use crate::search::{self, Pattern};
 use crate::size::{Point, Size};
 use crate::source::Source;
 use crate::sys::{self, AsString};
@@ -831,12 +832,22 @@ fn cut(env: &mut Environment) -> Option<Action> {
 
 /// Operation: `search`
 fn search(env: &mut Environment) -> Option<Action> {
-    Search::question(env.get_active_editor().clone())
+    Search::question(env.get_active_editor().clone(), false, false)
+}
+
+/// Operation: `search-case`
+fn search_case(env: &mut Environment) -> Option<Action> {
+    Search::question(env.get_active_editor().clone(), false, true)
 }
 
 /// Operation: `search-regex`
 fn search_regex(env: &mut Environment) -> Option<Action> {
-    SearchRegex::question(env.get_active_editor().clone())
+    Search::question(env.get_active_editor().clone(), true, false)
+}
+
+/// Operation: `search-regex-case`
+fn search_regex_case(env: &mut Environment) -> Option<Action> {
+    Search::question(env.get_active_editor().clone(), true, true)
 }
 
 /// Operation: `search-next`
@@ -848,155 +859,131 @@ fn search_next(env: &mut Environment) -> Option<Action> {
         let cur_pos = editor.borrow().pos();
         let pos = if pos == cur_pos { cur_pos + 1 } else { cur_pos };
 
-        // Find next match.
+        // Find next match and highlight if found.
         let found = pattern.find(&editor.borrow().buffer(), pos);
-
         if let Some((start_pos, end_pos)) = found {
-            // Match found, so move to starting position and highlight match as soft
-            // selection.
             let mut editor = editor.borrow_mut();
             editor.move_to(start_pos, Align::Center);
             editor.clear_mark();
             editor.set_soft_mark_at(end_pos);
             editor.render();
-
-            // Keep most recent match state for possible continuation.
             env.set_last_match(start_pos, pattern);
         } else {
-            // Restore prior match state.
+            // Restore match state that was taken earlier.
             env.set_last_match(pos, pattern);
         }
         None
     } else {
-        // Since no prior match exists, act as if new search is started.
-        Search::question(editor)
+        // Since no prior match exists, act as if new term search is started.
+        Search::question(editor, false, false)
     }
 }
 
 struct Search {
     editor: EditorRef,
+    capture: Capture,
+    using_regex: bool,
+    case_strict: bool,
+    last_match: Option<(usize, Box<dyn Pattern>)>,
 }
 
 impl Search {
-    const PROMPT: &str = "search:";
-
-    fn question(editor: EditorRef) -> Option<Action> {
-        Action::as_question(Search { editor }.to_box())
+    fn question(editor: EditorRef, using_regex: bool, case_strict: bool) -> Option<Action> {
+        let capture = editor.borrow().capture();
+        Action::as_question(
+            Search {
+                editor,
+                capture,
+                using_regex,
+                case_strict,
+                last_match: None,
+            }
+            .to_box(),
+        )
     }
 
     fn to_box(self) -> Box<dyn Inquirer> {
         Box::new(self)
+    }
+
+    fn restore(&mut self) {
+        let mut editor = self.editor.borrow_mut();
+        editor.restore(&self.capture);
+        editor.render();
     }
 }
 
 impl Inquirer for Search {
     fn prompt(&self) -> String {
-        Self::PROMPT.to_string()
+        format!(
+            "{}search (case-{}sensitive):",
+            if self.using_regex { "regex " } else { "" },
+            if self.case_strict { "" } else { "in" }
+        )
     }
 
-    fn completer(&self) -> Box<dyn Completer> {
-        user::case_completer()
-    }
-
-    fn respond(&mut self, env: &mut Environment, value: Option<&str>) -> Option<Action> {
-        match value {
-            Some(value) if value.len() > 0 => {
-                // Construct pattern using term provided by user.
-                let case_strict = value.starts_with('!');
-                let pattern = search::using_term(value[1..].to_string(), case_strict);
-
-                // Find first match starting at current buffer position.
-                let found =
-                    pattern.find(&self.editor.borrow().buffer(), self.editor.borrow().pos());
-
-                if let Some((start_pos, end_pos)) = found {
-                    // Match found, so move to starting position and highlight match as
-                    // soft selection.
-                    let mut editor = self.editor.borrow_mut();
-                    editor.move_to(start_pos, Align::Center);
-                    editor.clear_mark();
-                    editor.set_soft_mark_at(end_pos);
-                    editor.render();
-
-                    // Keep most recent match for possible continuation.
-                    env.set_last_match(start_pos, pattern);
-                    None
-                } else {
-                    Action::as_echo(&format!("{}: not found", pattern.pattern()))
+    fn react(&mut self, _: &mut Environment, value: &str, key: &Key) -> Option<String> {
+        if value.len() > 0 {
+            let (pos, pattern) = match self.last_match.take() {
+                Some((pos, pattern)) if *key == TAB => {
+                    // Find next match using existing pattern when TAB is pressed,
+                    // noting that starting position must be incremented so as not to
+                    // match on same term.
+                    (pos + 1, pattern)
                 }
-            }
-            _ => None,
-        }
-    }
-}
-
-struct SearchRegex {
-    editor: EditorRef,
-}
-
-impl SearchRegex {
-    const PROMPT: &str = "regex search:";
-
-    fn question(editor: EditorRef) -> Option<Action> {
-        Action::as_question(SearchRegex { editor }.to_box())
-    }
-
-    fn to_box(self) -> Box<dyn Inquirer> {
-        Box::new(self)
-    }
-}
-
-impl Inquirer for SearchRegex {
-    fn prompt(&self) -> String {
-        Self::PROMPT.to_string()
-    }
-
-    fn completer(&self) -> Box<dyn Completer> {
-        user::case_completer()
-    }
-
-    fn respond(&mut self, env: &mut Environment, value: Option<&str>) -> Option<Action> {
-        match value {
-            Some(value) if value.len() > 0 => {
-                // Construct regex using pattern provided by user, but note that this
-                // process may fail due to an invalid expression.
-                let case_strict = value.starts_with('!');
-                let value = &value[1..];
-                let regex = RegexBuilder::new(value)
-                    .case_insensitive(!case_strict)
-                    .multi_line(true)
-                    .build();
-
-                match regex {
-                    Ok(regex) => {
-                        // Construct pattern using valid regex.
-                        let pattern = search::using_regex(regex);
-
-                        // Find first match starting at current buffer position.
-                        let found = pattern
-                            .find(&self.editor.borrow().buffer(), self.editor.borrow().pos());
-
-                        if let Some((start_pos, end_pos)) = found {
-                            // Match found, so move to starting position and highlight
-                            // match as soft selection.
-                            let mut editor = self.editor.borrow_mut();
-                            editor.move_to(start_pos, Align::Center);
-                            editor.clear_mark();
-                            editor.set_soft_mark_at(end_pos);
-                            editor.render();
-
-                            // Keep most recent match for possible continuation.
-                            env.set_last_match(start_pos, pattern);
-                            None
+                _ => {
+                    let pattern = if self.using_regex {
+                        // Compile regular expression, which might fail if malformed
+                        // or too large, the latter of which is unlikely in practice.
+                        let regex = RegexBuilder::new(value)
+                            .case_insensitive(!self.case_strict)
+                            .multi_line(true)
+                            .build();
+                        if let Ok(regex) = regex {
+                            search::using_regex(regex)
                         } else {
-                            Action::as_echo(&format!("{}: not found", pattern.pattern()))
+                            return Some(" (no match)".to_string());
                         }
-                    }
-                    Err(_) => Action::as_echo(&format!("{value}: regex invalid or too large")),
+                    } else {
+                        search::using_term(value.to_string(), self.case_strict)
+                    };
+                    (self.capture.pos, pattern)
+                }
+            };
+
+            // Find next match and highlight if found.
+            let found = pattern.find(&self.editor.borrow().buffer(), pos);
+            if let Some((start_pos, end_pos)) = found {
+                let mut editor = self.editor.borrow_mut();
+                editor.move_to(start_pos, Align::Center);
+                editor.clear_mark();
+                editor.set_soft_mark_at(end_pos);
+                editor.render();
+                self.last_match = Some((start_pos, pattern));
+                None
+            } else {
+                Some(" (no match)".to_string())
+            }
+        } else {
+            self.restore();
+            self.last_match = None;
+            None
+        }
+    }
+
+    fn respond(&mut self, env: &mut Environment, value: Option<&str>) -> Option<Action> {
+        match value {
+            Some(value) if value.len() > 0 => {
+                // Keep most recent match for possible continuation.
+                if let Some((pos, pattern)) = self.last_match.take() {
+                    env.set_last_match(pos, pattern);
                 }
             }
-            _ => None,
+            _ => {
+                self.restore();
+            }
         }
+        None
     }
 }
 
@@ -1925,7 +1912,7 @@ fn base_dir(editor: &EditorRef) -> PathBuf {
 }
 
 /// Predefined mapping of editing operations to editing functions.
-pub const OP_MAPPINGS: [(&'static str, OpFn); 74] = [
+pub const OP_MAPPINGS: [(&'static str, OpFn); 76] = [
     // --- exit and cancellation ---
     ("quit", quit),
     // --- help ---
@@ -1981,7 +1968,9 @@ pub const OP_MAPPINGS: [(&'static str, OpFn); 74] = [
     ("cut", cut),
     // --- search ---
     ("search", search),
+    ("search-case", search_case),
     ("search-regex", search_regex),
+    ("search-regex-case", search_regex_case),
     ("search-next", search_next),
     // --- file handling ---
     ("open-file", open_file),
