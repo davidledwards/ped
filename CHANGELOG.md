@@ -2,6 +2,20 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
+## [0.14.0](https://github.com/davidledwards/ped/tree/v0.15.0) - `2025-01-24`
+
+### Added
+
+- Interactive rendering of editor canvas when entering line numbers in `goto-line`
+
+### Changed
+
+- Name of default syntax configuration from `Default` to `Text`
+
+### Fixed
+
+- Missing call to canvas rendering in `goto-line`
+
 ## [0.14.0](https://github.com/davidledwards/ped/tree/v0.14.0) - `2025-01-24`
 
 ### Added
@@ -11,7 +25,7 @@ This file contains relevant information for each release. Please refer to the co
 
 ### Changed
 
-- Case-sensitivity of searches is now bound to distinct key sequences
+- Case-sensitivity of search is now bound to distinct key sequences
 
   - `C-\`: normal search (case-insensitive)
   - `M-C-\`: normal search (case-sensitive)

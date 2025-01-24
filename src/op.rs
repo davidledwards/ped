@@ -604,17 +604,25 @@ fn goto_line(env: &mut Environment) -> Option<Action> {
 /// An inquirer that orchestrates going to a specific line in an editor.
 struct GotoLine {
     editor: EditorRef,
+    capture: Capture,
 }
 
 impl GotoLine {
     const PROMPT: &str = "goto line:";
 
     fn question(editor: EditorRef) -> Option<Action> {
-        Action::as_question(GotoLine { editor }.to_box())
+        let capture = editor.borrow().capture();
+        Action::as_question(GotoLine { editor, capture }.to_box())
     }
 
     fn to_box(self) -> Box<dyn Inquirer> {
         Box::new(self)
+    }
+
+    fn restore(&mut self) {
+        let mut editor = self.editor.borrow_mut();
+        editor.restore(&self.capture);
+        editor.render();
     }
 }
 
@@ -627,20 +635,29 @@ impl Inquirer for GotoLine {
         user::number_completer()
     }
 
-    fn respond(&mut self, _: &mut Environment, value: Option<&str>) -> Option<Action> {
-        if let Some(s) = value {
-            if let Ok(line) = s.parse::<u32>() {
-                let line = if line > 0 { line - 1 } else { line };
+    fn react(&mut self, _: &mut Environment, value: &str, _: &Key) -> Option<String> {
+        let value = value.trim();
+        if value.len() > 0 {
+            if let Ok(line) = value.trim().parse::<u32>() {
+                let line = if line > 0 { line - 1 } else { 0 };
                 let mut editor = self.editor.borrow_mut();
                 editor.move_line(line, Align::Center);
                 editor.render();
                 None
             } else {
-                Action::as_echo(&format!("{s}: invalid line number"))
+                Some(" (invalid line number)".to_string())
             }
         } else {
+            self.restore();
             None
         }
+    }
+
+    fn respond(&mut self, _: &mut Environment, value: Option<&str>) -> Option<Action> {
+        if value.is_none() {
+            self.restore();
+        }
+        None
     }
 }
 
