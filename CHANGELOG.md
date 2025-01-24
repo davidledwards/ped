@@ -2,6 +2,23 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
+## [0.14.0](https://github.com/davidledwards/ped/tree/v0.14.0) - `2025-01-??`
+
+### Added
+
+- Incremental search for normal and regular expression vaiants, where pressing `TAB` moves to the next match
+
+### Changed
+
+- Case-sensitivity of searches is now bound to distinct key sequences
+
+  - `C-\`: normal search (case-insensitive)
+  - `M-C-\`: normal search (case-sensitive)
+  - `M-\`: regular expression search (case-insensitive)
+  - `M-M-\`: regular expression search (case-sensitive)
+
+- Default background color of selected text is now `88` to improve contrast
+
 ## [0.13.1](https://github.com/davidledwards/ped/tree/v0.13.1) - `2025-01-20`
 
 ### Added

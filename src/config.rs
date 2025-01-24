@@ -175,7 +175,7 @@ impl Default for Settings {
 impl Theme {
     const TEXT_FG: u8 = 252;
     const TEXT_BG: u8 = 233;
-    const SELECT_BG: u8 = 237;
+    const SELECT_BG: u8 = 88;
     const SPOTLIGHT_BG: u8 = 234;
     const WHITSPACE_FG: u8 = 243;
     const ACCENT_FG: u8 = 180;
