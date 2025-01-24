@@ -4,9 +4,9 @@ usage: ped OPTIONS [file...]
   The pedestrian text editor.
 
   OPTIONS
-    --spotlight        : highlight cursor row
-    --lines            : show line numbers in left margin
-    --eol              : make \n visible with special character
+    --[no-]spotlight   : [do not] highlight cursor row
+    --[no-]lines       : [do not] show line numbers in left margin
+    --[no-]eol         : [do not] make \n visible with special character
     --tab-hard         : insert tabs as \t
     --tab-soft         : insert tabs as spaces (default)
     --tab-size, -t N   : tab stop size when --tab-soft (default: 4)

@@ -96,7 +96,6 @@ The following notation is used below when refering to keys.
 
 - `C-<key>` means `CONTROL` + `<key>`
 - `S-<key>` means `SHIFT` + `<key>`
-- `S-C-<key>` means `SHIFT` + `CONTROL` + `<key>`
 - `M-<key>` means `ESCAPE` (or `META`) + `<key>`
 
 ### General
@@ -150,11 +149,13 @@ The following notation is used below when refering to keys.
 
 ### Search
 
-| Key   | Command                         |
-| ----- | ------------------------------- |
-| `C-\` | Search using string             |
-| `M-\` | Search using regular expression |
-| `C-]` | Search for next match           |
+| Key     | Command                                            |
+| ------- | -------------------------------------------------- |
+| `C-\`   | Search using term (case-insensitive)               |
+| `M-C-\` | Search using term (case-sensitive)                 |
+| `M-\`   | Search using regular expression (case-insensitive) |
+| `M-M-\` | Search using regular expression (case-sensitive)   |
+| `C-]`   | Search for next match                              |
 
 ### Files
 

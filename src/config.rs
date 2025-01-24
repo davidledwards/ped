@@ -163,8 +163,8 @@ impl Settings {
 impl Default for Settings {
     fn default() -> Settings {
         Settings {
-            spotlight: false,
-            lines: false,
+            spotlight: true,
+            lines: true,
             eol: false,
             tab_hard: false,
             tab_size: 4,

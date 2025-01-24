@@ -7,6 +7,7 @@ This file contains relevant information for each release. Please refer to the co
 ### Added
 
 - Incremental search for normal and regular expression vaiants, where pressing `TAB` moves to the next match
+- CLI options `--no-spotlight`, `--no-lines`, and `--no-eol` to disable features
 
 ### Changed
 
@@ -18,6 +19,7 @@ This file contains relevant information for each release. Please refer to the co
   - `M-M-\`: regular expression search (case-sensitive)
 
 - Default background color of selected text is now `88` to improve contrast
+- `--spotlight` and `--lines` are now enabled by default
 
 ## [0.13.1](https://github.com/davidledwards/ped/tree/v0.13.1) - `2025-01-20`
 

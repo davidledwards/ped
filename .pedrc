@@ -5,12 +5,12 @@
 #
 [settings]
 # Enables highlighting of the cursor row.
-# Default = false
-spotlight = true
+# Default = true
+spotlight = false
 
 # Shows line numbers in the left margin.
-# Default = false
-lines = true
+# Default = true
+lines = false
 
 # Makes \n characters visible using a special character.
 # Default = false

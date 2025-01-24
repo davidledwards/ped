@@ -1,7 +1,6 @@
 [Notation]
   C-<key>    is     CONTROL + <key>
   S-<key>    is     SHIFT + <key>
-  S-C-<key>  is     SHIFT + CONTROL + <key>
   M-<key>    is     ESCAPE (or META) + <key>
 
 [General]
@@ -45,8 +44,10 @@
   navigating will select a region of text.
 
 [Search]
-  C-\               Search using string
-  M-\               Search using regular expression
+  C-\               Search using term (case-insensitive)
+  M-C-\             Search using term (case-sensitive)
+  M-\               Search using regular expression (case-insensitive)
+  M-M-\             Search using regular expression (case-sensitive)
   C-]               Search for next match
 
 [Files]
