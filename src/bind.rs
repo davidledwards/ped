@@ -67,9 +67,25 @@ impl Bindings {
     }
 
     /// Converts the key sequence `key_seq` to a vector of [`Key']s.
+    ///
+    /// If `strict` is `true`, then the presence of a restricted key sequence will
+    /// result in `Err`.
     fn to_keys(&self, key_seq: &str, strict: bool) -> Result<Vec<Key>> {
-        let keys = key_seq
-            .split(':')
+        // Preprocess key sequence by expanding occurrences of `M-<key>` into
+        // `ESC` + `<key>`.
+        let mut keys = key_seq.split(":").collect::<Vec<_>>();
+        let mut i = 0;
+        while i < keys.len() {
+            if let Some(key) = keys[i].strip_prefix("M-") {
+                keys[i] = key;
+                keys.insert(i, "ESC");
+            }
+            i += 1;
+        }
+
+        // Check validity of key names and produce vector of keys.
+        let keys = keys
+            .iter()
             .map(|key| {
                 self.key_map
                     .get(key)
@@ -86,6 +102,7 @@ impl Bindings {
             })
             .collect::<Result<Vec<Key>>>();
 
+        // Postprocess to ensure vector of keys is not restricted.
         if strict {
             keys.and_then(|keys| {
                 if self.restricted_keys.contains(&keys) {

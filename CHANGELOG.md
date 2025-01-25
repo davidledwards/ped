@@ -2,7 +2,13 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
-## [0.14.0](https://github.com/davidledwards/ped/tree/v0.15.0) - `2025-01-24`
+## [0.16.0](https://github.com/davidledwards/ped/tree/v0.16.0) - `2025-01-25`
+
+### Added
+
+- Support for `M-` as shorthand for `ESC` when binding keys, i.e. `M-x` is equivalent to `ESC:x`
+
+## [0.15.0](https://github.com/davidledwards/ped/tree/v0.15.0) - `2025-01-24`
 
 ### Added
 

@@ -107,4 +107,9 @@ echo-fg = "funky-red"
 "C-^" = "set-mark"
 
 # A binding to a sequence of keys.
-"ESC:x:y:z" = "move-top"
+"M-x:y:z" = "move-top"
+
+# Note that "M-<key>" may be used as shorthand for "ESC:<key>". Both of the
+# following bindings are identical.
+"M-x:e" = "move-end"
+"ESC:x:e" = "move-end"

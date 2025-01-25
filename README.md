@@ -246,7 +246,8 @@ As I was experimenting with different color combinations, I decided to write a C
 `ped` currently has a few notable limitations or deficiencies that may be addressed in future versions.
 
 - An auto-save feature has not been implemented, so remember to save frequently.
-- TAB characters `\t` are not indented as one might expect, but rather as a special character `→`.
+- TAB characters `\t` are not indented as one might expect, but rather shown as the special character `→`.
+- Control characters other than `\t` and `\n` are shown as `¿`, though one can place the cursor under such characters and press `C-t` to see the Unicode code point.
 - A target binary does not exist for Windows.
 
 ## Release
