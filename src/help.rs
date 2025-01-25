@@ -7,7 +7,7 @@
 use crate::buffer::Buffer;
 use crate::config::ConfigurationRef;
 use crate::editor::{Editor, EditorRef};
-use crate::key::{Key, KEY_MAPPINGS};
+use crate::key::{self, Key, KEY_MAPPINGS};
 use crate::op::OP_MAPPINGS;
 use crate::source::Source;
 use crate::{BUILD_DATE, BUILD_HASH, PACKAGE_NAME, PACKAGE_VERSION};
@@ -168,7 +168,7 @@ fn bindings_buffer(bindings: &HashMap<Vec<Key>, String>) -> Buffer {
 fn prepare_bindings(bindings: &HashMap<Vec<Key>, String>) -> BTreeMap<String, String> {
     bindings
         .iter()
-        .map(|(keys, op)| (pretty_keys(keys).join(" "), op.to_string()))
+        .map(|(keys, op)| (key::pretty(keys), op.to_string()))
         .collect::<BTreeMap<_, _>>()
 }
 
@@ -224,23 +224,4 @@ fn prepare_colors(colors: &HashMap<String, u8>) -> IndexMap<String, u8> {
         .iter()
         .map(|(name, color)| (name.to_string(), **color))
         .collect::<IndexMap<_, _>>()
-}
-
-/// Returns a vector of individual key names extracted from `keys`.
-///
-/// Sequences of `ESC` + `<key>` are replaced with `M-<key>`.
-fn pretty_keys(keys: &Vec<Key>) -> Vec<String> {
-    let mut keys = keys.iter().map(|key| key.to_string()).collect::<Vec<_>>();
-    if keys.len() > 1 {
-        let mut i = keys.len() - 1;
-        while i > 0 {
-            if keys[i - 1] == "ESC" {
-                let key = format!("M-{}", keys[i]);
-                keys.drain(i - 1..=i);
-                keys.insert(i - 1, key);
-            }
-            i -= 1;
-        }
-    }
-    keys
 }

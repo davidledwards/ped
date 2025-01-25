@@ -476,6 +476,31 @@ fn map_mods(key_mod: u8) -> (Shift, Ctrl) {
         _ => (Shift::Off, Ctrl::Off),
     }
 }
+
+/// Returns a string constructed by joining the result of [`pretty_keys`] with the
+/// space character.
+pub fn pretty(keys: &Vec<Key>) -> String {
+    pretty_keys(keys).join(" ")
+}
+
+/// Returns a vector of key names extracted from `keys`, wheressequences of
+/// `ESC` + `<key>` are replaced with `M-<key>`.
+pub fn pretty_keys(keys: &Vec<Key>) -> Vec<String> {
+    let mut keys = keys.iter().map(|key| key.to_string()).collect::<Vec<_>>();
+    if keys.len() > 1 {
+        let mut i = keys.len() - 1;
+        while i > 0 {
+            if keys[i - 1] == "ESC" {
+                let key = format!("M-{}", keys[i]);
+                keys.drain(i - 1..=i);
+                keys.insert(i - 1, key);
+            }
+            i -= 1;
+        }
+    }
+    keys
+}
+
 /// Predefined mapping of key names to [`Key`]s.
 ///
 /// A few special keys are bound to multiple names as a convenience.

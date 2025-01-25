@@ -13,7 +13,7 @@ use crate::editor::{Align, ImmutableEditor};
 use crate::env::{Environment, Focus};
 use crate::error::Result;
 use crate::input::{Directive, InputEditor};
-use crate::key::{Key, Keyboard, Shift, CTRL_G};
+use crate::key::{self, Key, Keyboard, Shift, CTRL_G};
 use crate::op::{self, Action};
 use crate::size::Point;
 use crate::sys::{self, AsString};
@@ -21,7 +21,6 @@ use crate::term;
 use crate::user::Inquirer;
 use crate::workspace::{Placement, Workspace};
 use crate::{PACKAGE_NAME, PACKAGE_VERSION};
-use std::fmt;
 use std::time::Instant;
 
 /// The primary control point for coordinating user interaction and editing operations.
@@ -57,21 +56,6 @@ pub struct Controller {
 enum Step {
     Continue,
     Quit,
-}
-
-/// Wrapper used only for formatting [`Key`] sequences.
-struct KeySeq<'a>(&'a Vec<Key>);
-
-impl fmt::Display for KeySeq<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let key_seq = self
-            .0
-            .iter()
-            .map(|key| key.to_string())
-            .collect::<Vec<_>>()
-            .join(" ");
-        write!(f, "{key_seq}")
-    }
 }
 
 impl Controller {
@@ -306,7 +290,7 @@ impl Controller {
     }
 
     fn show_keys(&mut self) {
-        let text = KeySeq(&self.key_seq).to_string();
+        let text = key::pretty(&self.key_seq);
         self.set_echo(text.as_str());
     }
 
@@ -314,7 +298,7 @@ impl Controller {
         let key_seq = &self.key_seq;
         let text = format!(
             "{}: undefined {}",
-            KeySeq(&key_seq),
+            key::pretty(&key_seq),
             if key_seq.len() == 1 {
                 "key"
             } else {
