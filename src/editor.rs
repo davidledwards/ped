@@ -711,14 +711,12 @@ impl Draw {
 
     /// Formats `c` using a color depending on the current rendering context.
     fn as_text(&self, c: char, render: &Render) -> Cell {
-        let fg = if let Some(fg) = render.syntax_cursor.color() {
+        let fg = if (c == '\n' && self.config.settings.eol) || c.is_ascii_control() {
+            self.config.theme.whitespace_fg
+        } else if let Some(fg) = render.syntax_cursor.color() {
             fg
         } else {
-            if (c == '\n' && self.config.settings.eol) || c.is_ascii_control() {
-                self.config.theme.whitespace_fg
-            } else {
-                self.config.theme.text_fg
-            }
+            self.config.theme.text_fg
         };
 
         let bg = if self.select_span.contains(&render.pos) {
