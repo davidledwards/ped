@@ -19,6 +19,8 @@ pub struct Banner {
     dirty_area: Option<u32>,
     source_area: Option<Range<u32>>,
     loc_area: Option<Range<u32>>,
+    active_bg: u8,
+    inactive_bg: u8,
     banner_color: Color,
     accent_color: Color,
     dirty: bool,
@@ -73,25 +75,27 @@ impl Banner {
         // Determine which areas of banner will be shown based on available number of
         // columns.
         let (dirty_area, source_area, loc_area) = Self::calc_areas(cols);
-        let banner_color = Color::new(config.theme.banner_fg, config.theme.banner_bg);
-        let accent_color = Color::new(config.theme.accent_fg, config.theme.banner_bg);
+        let active_bg = config.theme.active_bg;
+        let inactive_bg = config.theme.inactive_bg;
+        let banner_color = Color::new(config.theme.banner_fg, inactive_bg);
+        let accent_color = Color::new(config.theme.accent_fg, inactive_bg);
 
-        // Initialize entire canvas with blanks.
-        let mut canvas = Canvas::new(origin, Size::new(1, cols));
-        canvas.fill_row(0, ' ', banner_color);
-
-        Banner {
-            canvas,
+        let mut this = Banner {
+            canvas: Canvas::new(origin, Size::new(1, cols)),
             dirty_area,
             source_area,
             loc_area,
+            active_bg,
+            inactive_bg,
             banner_color,
             accent_color,
             dirty: false,
             source: Source::Null,
             syntax: String::new(),
             loc: Point::ORIGIN,
-        }
+        };
+        this.clear();
+        this
     }
 
     pub fn none() -> Banner {
@@ -100,6 +104,8 @@ impl Banner {
             dirty_area: None,
             source_area: None,
             loc_area: None,
+            active_bg: 0,
+            inactive_bg: 0,
             banner_color: Color::ZERO,
             accent_color: Color::ZERO,
             dirty: false,
@@ -114,8 +120,30 @@ impl Banner {
         Rc::new(RefCell::new(self))
     }
 
+    /// Draws the banner bar by synchronizing pending changes.
     pub fn draw(&mut self) {
         self.canvas.draw();
+    }
+
+    /// Redraws the entire banner regardless of pending changes.
+    pub fn redraw(&mut self) {
+        self.clear();
+        self.draw_dirty();
+        self.draw_source();
+        self.draw_location();
+        self.canvas.draw();
+    }
+
+    /// Changes the coloring of the banner bar based on its focus setting `yes`.
+    pub fn focus(&mut self, yes: bool) {
+        let bg = if yes {
+            self.active_bg
+        } else {
+            self.inactive_bg
+        };
+        self.banner_color.bg = bg;
+        self.accent_color.bg = bg;
+        self.redraw();
     }
 
     pub fn set_dirty(&mut self, dirty: bool) -> &mut Banner {
@@ -142,6 +170,10 @@ impl Banner {
         self.loc = loc;
         self.draw_location();
         self
+    }
+
+    fn clear(&mut self) {
+        self.canvas.fill_row(0, ' ', self.banner_color);
     }
 
     fn draw_dirty(&mut self) {

@@ -55,10 +55,10 @@ tab-size = 8
 # `ped --colors`.
 #
 [colors]
-"funky-red" = 196
-"charcoal" = 232
-"light-gray" = 234
-"medium-gray" = 237
+funky-red = 196
+charcoal = 232
+light-gray = 234
+medium-gray = 237
 
 # This section allows the configuration of alternative colors.
 #
@@ -74,7 +74,8 @@ tab-size = 8
 #   echo-fg
 #   prompt-fg
 #   banner-fg
-#   banner-bg
+#   active-bg
+#   inactive-bg
 #   margin-fg
 #   margin-bg
 #

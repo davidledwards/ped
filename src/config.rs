@@ -70,7 +70,8 @@ pub struct Theme {
     pub echo_fg: u8,
     pub prompt_fg: u8,
     pub banner_fg: u8,
-    pub banner_bg: u8,
+    pub active_bg: u8,
+    pub inactive_bg: u8,
     pub margin_fg: u8,
     pub margin_bg: u8,
 }
@@ -128,8 +129,11 @@ struct ExternalTheme {
     #[serde(rename = "banner-fg")]
     banner_fg: Option<ColorValue>,
 
-    #[serde(rename = "banner-bg")]
-    banner_bg: Option<ColorValue>,
+    #[serde(rename = "active-bg")]
+    active_bg: Option<ColorValue>,
+
+    #[serde(rename = "inactive-bg")]
+    inactive_bg: Option<ColorValue>,
 
     #[serde(rename = "margin-fg")]
     margin_fg: Option<ColorValue>,
@@ -182,7 +186,8 @@ impl Theme {
     const ECHO_FG: u8 = 216;
     const PROMPT_FG: u8 = 102;
     const BANNER_FG: u8 = 254;
-    const BANNER_BG: u8 = 60;
+    const ACTIVE_BG: u8 = 60;
+    const INACTIVE_BG: u8 = 237;
     const MARGIN_FG: u8 = 61;
     const MARGIN_BG: u8 = 234;
 
@@ -210,7 +215,8 @@ impl Theme {
             self.echo_fg = resolve(self.echo_fg, &ext.echo_fg, colors)?;
             self.prompt_fg = resolve(self.prompt_fg, &ext.prompt_fg, colors)?;
             self.banner_fg = resolve(self.banner_fg, &ext.banner_fg, colors)?;
-            self.banner_bg = resolve(self.banner_bg, &ext.banner_bg, colors)?;
+            self.active_bg = resolve(self.active_bg, &ext.active_bg, colors)?;
+            self.inactive_bg = resolve(self.inactive_bg, &ext.inactive_bg, colors)?;
             self.margin_fg = resolve(self.margin_fg, &ext.margin_fg, colors)?;
             self.margin_bg = resolve(self.margin_bg, &ext.margin_bg, colors)?;
         }
@@ -230,7 +236,8 @@ impl Default for Theme {
             echo_fg: Self::ECHO_FG,
             prompt_fg: Self::PROMPT_FG,
             banner_fg: Self::BANNER_FG,
-            banner_bg: Self::BANNER_BG,
+            active_bg: Self::ACTIVE_BG,
+            inactive_bg: Self::INACTIVE_BG,
             margin_fg: Self::MARGIN_FG,
             margin_bg: Self::MARGIN_BG,
         }

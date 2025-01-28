@@ -7,7 +7,7 @@
 use crate::editor::{Align, Editor, EditorRef, ImmutableEditor};
 use crate::search::Pattern;
 use crate::source::Source;
-use crate::window::WindowRef;
+use crate::window::{BannerRef, WindowRef};
 use crate::workspace::{Placement, Workspace, WorkspaceRef};
 use std::cell::{Ref, RefMut};
 use std::collections::{BTreeMap, HashMap};
@@ -110,6 +110,7 @@ impl Environment {
 
     /// Sets the _active_ view based on `focus` and returns the view id.
     pub fn set_active(&mut self, focus: Focus) -> u32 {
+        self.unfocus(self.active_view_id);
         self.active_view_id = match focus {
             Focus::Top => self.workspace().top_view().id,
             Focus::Bottom => self.workspace().bottom_view().id,
@@ -123,6 +124,7 @@ impl Environment {
                 }
             }
         };
+        self.focus(self.active_view_id);
         self.active_view_id
     }
 
@@ -233,6 +235,7 @@ impl Environment {
         next_id.map(|next_id| {
             self.remove_view(view_id);
             self.reattach_views();
+            self.focus(next_id);
             self.active_view_id = next_id;
             self.active_view_id
         })
@@ -279,10 +282,12 @@ impl Environment {
         }
     }
 
+    /// Sets the value of the clipboard to `text`.
     pub fn set_clipboard(&mut self, text: Vec<char>) {
         self.clipboard = Some(text);
     }
 
+    /// Returns the value of the clipboard.
     pub fn get_clipboard(&self) -> Option<&Vec<char>> {
         self.clipboard.as_ref()
     }
@@ -295,9 +300,9 @@ impl Environment {
         self.last_match.take()
     }
 
+    /// Resizes the workspace, which might remove a subset of views if resizing
+    /// violates the minimum size constraint for windows.
     pub fn resize(&mut self) {
-        // Resize workspace, which might remove subset of views if resizing would
-        // violate minimum size constraints.
         let view_ids = self.workspace_mut().resize(self.active_view_id);
         self.workspace_mut().clear_shared();
 
@@ -390,6 +395,18 @@ impl Environment {
 
     fn window_of(&self, view_id: u32) -> WindowRef {
         self.workspace().get_view(view_id).window.clone()
+    }
+
+    fn banner_of(&self, view_id: u32) -> BannerRef {
+        self.window_of(view_id).borrow().banner().clone()
+    }
+
+    fn focus(&self, view_id: u32) {
+        self.banner_of(view_id).borrow_mut().focus(true);
+    }
+
+    fn unfocus(&self, view_id: u32) {
+        self.banner_of(view_id).borrow_mut().focus(false);
     }
 
     fn next_editor_id(&mut self) -> u32 {

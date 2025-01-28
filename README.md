@@ -29,10 +29,10 @@ brew install ped
 
 Releases can be downloaded directly from [GitHub](https://github.com/davidledwards/ped/releases).
 
-Alternatively, using the [GitHub CLI](https://cli.github.com/), releases can also be downloaded from the command line. For example, to download version `0.15.0`, run the following command.
+Alternatively, using the [GitHub CLI](https://cli.github.com/), releases can also be downloaded from the command line. For example, to download version `0.17.0`, run the following command.
 
 ```shell
-gh release download --repo https://github.com/davidledwards/ped v0.15.0
+gh release download --repo https://github.com/davidledwards/ped v0.17.0
 ```
 
 ## Usage

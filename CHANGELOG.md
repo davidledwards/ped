@@ -2,6 +2,17 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
+## [0.17.0](https://github.com/davidledwards/ped/tree/v0.17.0) - `2025-01-28`
+
+### Added
+
+- Background color of banner bar changes based on _active_ or _inactive_
+- Configuration colors `active-bg` and `inactive-bg` applicable to banner bar
+
+### Changed
+
+- Replaced configuration color `banner-bg` with `active-bg`
+
 ## [0.16.0](https://github.com/davidledwards/ped/tree/v0.16.0) - `2025-01-25`
 
 ### Added
