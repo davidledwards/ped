@@ -26,7 +26,7 @@ function build() {
 }
 
 echo "detecting version"
-__VERSION=$(cargo run --release -- --version | cut -d " " -f 2)
+__VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r ".packages[0].version")
 
 __TARGETS=("aarch64" "x86_64")
 __FILES=()
