@@ -57,7 +57,7 @@ pub struct Settings {
     pub lines: bool,
     pub eol: bool,
     pub tab_hard: bool,
-    pub tab_size: usize,
+    pub tab_size: u32,
 }
 
 pub struct Theme {
@@ -96,7 +96,7 @@ struct ExternalSettings {
     tab_hard: Option<bool>,
 
     #[serde(rename = "tab-size")]
-    tab_size: Option<usize>,
+    tab_size: Option<u32>,
 }
 
 #[derive(Deserialize)]

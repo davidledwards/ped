@@ -11,7 +11,7 @@ pub struct Options {
     pub lines: Option<bool>,
     pub eol: Option<bool>,
     pub tab_hard: Option<bool>,
-    pub tab_size: Option<usize>,
+    pub tab_size: Option<u32>,
     pub keys: bool,
     pub ops: bool,
     pub bindings: bool,

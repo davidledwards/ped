@@ -26,7 +26,6 @@ pub struct Environment {
     active_view_id: u32,
     clipboard: Option<Vec<char>>,
     last_match: Option<(usize, Box<dyn Pattern>)>,
-    tab_hard: bool,
 }
 
 pub enum Focus {
@@ -73,9 +72,6 @@ impl Environment {
         let mut view_map = ViewMap::new();
         view_map.insert(active_view_id, editor_id);
 
-        // Initialize other behaviors.
-        let tab_hard = workspace.borrow().config().settings.tab_hard;
-
         Environment {
             workspace,
             editor_map,
@@ -84,7 +80,6 @@ impl Environment {
             active_view_id,
             clipboard: None,
             last_match: None,
-            tab_hard,
         }
     }
 
@@ -320,15 +315,6 @@ impl Environment {
 
     pub fn view_map(&self) -> &ViewMap {
         &self.view_map
-    }
-
-    pub fn is_tab_hard(&self) -> bool {
-        self.tab_hard
-    }
-
-    pub fn toggle_tab_hard(&mut self) -> bool {
-        self.tab_hard = !self.tab_hard;
-        self.tab_hard
     }
 
     /// Attaches the window of `view_id` to the editor referenced by `editor_id`, and

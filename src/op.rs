@@ -691,13 +691,7 @@ fn insert_tab(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
     if let Some(editor) = editor.modify() {
         editor.clear_mark();
-        if env.is_tab_hard() {
-            editor.insert_char('\t');
-        } else {
-            let tab_size = env.workspace().config().settings.tab_size;
-            let n = tab_size - (editor.location().col as usize % tab_size);
-            editor.insert_str(&" ".repeat(n));
-        }
+        editor.insert_tab();
         editor.render();
         None
     } else {
@@ -1647,7 +1641,7 @@ fn describe_editor(env: &mut Environment) -> Option<Action> {
 
 /// Operation: `tab-mode`
 fn tab_mode(env: &mut Environment) -> Option<Action> {
-    if env.toggle_tab_hard() {
+    if env.get_active_editor().borrow_mut().toggle_tab() {
         Action::as_echo("hard tabs enabled")
     } else {
         Action::as_echo("soft tabs enabled")

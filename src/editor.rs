@@ -85,6 +85,10 @@ pub trait ImmutableEditor {
     /// Returns the buffer position corresponding to the [`cursor`](Self::cursor).
     fn pos(&self) -> usize;
 
+    /// Toggles the tab mode between _hard_ and _soft_, returning `true` if the
+    /// resulting mode is _hard_ and `false` if _soft_.
+    fn toggle_tab(&mut self) -> bool;
+
     /// Sets the cursor location and corresponding buffer position to `cursor`, though
     /// the final cursor location is constrained by end-of-line and end-of-buffer
     /// boundaries.
@@ -273,6 +277,9 @@ pub trait MutableEditor: ImmutableEditor {
     /// Inserts the string slice `str` at the current buffer position.
     fn insert_str(&mut self, text: &str);
 
+    /// Inserts the `TAB` character.
+    fn insert_tab(&mut self);
+
     /// Inserts the array of `text` at the current buffer position.
     fn insert(&mut self, text: &[char]);
 
@@ -381,6 +388,12 @@ struct EditorKernel {
 
     /// Number of columns allocated to the margin for displaying line numbers.
     margin_cols: u32,
+
+    /// Indicates whether _hard_ or _soft_ tabs are inserted.
+    tab_hard: bool,
+
+    /// The width of tab stops in number of columns.
+    tab_cols: u32,
 }
 
 /// The distinct types of changes to a buffer recorded in the _undo_ and _redo_ stacks.
@@ -905,6 +918,11 @@ impl ImmutableEditor for Editor {
     }
 
     #[inline]
+    fn toggle_tab(&mut self) -> bool {
+        self.kernel.toggle_tab()
+    }
+
+    #[inline]
     fn set_focus(&mut self, cursor: Point) {
         self.kernel.set_focus(cursor);
     }
@@ -1125,6 +1143,11 @@ impl ImmutableEditor for EditorKernel {
 
     fn pos(&self) -> usize {
         self.cur_pos
+    }
+
+    fn toggle_tab(&mut self) -> bool {
+        self.tab_hard = !self.tab_hard;
+        self.tab_hard
     }
 
     fn set_focus(&mut self, cursor: Point) {
@@ -1561,6 +1584,15 @@ impl MutableEditor for EditorKernel {
         self.insert_normal(&text.chars().collect::<Vec<_>>())
     }
 
+    fn insert_tab(&mut self) {
+        if self.tab_hard {
+            self.insert_char('\t');
+        } else {
+            let n = self.tab_cols - (self.location().col % self.tab_cols);
+            self.insert_str(&" ".repeat(n as usize));
+        }
+    }
+
     fn insert(&mut self, text: &[char]) {
         self.insert_normal(text);
     }
@@ -1650,6 +1682,10 @@ impl EditorKernel {
         let syntax_cursor = tokenizer.tokenize(&buffer.borrow());
         let tokenize_cost = timer.elapsed().as_millis();
 
+        // Additional settings.
+        let tab_hard = config.settings.tab_hard;
+        let tab_cols = config.settings.tab_size as u32;
+
         EditorKernel {
             config,
             source,
@@ -1673,6 +1709,8 @@ impl EditorKernel {
             rows: 0,
             cols: 0,
             margin_cols: 0,
+            tab_hard,
+            tab_cols,
         }
     }
 
