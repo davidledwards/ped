@@ -92,7 +92,7 @@ impl Colors {
     }
 
     /// Predefined mapping of ANSI standard and extended colors.
-    const COLOR_MAPPINGS: [(&str, u8); 29] = [
+    const COLOR_MAPPINGS: [(&str, u8); 33] = [
         // --- ANSI colors ---
         ("black", 0),
         ("red", 1),
@@ -112,8 +112,11 @@ impl Colors {
         ("bright-white", 15),
         // --- custom colors ---
         ("pale-green", 30),
+        ("charcoal-mist", 60),
+        ("slate-frost", 61),
         ("deep-sapphire", 69),
         ("verdant-spring", 79),
+        ("crimson-ember", 88),
         ("sage-green", 102),
         ("misty-aqua", 109),
         ("crystal-cyan", 111),
@@ -122,6 +125,7 @@ impl Colors {
         ("seafoam-mist", 147),
         ("burnt-orange", 166),
         ("orchid-bloom", 175),
+        ("amber-dusk", 180),
         ("peachy-orange", 216),
         ("golden-glow", 223),
     ];
