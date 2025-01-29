@@ -12,7 +12,11 @@ This file contains relevant information for each release. Please refer to the co
 ### Changed
 
 - Replaced configuration color `banner-bg` with `active-bg`
-- Toggling tab mode between _hard_ and _soft_ now applies to editor in focus as opposed to all editors
+
+### Fixed
+
+- Changing tab mode between _hard_ and _soft_ now applies to editor in focus rather than entire workspace
+- Retention of previous search result, for purpose of continuation, is now associated with applicable editor rather than entire workspace
 
 ## [0.16.0](https://github.com/davidledwards/ped/tree/v0.16.0) - `2025-01-25`
 

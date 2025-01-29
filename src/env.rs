@@ -5,7 +5,6 @@
 //! simplify operations, but more importantly, to enforce certain invariants.
 
 use crate::editor::{Align, Editor, EditorRef, ImmutableEditor};
-use crate::search::Pattern;
 use crate::source::Source;
 use crate::window::{BannerRef, WindowRef};
 use crate::workspace::{Placement, Workspace, WorkspaceRef};
@@ -25,7 +24,6 @@ pub struct Environment {
     view_map: ViewMap,
     active_view_id: u32,
     clipboard: Option<Vec<char>>,
-    last_match: Option<(usize, Box<dyn Pattern>)>,
 }
 
 pub enum Focus {
@@ -79,7 +77,6 @@ impl Environment {
             view_map,
             active_view_id,
             clipboard: None,
-            last_match: None,
         }
     }
 
@@ -285,14 +282,6 @@ impl Environment {
     /// Returns the value of the clipboard.
     pub fn get_clipboard(&self) -> Option<&Vec<char>> {
         self.clipboard.as_ref()
-    }
-
-    pub fn set_last_match(&mut self, pos: usize, pattern: Box<dyn Pattern>) {
-        self.last_match = Some((pos, pattern));
-    }
-
-    pub fn take_last_match(&mut self) -> Option<(usize, Box<dyn Pattern>)> {
-        self.last_match.take()
     }
 
     /// Resizes the workspace, which might remove a subset of views if resizing

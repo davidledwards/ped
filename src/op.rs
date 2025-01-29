@@ -866,24 +866,25 @@ fn search_regex_case(env: &mut Environment) -> Option<Action> {
 /// Operation: `search-next`
 fn search_next(env: &mut Environment) -> Option<Action> {
     let editor = env.get_active_editor().clone();
-    if let Some((pos, pattern)) = env.take_last_match() {
+    let last_match = editor.borrow_mut().take_last_match();
+    if let Some((pos, pattern)) = last_match {
         // If position of last match is also current buffer position, then advance
         // to next position before resuming search.
-        let cur_pos = editor.borrow().pos();
+        let mut editor = editor.borrow_mut();
+        let cur_pos = editor.pos();
         let pos = if pos == cur_pos { cur_pos + 1 } else { cur_pos };
 
         // Find next match and highlight if found.
-        let found = pattern.find(&editor.borrow().buffer(), pos);
+        let found = pattern.find(&editor.buffer(), pos);
         if let Some((start_pos, end_pos)) = found {
-            let mut editor = editor.borrow_mut();
             editor.move_to(start_pos, Align::Center);
             editor.clear_mark();
             editor.set_soft_mark_at(end_pos);
             editor.render();
-            env.set_last_match(start_pos, pattern);
+            editor.set_last_match(start_pos, pattern);
         } else {
             // Restore match state that was taken earlier.
-            env.set_last_match(pos, pattern);
+            editor.set_last_match(pos, pattern);
         }
         None
     } else {
@@ -997,11 +998,11 @@ impl Inquirer for Search {
         }
     }
 
-    fn respond(&mut self, env: &mut Environment, value: Option<&str>) -> Option<Action> {
+    fn respond(&mut self, _: &mut Environment, value: Option<&str>) -> Option<Action> {
         match value {
             Some(value) if value.len() > 0 => {
                 if let Some((pos, pattern)) = self.last_match.take() {
-                    env.set_last_match(pos, pattern);
+                    self.editor.borrow_mut().set_last_match(pos, pattern);
                 }
             }
             _ => self.restore(),

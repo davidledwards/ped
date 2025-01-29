@@ -9,6 +9,7 @@ use crate::canvas::{Canvas, CanvasRef};
 use crate::color::Color;
 use crate::config::ConfigurationRef;
 use crate::grid::Cell;
+use crate::search::Pattern;
 use crate::size::{Point, Size};
 use crate::source::Source;
 use crate::syntax::Syntax;
@@ -263,6 +264,13 @@ pub trait ImmutableEditor {
 
     /// Renders the contents of the editor.
     fn render(&mut self);
+
+    /// Sets the last match from a prior search, where `pos` is the starting positon of
+    /// the match and `pattern` is the applicable search pattern.
+    fn set_last_match(&mut self, pos: usize, pattern: Box<dyn Pattern>);
+
+    /// Takes the last match from a prior search.
+    fn take_last_match(&mut self) -> Option<(usize, Box<dyn Pattern>)>;
 }
 
 /// A collection of _mutable_ operations that can be performed on an [`Editor`].
@@ -396,6 +404,9 @@ struct EditorKernel {
 
     /// The width of tab stops in number of columns.
     tab_cols: u32,
+
+    /// An optional last match from a prior search.
+    last_match: Option<(usize, Box<dyn Pattern>)>,
 }
 
 /// The distinct types of changes to a buffer recorded in the _undo_ and _redo_ stacks.
@@ -1098,6 +1109,16 @@ impl ImmutableEditor for Editor {
     fn render(&mut self) {
         self.kernel.render();
     }
+
+    #[inline]
+    fn set_last_match(&mut self, pos: usize, pattern: Box<dyn Pattern>) {
+        self.kernel.set_last_match(pos, pattern);
+    }
+
+    #[inline]
+    fn take_last_match(&mut self) -> Option<(usize, Box<dyn Pattern>)> {
+        self.kernel.take_last_match()
+    }
 }
 
 impl ImmutableEditor for EditorKernel {
@@ -1583,6 +1604,14 @@ impl ImmutableEditor for EditorKernel {
             .set_location(self.location())
             .draw();
     }
+
+    fn set_last_match(&mut self, pos: usize, pattern: Box<dyn Pattern>) {
+        self.last_match = Some((pos, pattern));
+    }
+
+    fn take_last_match(&mut self) -> Option<(usize, Box<dyn Pattern>)> {
+        self.last_match.take()
+    }
 }
 
 impl MutableEditor for EditorKernel {
@@ -1721,6 +1750,7 @@ impl EditorKernel {
             margin_cols: 0,
             tab_hard,
             tab_cols,
+            last_match: None,
         }
     }
 
