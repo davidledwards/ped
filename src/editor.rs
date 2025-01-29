@@ -85,9 +85,11 @@ pub trait ImmutableEditor {
     /// Returns the buffer position corresponding to the [`cursor`](Self::cursor).
     fn pos(&self) -> usize;
 
-    /// Toggles the tab mode between _hard_ and _soft_, returning `true` if the
-    /// resulting mode is _hard_ and `false` if _soft_.
-    fn toggle_tab(&mut self) -> bool;
+    /// Returns `true` if the tab mode is _hard_ and `false` if _soft_.
+    fn get_tab(&self) -> bool;
+
+    /// Sets the tab mode based on the value of `hard`.
+    fn set_tab(&mut self, hard: bool);
 
     /// Sets the cursor location and corresponding buffer position to `cursor`, though
     /// the final cursor location is constrained by end-of-line and end-of-buffer
@@ -918,8 +920,13 @@ impl ImmutableEditor for Editor {
     }
 
     #[inline]
-    fn toggle_tab(&mut self) -> bool {
-        self.kernel.toggle_tab()
+    fn get_tab(&self) -> bool {
+        self.kernel.get_tab()
+    }
+
+    #[inline]
+    fn set_tab(&mut self, hard: bool) {
+        self.kernel.set_tab(hard);
     }
 
     #[inline]
@@ -1145,9 +1152,12 @@ impl ImmutableEditor for EditorKernel {
         self.cur_pos
     }
 
-    fn toggle_tab(&mut self) -> bool {
-        self.tab_hard = !self.tab_hard;
+    fn get_tab(&self) -> bool {
         self.tab_hard
+    }
+
+    fn set_tab(&mut self, hard: bool) {
+        self.tab_hard = hard;
     }
 
     fn set_focus(&mut self, cursor: Point) {

@@ -1641,10 +1641,13 @@ fn describe_editor(env: &mut Environment) -> Option<Action> {
 
 /// Operation: `tab-mode`
 fn tab_mode(env: &mut Environment) -> Option<Action> {
-    if env.get_active_editor().borrow_mut().toggle_tab() {
-        Action::as_echo("hard tabs enabled")
-    } else {
+    let mut editor = env.get_active_editor().borrow_mut();
+    let hard = editor.get_tab();
+    editor.set_tab(!hard);
+    if hard {
         Action::as_echo("soft tabs enabled")
+    } else {
+        Action::as_echo("hard tabs enabled")
     }
 }
 
