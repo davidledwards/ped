@@ -2,6 +2,19 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
+## [0.18.0](https://github.com/davidledwards/ped/tree/v0.18.0) - `2025-??-??`
+
+### Changed
+
+- Several default key bindings aimed at consistency
+
+  - `M-o t` → `M-o a` (`open-file-top`: open file in new window at top of workspace)
+  - `M-o b` → `M-o e` (`open-file-bottom`: open file in new window at bottom of workspace)
+  - `M-y t` → `M-y a` (`select-editor-top`: switch to editor in new window at top of workspace)
+  - `M-y b` → `M-y e` (`select-editor-bottom`: switch to editor in new window at bottom of workspace)
+  - `M-w t` → `M-w a` (`top-window`: move to window at top of workspace)
+  - `M-w b` → `M-w e` (`bottom-window`: move to window at bottom of workspace)
+
 ## [0.17.0](https://github.com/davidledwards/ped/tree/v0.17.0) - `2025-01-28`
 
 ### Added

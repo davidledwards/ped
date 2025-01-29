@@ -33,10 +33,11 @@ pub fn help_editor(config: ConfigurationRef) -> EditorRef {
 
 fn help_buffer() -> Buffer {
     let mut buf = Buffer::new();
-    write!(buf, include_str!("include/help-header.in"));
+    writeln!(buf, include_str!("include/help-header.in"));
+    writeln!(buf, "[Build]");
     writeln!(
         buf,
-        "\nBuild: {PACKAGE_NAME} {PACKAGE_VERSION} ({BUILD_HASH} {BUILD_DATE})\n"
+        "{PACKAGE_NAME} {PACKAGE_VERSION} ({BUILD_HASH} {BUILD_DATE})\n"
     );
     write!(buf, include_str!("include/help-keys.in"));
     buf.set_pos(0);

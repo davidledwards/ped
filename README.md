@@ -29,10 +29,10 @@ brew install ped
 
 Releases can be downloaded directly from [GitHub](https://github.com/davidledwards/ped/releases).
 
-Alternatively, using the [GitHub CLI](https://cli.github.com/), releases can also be downloaded from the command line. For example, to download version `0.17.0`, run the following command.
+Alternatively, using the [GitHub CLI](https://cli.github.com/), releases can also be downloaded from the command line. For example, to download version `0.18.0`, run the following command.
 
 ```shell
-gh release download --repo https://github.com/davidledwards/ped v0.17.0
+gh release download --repo https://github.com/davidledwards/ped v0.18.0
 ```
 
 ## Usage
@@ -162,8 +162,8 @@ The following notation is used below when refering to keys.
 | Key     | Command                                        |
 | ------- | ---------------------------------------------- |
 | `C-o`   | Open file in current window                    |
-| `M-o t` | Open file in new window at top of workspace    |
-| `M-o b` | Open file in new window at bottom of workspace |
+| `M-o a` | Open file in new window at top of workspace    |
+| `M-o e` | Open file in new window at bottom of workspace |
 | `M-o p` | Open file in new window above current window   |
 | `M-o n` | Open file in new window below current window   |
 | `C-s`   | Save file                                      |
@@ -174,8 +174,8 @@ The following notation is used below when refering to keys.
 | Key     | Command                                               |
 | ------- | ----------------------------------------------------- |
 | `C-y`   | Switch to editor in current window                    |
-| `M-y t` | Switch to editor in new window at top of workspace    |
-| `M-y b` | Switch to editor in new window at bottom of workspace |
+| `M-y a` | Switch to editor in new window at top of workspace    |
+| `M-y e` | Switch to editor in new window at bottom of workspace |
 | `M-y p` | Switch to editor in new window above current window   |
 | `M-y n` | Switch to editor in new window below current window   |
 | `M-,`   | Switch to previous editor in current window           |
@@ -189,8 +189,8 @@ The following notation is used below when refering to keys.
 | `C-w`         | Close window and editor               |
 | `M-w 0`       | Close window                          |
 | `M-w 1`       | Close all other windows               |
-| `M-w t`       | Move to window at top of workspace    |
-| `M-w b`       | Move to window at bottom of workspace |
+| `M-w a`       | Move to window at top of workspace    |
+| `M-w e`       | Move to window at bottom of workspace |
 | `M-w p` `M-<` | Move to window above current window   |
 | `M-w n` `M->` | Move to window below current window   |
 
