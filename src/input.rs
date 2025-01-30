@@ -55,10 +55,11 @@ pub struct InputEditor {
     /// or equal to `input.len()`.
     len: usize,
 
-    /// The current position in `input` corresponding to [`cursor`](Self::cursor).
+    /// The current index position in `input` corresponding to [`cursor`](Self::cursor).
     pos: usize,
 
-    /// The position of the cursor on the visible canvas.
+    /// The position of the cursor on the visible canvas, values of which range
+    /// [`0`, [`input_cols`](Self::input_cols)).
     cursor: u32,
 
     /// An optional _hint_ that is appended to the user-provided portion of `input`.
