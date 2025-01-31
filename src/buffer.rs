@@ -494,7 +494,14 @@ impl Index<usize> for Buffer {
     type Output = char;
 
     fn index(&self, pos: usize) -> &char {
-        self.get_char_unchecked(pos)
+        if pos < self.size {
+            self.get_char_unchecked(pos)
+        } else {
+            panic!(
+                "buffer index out of bounds: pos = {}, size = {}",
+                pos, self.size
+            )
+        }
     }
 }
 
@@ -950,5 +957,15 @@ mod tests {
             assert_eq!(a_pos, b_pos);
             assert_eq!(a, b);
         }
+    }
+
+    #[test]
+    #[should_panic]
+    fn index_out_of_bounds() {
+        const TEXT: &str = "Lorem ipsum dolor sit amet, consectetur porttitor";
+
+        let mut buf = Buffer::new();
+        buf.insert_str(TEXT);
+        let _ = buf[buf.size()];
     }
 }
