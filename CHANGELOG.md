@@ -15,6 +15,8 @@ This file contains relevant information for each release. Please refer to the co
   - `M-w t` → `M-w a` (`top-window`: move to window at top of workspace)
   - `M-w b` → `M-w e` (`bottom-window`: move to window at bottom of workspace)
 
+- Default value of `echo-fg` color to `208`
+
 ### Fixed
 
 - Incorrect character display in `describe-editor` (`C-t`) when cursor is positioned at end of file

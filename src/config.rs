@@ -183,7 +183,7 @@ impl Theme {
     const SPOTLIGHT_BG: u8 = 234;
     const WHITSPACE_FG: u8 = 243;
     const ACCENT_FG: u8 = 180;
-    const ECHO_FG: u8 = 216;
+    const ECHO_FG: u8 = 208;
     const PROMPT_FG: u8 = 102;
     const BANNER_FG: u8 = 254;
     const ACTIVE_BG: u8 = 60;
