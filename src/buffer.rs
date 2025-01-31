@@ -217,10 +217,12 @@ impl Buffer {
         if from_pos == to_pos {
             vec![]
         } else {
+            let from_pos = cmp::min(from_pos, self.size);
+            let to_pos = cmp::min(to_pos, self.size);
             let (from_pos, to_pos) = if from_pos < to_pos {
-                (from_pos, cmp::min(to_pos, self.size))
+                (from_pos, to_pos)
             } else {
-                (to_pos, cmp::min(from_pos, self.size))
+                (to_pos, from_pos)
             };
             let count = to_pos - from_pos;
             let mut cs = Vec::with_capacity(count);
