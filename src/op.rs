@@ -1622,20 +1622,22 @@ impl Inquirer for SelectEditor {
 fn describe_editor(env: &mut Environment) -> Option<Action> {
     let editor = env.get_active_editor().borrow();
     let buffer = editor.buffer();
-    let Point { row, col } = editor.location() + (1, 1);
-    let c = buffer[editor.pos()];
-    let text = format!(
-        "line/col: {}/{} ∙ size: {} ∙ lines: {} ∙ char: {}\\u{:04x}",
-        row,
-        col,
-        buffer.size(),
-        buffer.line_of(usize::MAX) + 1,
-        if c.is_control() {
+    let (c_char, c_code) = if let Some(c) = buffer.get_char(editor.pos()) {
+        let c_char = if c.is_control() {
             "".to_string()
         } else {
             format!("'{c}' ")
-        },
-        c as u32,
+        };
+        (c_char, format!("\\u{:04x}", c as u32))
+    } else {
+        ("EOF".to_string(), "".to_string())
+    };
+    let text = format!(
+        "characters: {} | lines: {} | cursor: {}{}",
+        buffer.size(),
+        buffer.line_of(usize::MAX) + 1,
+        c_char,
+        c_code,
     );
     Action::as_echo(&text)
 }
