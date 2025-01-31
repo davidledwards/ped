@@ -58,8 +58,8 @@ pub struct InputEditor {
     /// The current index position in `input` corresponding to [`cursor`](Self::cursor).
     pos: usize,
 
-    /// The position of the cursor on the visible canvas, values of which range
-    /// [`0`, [`input_cols`](Self::input_cols)).
+    /// The position of the cursor on the visible canvas, values of which must be in
+    /// the range [`0`, `input_cols`).
     cursor: u32,
 
     /// An optional _hint_ that is appended to the user-provided portion of `input`.
@@ -116,14 +116,9 @@ impl InputEditor {
         self.prompt = Some(prompt.to_string());
         self.completer = completer;
         self.set_sizes();
-        self.input.clear();
-        self.len = 0;
-        self.pos = 0;
-        self.cursor = 0;
-        self.hint = self.completer.prepare();
-        if let Some(hint) = self.hint.as_ref() {
-            self.input.extend(hint.chars());
-        }
+        self.set_input(None);
+        let hint = self.completer.prepare();
+        self.update_hint(hint);
         self.draw();
     }
 
@@ -132,10 +127,7 @@ impl InputEditor {
         self.prompt = None;
         self.completer = user::null_completer();
         self.set_sizes();
-        self.input.clear();
-        self.len = 0;
-        self.pos = 0;
-        self.cursor = 0;
+        self.set_input(None);
         self.hint = None;
         self.draw();
     }
@@ -163,7 +155,7 @@ impl InputEditor {
     /// Resizes the input editor by reprobing the associated workspace.
     pub fn resize(&mut self) {
         self.set_sizes();
-        self.cursor = cmp::min(self.cursor, self.input_cols.saturating_sub(1));
+        self.cursor = self.clamp_cursor(self.cursor);
         self.draw();
     }
 
@@ -173,9 +165,7 @@ impl InputEditor {
     /// [`completer`](Self::completer), but this method provides a means of finer
     /// control.
     pub fn set_hint(&mut self, hint: String) {
-        self.input.truncate(self.len);
-        self.input.extend(hint.chars());
-        self.hint = Some(hint);
+        self.update_hint(Some(hint));
         self.draw_input();
     }
 
@@ -187,7 +177,7 @@ impl InputEditor {
                 self.input.insert(self.pos, c);
                 self.len += 1;
                 self.pos += 1;
-                self.cursor = cmp::min(self.cursor + 1, self.input_cols - 1);
+                self.cursor = self.clamp_cursor(self.cursor + 1);
                 self.evaluate();
                 self.draw_input();
             }
@@ -235,7 +225,7 @@ impl InputEditor {
                 // Move cursor forward.
                 if self.pos < self.len {
                     self.pos += 1;
-                    self.cursor = cmp::min(self.cursor + 1, self.input_cols - 1);
+                    self.cursor = self.clamp_cursor(self.cursor + 1);
                     self.draw_input();
                 }
             }
@@ -259,7 +249,7 @@ impl InputEditor {
                 // Move cursor to end of line.
                 if self.pos < self.len {
                     self.pos = self.len;
-                    self.cursor = cmp::min(self.pos as u32, self.input_cols - 1);
+                    self.cursor = self.clamp_cursor(self.pos as u32);
                     self.draw_input();
                 }
             }
@@ -284,38 +274,20 @@ impl InputEditor {
 
     /// Calls the attached completer to evaluate the input value in its current form.
     fn evaluate(&mut self) {
-        if let Some(hint) = (self.completer).evaluate(&self.value()) {
-            self.input.truncate(self.len);
-            self.input.extend(hint.chars());
-            self.hint = Some(hint);
-        } else if let Some(_) = self.hint.take() {
-            self.input.truncate(self.len);
-        }
+        let hint = (self.completer).evaluate(&self.value());
+        self.update_hint(hint);
     }
 
     /// Calls the attached completer to make a suggestion based on the input value in
     /// its current form.
     fn suggest(&mut self) {
         match (self.completer).suggest(&self.value()) {
-            (Some(replace), hint) => {
-                self.input = replace.chars().collect();
-                self.len = self.input.len();
-                if let Some(hint) = hint.as_ref() {
-                    self.input.extend(hint.chars());
-                }
-                self.pos = self.len;
-                self.cursor = cmp::min(self.pos as u32, self.input_cols - 1);
-                self.hint = hint;
+            (replace @ Some(_), hint) => {
+                self.set_input(replace);
+                self.update_hint(hint);
             }
-            (None, Some(hint)) => {
-                self.input.truncate(self.len);
-                self.input.extend(hint.chars());
-                self.hint = Some(hint);
-            }
-            (None, None) => {
-                if let Some(_) = self.hint.take() {
-                    self.input.truncate(self.len);
-                }
+            (None, hint) => {
+                self.update_hint(hint);
             }
         }
     }
@@ -324,13 +296,43 @@ impl InputEditor {
     /// form, returning `true` if the accepted and `false` otherwise.
     fn accept(&mut self) -> bool {
         if let Some(value) = (self.completer).accept(&self.value()) {
-            self.input = value.chars().collect();
-            self.len = self.input.len();
+            self.set_input(Some(value));
             self.hint = None;
             true
         } else {
             false
         }
+    }
+
+    /// Updates the hint with `hint`.
+    ///
+    /// An existing hint prior to this call is _always_ removed regardless of the value
+    /// of `hint`.
+    fn update_hint(&mut self, hint: Option<String>) {
+        if let Some(hint) = hint {
+            self.input.truncate(self.len);
+            self.input.extend(hint.chars());
+            self.hint = Some(hint);
+        } else if let Some(_) = self.hint.take() {
+            self.input.truncate(self.len);
+        }
+    }
+
+    /// Sets the input to `value` and clears the hint.
+    fn set_input(&mut self, value: Option<String>) {
+        if let Some(value) = value {
+            self.input = value.chars().collect();
+        } else {
+            self.input.clear();
+        }
+        self.len = self.input.len();
+        self.pos = self.len;
+        self.cursor = self.clamp_cursor(self.pos as u32);
+    }
+
+    /// Returns a clamped value of `cursor` bounded by the size of the input area.
+    fn clamp_cursor(&self, cursor: u32) -> u32 {
+        cmp::min(cursor, self.input_cols.saturating_sub(1))
     }
 
     /// Sets column sizes for the _prompt_ and _input_ areas, and allocates an

@@ -15,6 +15,10 @@ This file contains relevant information for each release. Please refer to the co
   - `M-w t` → `M-w a` (`top-window`: move to window at top of workspace)
   - `M-w b` → `M-w e` (`bottom-window`: move to window at bottom of workspace)
 
+### Fixed
+
+- Incorrect character display in `describe-editor` (`C-t`) when cursor is positioned at end of file
+
 ## [0.17.0](https://github.com/davidledwards/ped/tree/v0.17.0) - `2025-01-28`
 
 ### Added
