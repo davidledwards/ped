@@ -12,14 +12,12 @@ This file contains relevant information for each release. Please refer to the co
 ### Changed
 
 - Several default key bindings aimed at consistency
-
   - `M-o t` → `M-o a` (`open-file-top`: open file in new window at top of workspace)
   - `M-o b` → `M-o e` (`open-file-bottom`: open file in new window at bottom of workspace)
   - `M-y t` → `M-y a` (`select-editor-top`: switch to editor in new window at top of workspace)
   - `M-y b` → `M-y e` (`select-editor-bottom`: switch to editor in new window at bottom of workspace)
   - `M-w t` → `M-w a` (`top-window`: move to window at top of workspace)
   - `M-w b` → `M-w e` (`bottom-window`: move to window at bottom of workspace)
-
 - Default value of `echo-fg` color to `208`
 - Output of CLI options `--bindings` and `--colors` to TOML format
 
@@ -73,12 +71,10 @@ This file contains relevant information for each release. Please refer to the co
 ### Changed
 
 - Case-sensitivity of search is now bound to distinct key sequences
-
   - `C-\`: normal search (case-insensitive)
   - `M-C-\`: normal search (case-sensitive)
   - `M-\`: regular expression search (case-insensitive)
   - `M-M-\`: regular expression search (case-sensitive)
-
 - Default background color of selected text is now `88` to improve contrast
 - `--spotlight` and `--lines` are now enabled by default
 
@@ -178,7 +174,6 @@ This file contains relevant information for each release. Please refer to the co
 ### Changed
 
 - Shortened names of CLI options
-
   - `--show-spotlight` → `--spotlight`
   - `--show-lines` → `--lines`
   - `--show-eol` → `--eol`
@@ -187,9 +182,7 @@ This file contains relevant information for each release. Please refer to the co
   - `--print-ops` → `--ops`
   - `--print-bindings` → `--bindings`
   - `--syntax-dir` → `--syntax`
-
 - Shortened names of configuration settings
-
   - `show-spotlight` → `spotlight`
   - `show-lines` → `lines`
   - `show-eol` → `eol`
