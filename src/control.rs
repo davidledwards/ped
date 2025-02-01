@@ -12,6 +12,7 @@ use crate::echo::Echo;
 use crate::editor::{Align, ImmutableEditor};
 use crate::env::{Environment, Focus};
 use crate::error::Result;
+use crate::etc::{PACKAGE_NAME, PACKAGE_VERSION};
 use crate::input::{Directive, InputEditor};
 use crate::key::{self, Key, Keyboard, Shift, CTRL_G};
 use crate::op::{self, Action};
@@ -20,7 +21,6 @@ use crate::sys::{self, AsString};
 use crate::term;
 use crate::user::Inquirer;
 use crate::workspace::{Placement, Workspace};
-use crate::{PACKAGE_NAME, PACKAGE_VERSION};
 use std::time::Instant;
 
 /// The primary control point for coordinating user interaction and editing operations.

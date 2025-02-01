@@ -5,8 +5,6 @@ use std::str::FromStr;
 
 /// Represents all potential CLI options.
 pub struct Options {
-    pub help: bool,
-    pub version: bool,
     pub spotlight: Option<bool>,
     pub lines: Option<bool>,
     pub eol: Option<bool>,
@@ -21,14 +19,15 @@ pub struct Options {
     pub syntax_dir: Option<String>,
     pub bare: bool,
     pub bare_syntax: bool,
+    pub help: bool,
+    pub version: bool,
+    pub source: bool,
     pub files: Vec<String>,
 }
 
 impl Default for Options {
     fn default() -> Options {
         Options {
-            help: false,
-            version: false,
             spotlight: None,
             lines: None,
             eol: None,
@@ -43,6 +42,9 @@ impl Default for Options {
             syntax_dir: None,
             bare: false,
             bare_syntax: false,
+            help: false,
+            version: false,
+            source: false,
             files: vec![],
         }
     }
@@ -57,8 +59,6 @@ impl Options {
         let mut it = args.into_iter();
         while let Some(arg) = it.next() {
             match arg.as_str() {
-                "--help" | "-h" => opts.help = true,
-                "--version" | "-v" => opts.version = true,
                 "--spotlight" => opts.spotlight = Some(true),
                 "--no-spotlight" => opts.spotlight = Some(false),
                 "--lines" => opts.lines = Some(true),
@@ -77,6 +77,9 @@ impl Options {
                 "--syntax" | "-S" => opts.syntax_dir = Some(expect_value(&arg, it.next())?),
                 "--bare" | "-b" => opts.bare = true,
                 "--bare-syntax" | "-B" => opts.bare_syntax = true,
+                "--help" | "-h" | "-?" => opts.help = true,
+                "--version" | "-v" => opts.version = true,
+                "--source" => opts.source = true,
                 "--" => {
                     // All arguments following `--` are interpreted as files.
                     opts.files.extend(it);

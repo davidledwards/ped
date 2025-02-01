@@ -7,6 +7,7 @@ This file contains relevant information for each release. Please refer to the co
 ### Added
 
 - CLI option `--theme` that prints the color theme in TOML format
+- CLI option `--source` that prints the GitHub repository URL corresponding to the specific commit when building `ped`
 
 ### Changed
 

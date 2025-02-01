@@ -2,10 +2,13 @@ use std::error::Error;
 use std::process::{Command, ExitCode};
 use std::str;
 
-const GIT_COMMAND: [&str; 4] = ["git", "show", "--no-patch", "--format=%h %as"];
+const GIT_COMMAND: [&str; 4] = ["git", "show", "--no-patch", "--format=%H %as"];
 
 const BUILD_HASH: &str = "cargo:rustc-env=BUILD_HASH";
 const BUILD_DATE: &str = "cargo:rustc-env=BUILD_DATE";
+const SOURCE_URL: &str = "cargo:rustc-env=SOURCE_URL";
+
+const SOURCE_URL_ROOT: &str = "https://github.com/davidledwards/ped/tree";
 
 fn main() -> ExitCode {
     match run() {
@@ -26,6 +29,7 @@ fn run() -> Result<ExitCode, Box<dyn Error>> {
         if let Some((hash, date)) = s.split_once(' ') {
             println!("{BUILD_HASH}={hash}");
             println!("{BUILD_DATE}={date}");
+            println!("{SOURCE_URL}={SOURCE_URL_ROOT}/{hash}");
             ExitCode::SUCCESS
         } else {
             eprintln!("\"{s}\": unable to split string");

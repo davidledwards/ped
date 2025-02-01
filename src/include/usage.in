@@ -28,6 +28,7 @@ usage: ped OPTIONS [file...]
   Help
     --help, -h         : print this information
     --version, -v      : print version information
+    --source           : print repository URL for this version
 
   CONFIGURATION
     An optional configuration file is loaded if present in one of the following

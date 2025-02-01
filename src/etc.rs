@@ -1,6 +1,23 @@
-//! Useful functions with designated modules.
+//! Useful functions.
 
 use std::ops::ControlFlow;
+
+pub const PACKAGE_NAME: &str = env!("CARGO_PKG_NAME");
+pub const PACKAGE_VERSION: &str = env!("CARGO_PKG_VERSION");
+pub const BUILD_HASH: &str = env!("BUILD_HASH");
+pub const BUILD_DATE: &str = env!("BUILD_DATE");
+pub const SOURCE_URL: &str = env!("SOURCE_URL");
+
+/// Returns version information.
+pub fn version() -> String {
+    format!(
+        "{} {} ({} {})",
+        PACKAGE_NAME,
+        PACKAGE_VERSION,
+        &BUILD_HASH[0..7],
+        BUILD_DATE,
+    )
+}
 
 /// Returns the byte offset in `buf` corresponding to the `pos`-th character, which is
 /// guaranteed to be aligned to a UTF-8 code point boundary in `buf`.

@@ -7,10 +7,10 @@
 use crate::buffer::Buffer;
 use crate::config::{ConfigurationRef, Theme};
 use crate::editor::{Editor, EditorRef};
+use crate::etc;
 use crate::key::{self, Key, KEY_MAPPINGS};
 use crate::op::OP_MAPPINGS;
 use crate::source::Source;
-use crate::{BUILD_DATE, BUILD_HASH, PACKAGE_NAME, PACKAGE_VERSION};
 use indexmap::IndexMap;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write;
@@ -35,10 +35,7 @@ fn help_buffer() -> Buffer {
     let mut buf = Buffer::new();
     writeln!(buf, include_str!("include/help-header.in"));
     writeln!(buf, "[Build]");
-    writeln!(
-        buf,
-        "{PACKAGE_NAME} {PACKAGE_VERSION} ({BUILD_HASH} {BUILD_DATE})\n"
-    );
+    writeln!(buf, "{}\n", etc::version());
     write!(buf, include_str!("include/help-keys.in"));
     buf.set_pos(0);
     buf
