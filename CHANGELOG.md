@@ -4,6 +4,10 @@ This file contains relevant information for each release. Please refer to the co
 
 ## [0.18.0](https://github.com/davidledwards/ped/tree/v0.18.0) - `2025-??-??`
 
+### Added
+
+- CLI option `--theme` that prints the color theme in TOML format
+
 ### Changed
 
 - Several default key bindings aimed at consistency
@@ -16,6 +20,7 @@ This file contains relevant information for each release. Please refer to the co
   - `M-w b` → `M-w e` (`bottom-window`: move to window at bottom of workspace)
 
 - Default value of `echo-fg` color to `208`
+- Output of CLI options `--bindings` and `--colors` to TOML format
 
 ### Fixed
 

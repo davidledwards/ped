@@ -129,6 +129,9 @@ fn run_opts(opts: &Options) -> Result<()> {
     } else if opts.colors {
         print!("{}", help::colors_content(config.colors.colors()));
         Ok(())
+    } else if opts.theme {
+        print!("{}", help::theme_content(&config.theme));
+        Ok(())
     } else {
         run_config(opts, config)
     }

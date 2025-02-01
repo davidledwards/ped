@@ -5,7 +5,7 @@
 #![allow(unused_must_use)]
 
 use crate::buffer::Buffer;
-use crate::config::ConfigurationRef;
+use crate::config::{ConfigurationRef, Theme};
 use crate::editor::{Editor, EditorRef};
 use crate::key::{self, Key, KEY_MAPPINGS};
 use crate::op::OP_MAPPINGS;
@@ -130,12 +130,13 @@ pub fn bindings_editor(config: ConfigurationRef) -> EditorRef {
     Editor::readonly(config, Source::as_ephemeral(BINDINGS_EDITOR_NAME), buffer).to_ref()
 }
 
-/// Returns a formatted list of key bindings.
+/// Returns a TOML-formatted list of key bindings.
 pub fn bindings_content(bindings: &HashMap<Vec<Key>, String>) -> String {
     let bindings = prepare_bindings(bindings);
     let mut out = String::new();
     for (key_seq, op) in bindings {
-        writeln!(out, "\"{key_seq}\", {op}");
+        let key_seq = key_seq.replace(' ', ":");
+        writeln!(out, "\"{key_seq}\" = \"{op}\"");
     }
     out
 }
@@ -180,12 +181,12 @@ pub fn colors_editor(config: ConfigurationRef) -> EditorRef {
     Editor::readonly(config, Source::as_ephemeral(COLORS_EDITOR_NAME), buffer).to_ref()
 }
 
-/// Returns a formatted list of color names and values.
+/// Returns a TOML-formatted list of color names and values.
 pub fn colors_content(colors: &HashMap<String, u8>) -> String {
     let colors = prepare_colors(colors);
     let mut out = String::new();
     for (name, color) in colors {
-        writeln!(out, "\"{name}\", {color}");
+        writeln!(out, "{name} = {color}");
     }
     out
 }
@@ -225,4 +226,29 @@ fn prepare_colors(colors: &HashMap<String, u8>) -> IndexMap<String, u8> {
         .iter()
         .map(|(name, color)| (name.to_string(), **color))
         .collect::<IndexMap<_, _>>()
+}
+
+/// Returns a TOML-formatted list of theme color names and values.
+pub fn theme_content(theme: &Theme) -> String {
+    const COLORS: [(&str, fn(&Theme) -> u8); 13] = [
+        ("text-fg", |t| t.text_fg),
+        ("text-bg", |t| t.text_bg),
+        ("select-bg", |t| t.select_bg),
+        ("spotlight-bg", |t| t.spotlight_bg),
+        ("whitespace-fg", |t| t.whitespace_fg),
+        ("accent-fg", |t| t.accent_fg),
+        ("echo-fg", |t| t.echo_fg),
+        ("prompt-fg", |t| t.prompt_fg),
+        ("banner-fg", |t| t.banner_fg),
+        ("active-bg", |t| t.active_bg),
+        ("inactive-bg", |t| t.inactive_bg),
+        ("margin-fg", |t| t.margin_fg),
+        ("margin-bg", |t| t.margin_bg),
+    ];
+
+    let mut out = String::new();
+    for (name, t_fn) in COLORS {
+        writeln!(out, "{name} = {}", t_fn(theme));
+    }
+    out
 }

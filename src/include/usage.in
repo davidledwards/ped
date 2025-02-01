@@ -13,10 +13,11 @@ usage: ped OPTIONS [file...]
     --tab-size, -t N   : tab stop size when --tab-soft (default: 4)
 
   Interrogation
-    --keys             : print available keys to stdout
-    --ops              : print available operations to stdout
-    --bindings         : print key bindings to stdout
-    --colors           : print color names to stdout
+    --keys             : print available keys
+    --ops              : print available operations
+    --bindings         : print key bindings in TOML format
+    --colors           : print color names in TOML format
+    --theme            : print color theme in TOML format
 
   Configuration
     --config, -C FILE  : load configuration from FILE
