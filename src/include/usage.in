@@ -1,62 +1,63 @@
-usage: ped OPTIONS [file...]
-       ped --help
+The pedestrian text editor.
 
-  The pedestrian text editor.
+USAGE
+  ped OPTIONS [file...]
+  ped --help
 
-  OPTIONS
-  Behavior
-    --[no-]spotlight   : [do not] highlight cursor row
-    --[no-]lines       : [do not] show line numbers in left margin
-    --[no-]eol         : [do not] make \n visible with special character
-    --tab-hard         : insert tabs as \t
-    --tab-soft         : insert tabs as spaces (default)
-    --tab-size, -t N   : tab stop size when --tab-soft (default: 4)
+OPTIONS
+Behavior
+  --[no-]spotlight   : [do not] highlight cursor row
+  --[no-]lines       : [do not] show line numbers in left margin
+  --[no-]eol         : [do not] make \n visible with special character
+  --tab-hard         : insert tabs as \t
+  --tab-soft         : insert tabs as spaces (default)
+  --tab-size, -t N   : tab stop size when --tab-soft (default: 4)
 
-  Interrogation
-    --keys             : print available keys
-    --ops              : print available operations
-    --bindings         : print key bindings in TOML format
-    --colors           : print color names in TOML format
-    --theme            : print color theme in TOML format
+Interrogation
+  --keys             : print available keys
+  --ops              : print available operations
+  --bindings         : print key bindings in TOML format
+  --colors           : print color names in TOML format
+  --theme            : print color theme in TOML format
 
-  Configuration
-    --config, -C FILE  : load configuration from FILE
-    --syntax, -S DIR   : load syntax configurations from DIR
-    --bare, -b         : ignore all forms of configuration
-    --bare-syntax, -B  : ignore syntax configurations
+Configuration
+  --config, -C FILE  : load configuration from FILE
+  --syntax, -S DIR   : load syntax configurations from DIR
+  --bare, -b         : ignore all forms of configuration
+  --bare-syntax, -B  : ignore syntax configurations
 
-  Help
-    --help, -h         : print this information
-    --version, -v      : print version information
-    --source           : print repository URL for this version
+Help
+  --help, -h         : print this information
+  --version, -v      : print version information
+  --source           : print repository URL for this version
 
-  CONFIGURATION
-    An optional configuration file is loaded if present in one of the following
-    locations in order of precedence:
+CONFIGURATION
+  An optional configuration file is loaded if present in one of the following
+  locations in order of precedence:
 
-        - $HOME/.pedrc
-        - $HOME/.ped/pedrc
-        - $HOME/.config/ped/pedrc
+    - $HOME/.pedrc
+    - $HOME/.ped/pedrc
+    - $HOME/.config/ped/pedrc
 
-    Alternatively, a configuration file can be specified using --config, which
-    ignores searching in the standard locations above. Any options given on the
-    command line will override settings from a configuraton file.
+Alternatively, a configuration file can be specified using --config, which
+ignores searching in the standard locations above. Any options given on the
+command line will override settings from a configuraton file.
 
-    Configuration files are formatted using the TOML syntax, details of which
-    can be found at <https://toml.io>. Configuration options specific to ped
-    are documented at <https://github.com/davidledwards/ped>.
+Configuration files are formatted using the TOML syntax, details of which can
+be found at <https://toml.io>. Configuration options specific to ped are
+documented at <https://github.com/davidledwards/ped>.
 
-  SYNTAX
-    An optional collection of syntax configuration files are enumerated and
-    loaded from one of the following directories in order of precedence:
+SYNTAX
+  An optional collection of syntax configuration files are enumerated and
+  loaded from one of the following directories in order of precedence:
 
-        - $HOME/.ped/syntax
-        - $HOME/.config/ped/syntax
+    - $HOME/.ped/syntax
+    - $HOME/.config/ped/syntax
 
-    Alternatively, a directory may be specified using --syntax, which ignores
-    searching in the standard directories above.
+Alternatively, a directory may be specified using --syntax, which ignores
+searching in the standard directories above.
 
-    Syntax configuration files are formatted using the TOML syntax and must
-    contain the `.toml` extension. All other files types are ignored. A
-    predefined set of syntax configuration files with instructions can be found
-    at <https://github.com/davidledwards/ped-syntax>.
+Syntax configuration files are formatted using the TOML syntax and must contain
+the `.toml` extension. All other files types are ignored. A predefined set of
+syntax configuration files with instructions can be found at
+<https://github.com/davidledwards/ped-syntax>.
