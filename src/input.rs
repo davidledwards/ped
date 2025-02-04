@@ -139,7 +139,7 @@ impl InputEditor {
 
     /// Draws the prompt and input areas.
     pub fn draw(&mut self) {
-        if let Some(_) = self.prompt {
+        if self.prompt.is_some() {
             self.draw_prompt();
             self.draw_input();
         } else {
@@ -313,7 +313,7 @@ impl InputEditor {
             self.input.truncate(self.len);
             self.input.extend(hint.chars());
             self.hint = Some(hint);
-        } else if let Some(_) = self.hint.take() {
+        } else if self.hint.take().is_some() {
             self.input.truncate(self.len);
         }
     }

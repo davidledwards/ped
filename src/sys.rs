@@ -27,8 +27,8 @@ impl AsString for Path {
 /// error occurred while getting the value of `HOME`.
 pub fn home_dir() -> PathBuf {
     env::var_os("HOME")
-        .map(|path| PathBuf::from(path))
-        .unwrap_or_else(|| this_dir())
+        .map(PathBuf::from)
+        .unwrap_or_else(this_dir)
 }
 
 /// Returns the path of the working directory, or [`this_dir`] if an error occurred
@@ -77,22 +77,18 @@ pub fn extract_dir<P: AsRef<Path>>(path: P) -> (PathBuf, PathBuf) {
     let path = path.as_ref();
     if path.is_dir() {
         (path.to_path_buf(), path.to_path_buf())
-    } else {
-        if let Some(parent) = path.parent() {
-            if parent == Path::new("") {
-                let dir = this_dir();
-                (dir.join(path), dir)
-            } else {
-                (path.to_path_buf(), parent.to_path_buf())
-            }
+    } else if let Some(parent) = path.parent() {
+        if parent == Path::new("") {
+            let dir = this_dir();
+            (dir.join(path), dir)
         } else {
-            if path == Path::new("") {
-                let dir = this_dir();
-                (dir.join(path), dir)
-            } else {
-                (path.to_path_buf(), path.to_path_buf())
-            }
+            (path.to_path_buf(), parent.to_path_buf())
         }
+    } else if path == Path::new("") {
+        let dir = this_dir();
+        (dir.join(path), dir)
+    } else {
+        (path.to_path_buf(), path.to_path_buf())
     }
 }
 

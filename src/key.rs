@@ -141,7 +141,7 @@ impl fmt::Display for Control {
             27 => write!(f, "ESC"),
             127 => write!(f, "DEL"),
             b @ 0..32 => write!(f, "C-{}", Self::CONTROL_CHAR[b as usize]),
-            b @ _ => {
+            b => {
                 // This should never happen, but nonetheless, format as number.
                 write!(f, "C-#{b}")
             }
@@ -238,7 +238,7 @@ impl Keyboard {
         } as u8;
 
         // Optional key modifier, which is bitmask.
-        let key_mod = if let Some(_) = self.read_literal(&[b';'])? {
+        let key_mod = if self.read_literal(b";")?.is_some() {
             match self.read_number()? {
                 Some(n) => cmp::max(1, n),
                 None => 1,
@@ -262,7 +262,7 @@ impl Keyboard {
             None => return Ok(Key::None),
         };
 
-        let col = if let Some(_) = self.read_literal(&[b';'])? {
+        let col = if self.read_literal(b";")?.is_some() {
             match self.read_number()? {
                 Some(col) => {
                     if col > 0 {
@@ -277,7 +277,7 @@ impl Keyboard {
             return Ok(Key::None);
         };
 
-        let row = if let Some(_) = self.read_literal(&[b';'])? {
+        let row = if self.read_literal(b";")?.is_some() {
             match self.read_number()? {
                 Some(row) => {
                     if row > 0 {
@@ -292,7 +292,7 @@ impl Keyboard {
             return Ok(Key::None);
         };
 
-        let key = if let Some(b) = self.read_literal(&[b'M', b'm'])? {
+        let key = if let Some(b) = self.read_literal(b"Mm")? {
             if button & 64 == 0 {
                 if b == b'M' {
                     Key::ButtonPress(row, col)
@@ -329,9 +329,9 @@ impl Keyboard {
             Key::None
         } else {
             let mut buf = [b, 0, 0, 0];
-            for i in 1..n {
+            for c in buf.iter_mut().take(n).skip(1) {
                 if let Some(b) = self.next()? {
-                    buf[i] = b;
+                    *c = b;
                 } else {
                     return Ok(Key::None);
                 }
@@ -339,7 +339,7 @@ impl Keyboard {
             to_utf8(&buf[..n])?
                 .chars()
                 .next()
-                .map(|c| Key::Char(c))
+                .map(Key::Char)
                 .unwrap_or(Key::None)
         };
         Ok(key)
@@ -479,13 +479,13 @@ fn map_mods(key_mod: u8) -> (Shift, Ctrl) {
 
 /// Returns a string constructed by joining the result of [`pretty_keys`] with the
 /// space character.
-pub fn pretty(keys: &Vec<Key>) -> String {
+pub fn pretty(keys: &[Key]) -> String {
     pretty_keys(keys).join(" ")
 }
 
 /// Returns a vector of key names extracted from `keys`, wheressequences of
 /// `ESC` + `<key>` are replaced with `M-<key>`.
-pub fn pretty_keys(keys: &Vec<Key>) -> Vec<String> {
+pub fn pretty_keys(keys: &[Key]) -> Vec<String> {
     let mut keys = keys.iter().map(|key| key.to_string()).collect::<Vec<_>>();
     if keys.len() > 1 {
         let mut i = keys.len() - 1;
@@ -507,7 +507,7 @@ pub fn pretty_keys(keys: &Vec<Key>) -> Vec<String> {
 ///
 /// Note that [`Key::Char`] is absent from these mappings because of the impracticality
 /// of mapping all possible characters.
-pub const KEY_MAPPINGS: [(&'static str, Key); 90] = [
+pub const KEY_MAPPINGS: [(&str, Key); 90] = [
     ("C-@", Key::Control(0)),
     ("C-a", Key::Control(1)),
     ("C-b", Key::Control(2)),

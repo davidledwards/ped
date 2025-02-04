@@ -28,7 +28,6 @@ use std::collections::HashMap;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
-use std::usize;
 
 /// A function type that implements an editing operation.
 pub type OpFn = fn(&mut Environment) -> Option<Action>;
@@ -93,23 +92,23 @@ impl Quit {
     fn start(env: &Environment) -> Option<Action> {
         let dirty = dirty_editors(env);
         if dirty.len() > 0 {
-            Action::as_question(Quit { dirty }.to_box())
+            Action::as_question(Quit { dirty }.into_box())
         } else {
             Action::as_quit()
         }
     }
 
     /// Continues the process of saving editors if `dirty` is not empty.
-    fn next(dirty: &Vec<EditorRef>) -> Option<Action> {
+    fn next(dirty: &[EditorRef]) -> Option<Action> {
         if dirty.len() > 1 {
             let dirty = dirty[1..].to_vec();
-            Action::as_question(Quit { dirty }.to_box())
+            Action::as_question(Quit { dirty }.into_box())
         } else {
             Action::as_quit()
         }
     }
 
-    fn to_box(self) -> Box<dyn Inquirer> {
+    fn into_box(self) -> Box<dyn Inquirer> {
         Box::new(self)
     }
 
@@ -165,9 +164,9 @@ impl Inquirer for Quit {
 
     fn respond(&mut self, env: &mut Environment, value: Option<&str>) -> Option<Action> {
         match value {
-            Some(yes_no) if yes_no == "y" => self.save_first(),
-            Some(yes_no) if yes_no == "a" => self.save_all(),
-            Some(yes_no) if yes_no == "n" => Self::next(&self.dirty),
+            Some("y") => self.save_first(),
+            Some("a") => self.save_all(),
+            Some("n") => Self::next(&self.dirty),
             Some(_) => Self::start(env),
             None => None,
         }
@@ -184,14 +183,14 @@ struct QuitOverride {
 
 impl QuitOverride {
     fn question(dirty: Vec<EditorRef>) -> Option<Action> {
-        Action::as_question(QuitOverride { dirty }.to_box())
+        Action::as_question(QuitOverride { dirty }.into_box())
     }
 
     fn again(&self) -> Option<Action> {
-        Action::as_question(self.clone().to_box())
+        Action::as_question(self.clone().into_box())
     }
 
-    fn to_box(self) -> Box<dyn Inquirer> {
+    fn into_box(self) -> Box<dyn Inquirer> {
         Box::new(self)
     }
 
@@ -216,8 +215,8 @@ impl Inquirer for QuitOverride {
 
     fn respond(&mut self, _: &mut Environment, value: Option<&str>) -> Option<Action> {
         match value {
-            Some(yes_no) if yes_no == "y" => self.save(),
-            Some(yes_no) if yes_no == "n" => Quit::next(&self.dirty),
+            Some("y") => self.save(),
+            Some("n") => Quit::next(&self.dirty),
             Some(_) => self.again(),
             None => None,
         }
@@ -268,13 +267,11 @@ where
         if let Some(view_id) = env.find_editor_view_id(editor_id) {
             env.kill_window_for(view_id);
             None
+        } else if let Some(view_id) = env.open_window(editor_id, Placement::Bottom, Align::Auto) {
+            env.set_active(Focus::To(view_id));
+            None
         } else {
-            if let Some(view_id) = env.open_window(editor_id, Placement::Bottom, Align::Auto) {
-                env.set_active(Focus::To(view_id));
-                None
-            } else {
-                Action::echo_no_window()
-            }
+            Action::echo_no_window()
         }
     } else {
         let config = env.workspace().config().clone();
@@ -588,7 +585,7 @@ fn scroll_center(env: &mut Environment) -> Option<Action> {
 /// Operation: `set-mark`
 fn set_mark(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
-    if let Some(_) = editor.clear_mark() {
+    if editor.clear_mark().is_some() {
         editor.render();
     } else {
         editor.set_hard_mark();
@@ -612,10 +609,10 @@ impl GotoLine {
 
     fn question(editor: EditorRef) -> Option<Action> {
         let capture = editor.borrow().capture();
-        Action::as_question(GotoLine { editor, capture }.to_box())
+        Action::as_question(GotoLine { editor, capture }.into_box())
     }
 
-    fn to_box(self) -> Box<dyn Inquirer> {
+    fn into_box(self) -> Box<dyn Inquirer> {
         Box::new(self)
     }
 
@@ -920,11 +917,11 @@ impl Search {
                 buf_cache,
                 last_match: None,
             }
-            .to_box(),
+            .into_box(),
         )
     }
 
-    fn to_box(self) -> Box<dyn Inquirer> {
+    fn into_box(self) -> Box<dyn Inquirer> {
         Box::new(self)
     }
 
@@ -1055,15 +1052,15 @@ struct Open {
 
 impl Open {
     fn question(dir: PathBuf, place: Option<Placement>) -> Option<Action> {
-        Action::as_question(Open { dir, place }.to_box())
+        Action::as_question(Open { dir, place }.into_box())
     }
 
-    fn to_box(self) -> Box<dyn Inquirer> {
+    fn into_box(self) -> Box<dyn Inquirer> {
         Box::new(self)
     }
 
     fn open(&mut self, env: &mut Environment, path: &str) -> Option<Action> {
-        let path = sys::canonicalize(&self.dir.join(path)).as_string();
+        let path = sys::canonicalize(self.dir.join(path)).as_string();
         let config = env.workspace().config().clone();
         match open_editor(config, &path) {
             Ok(editor) => {
@@ -1129,10 +1126,10 @@ struct Save {
 
 impl Save {
     fn question(editor: EditorRef) -> Option<Action> {
-        Action::as_question(Save { editor }.to_box())
+        Action::as_question(Save { editor }.into_box())
     }
 
-    fn to_box(self) -> Box<dyn Inquirer> {
+    fn into_box(self) -> Box<dyn Inquirer> {
         Box::new(self)
     }
 
@@ -1148,7 +1145,7 @@ impl Save {
         if let Err(e) = save_editor_as(editor, Some(path)) {
             Action::as_echo(&e)
         } else {
-            Action::as_echo(&Self::echo_saved(&path))
+            Action::as_echo(&Self::echo_saved(path))
         }
     }
 
@@ -1160,7 +1157,7 @@ impl Save {
                     .borrow()
                     .clone_as(Source::as_file(path, Some(timestamp)));
                 let row = cloned_editor.cursor().row;
-                env.set_editor(cloned_editor.to_ref(), Align::Row(row));
+                env.set_editor(cloned_editor.into_ref(), Align::Row(row));
                 Action::as_echo(&Self::echo_saved(path))
             }
             Err(e) => Action::as_echo(&e),
@@ -1214,14 +1211,14 @@ struct SaveExists {
 
 impl SaveExists {
     fn question(editor: EditorRef, path: String) -> Option<Action> {
-        Action::as_question(SaveExists { editor, path }.to_box())
+        Action::as_question(SaveExists { editor, path }.into_box())
     }
 
     fn again(&self) -> Option<Action> {
-        Action::as_question(self.clone().to_box())
+        Action::as_question(self.clone().into_box())
     }
 
-    fn to_box(self) -> Box<dyn Inquirer> {
+    fn into_box(self) -> Box<dyn Inquirer> {
         Box::new(self)
     }
 }
@@ -1238,8 +1235,8 @@ impl Inquirer for SaveExists {
 
     fn respond(&mut self, env: &mut Environment, value: Option<&str>) -> Option<Action> {
         match value {
-            Some(yes_no) if yes_no == "y" => Save::save_as(&self.editor, env, &self.path),
-            Some(yes_no) if yes_no == "n" => None,
+            Some("y") => Save::save_as(&self.editor, env, &self.path),
+            Some("n") => None,
             Some(_) => self.again(),
             None => None,
         }
@@ -1255,14 +1252,14 @@ struct SaveOverride {
 
 impl SaveOverride {
     fn question(editor: EditorRef) -> Option<Action> {
-        Action::as_question(SaveOverride { editor }.to_box())
+        Action::as_question(SaveOverride { editor }.into_box())
     }
 
     fn again(&self) -> Option<Action> {
-        Action::as_question(self.clone().to_box())
+        Action::as_question(self.clone().into_box())
     }
 
-    fn to_box(self) -> Box<dyn Inquirer> {
+    fn into_box(self) -> Box<dyn Inquirer> {
         Box::new(self)
     }
 }
@@ -1279,8 +1276,8 @@ impl Inquirer for SaveOverride {
 
     fn respond(&mut self, _: &mut Environment, value: Option<&str>) -> Option<Action> {
         match value {
-            Some(yes_no) if yes_no == "y" => Save::save(&self.editor),
-            Some(yes_no) if yes_no == "n" => None,
+            Some("y") => Save::save(&self.editor),
+            Some("n") => None,
             Some(_) => self.again(),
             None => None,
         }
@@ -1297,20 +1294,18 @@ fn kill_window(env: &mut Environment) -> Option<Action> {
             env.kill_window();
             None
         }
-    } else {
-        if let Some((switch_id, _)) = next_unattached_editor(env) {
-            let editor_id = env.get_active_editor_id();
-            let editor = env.get_active_editor();
-            if is_dirty_file(editor) {
-                Kill::question(editor.clone(), Some((editor_id, switch_id)))
-            } else {
-                env.switch_editor(switch_id, Align::Auto);
-                env.close_editor(editor_id);
-                None
-            }
+    } else if let Some((switch_id, _)) = next_unattached_editor(env) {
+        let editor_id = env.get_active_editor_id();
+        let editor = env.get_active_editor();
+        if is_dirty_file(editor) {
+            Kill::question(editor.clone(), Some((editor_id, switch_id)))
         } else {
-            Action::echo_cannot_close()
+            env.switch_editor(switch_id, Align::Auto);
+            env.close_editor(editor_id);
+            None
         }
+    } else {
+        Action::echo_cannot_close()
     }
 }
 
@@ -1329,23 +1324,24 @@ impl Kill {
                 editor,
                 close_and_switch,
             }
-            .to_box(),
+            .into_box(),
         )
     }
 
     fn again(&self) -> Option<Action> {
-        Action::as_question(self.clone().to_box())
+        Action::as_question(self.clone().into_box())
     }
 
-    fn to_box(self) -> Box<dyn Inquirer> {
+    fn into_box(self) -> Box<dyn Inquirer> {
         Box::new(self)
     }
 
     fn kill(&mut self, env: &mut Environment) -> Option<Action> {
-        Save::save(&self.editor).and_then(|action| {
+        let action = Save::save(&self.editor);
+        if action.is_some() {
             self.kill_only(env);
-            Some(action)
-        })
+        }
+        action
     }
 
     fn kill_only(&mut self, env: &mut Environment) -> Option<Action> {
@@ -1371,12 +1367,12 @@ impl Inquirer for Kill {
 
     fn respond(&mut self, env: &mut Environment, value: Option<&str>) -> Option<Action> {
         match value {
-            Some(yes_no) if yes_no == "y" => match stale_editor(&self.editor) {
+            Some("y") => match stale_editor(&self.editor) {
                 Ok(true) => KillOverride::question(self.editor.clone(), self.close_and_switch),
                 Ok(false) => self.kill(env),
                 Err(e) => Action::as_echo(&e),
             },
-            Some(yes_no) if yes_no == "n" => self.kill_only(env),
+            Some("n") => self.kill_only(env),
             Some(_) => self.again(),
             None => None,
         }
@@ -1398,28 +1394,29 @@ impl KillOverride {
                 editor,
                 close_and_switch,
             }
-            .to_box(),
+            .into_box(),
         )
     }
 
     fn again(&self) -> Option<Action> {
-        Action::as_question(self.clone().to_box())
+        Action::as_question(self.clone().into_box())
     }
 
-    fn to_box(self) -> Box<dyn Inquirer> {
+    fn into_box(self) -> Box<dyn Inquirer> {
         Box::new(self)
     }
 
     fn kill(&mut self, env: &mut Environment) -> Option<Action> {
-        Save::save(&self.editor).and_then(|action| {
+        let action = Save::save(&self.editor);
+        if action.is_some() {
             if let Some((editor_id, switch_id)) = self.close_and_switch {
                 env.switch_editor(switch_id, Align::Auto);
                 env.close_editor(editor_id);
             } else {
                 env.kill_window();
             }
-            Some(action)
-        })
+        }
+        action
     }
 }
 
@@ -1435,8 +1432,8 @@ impl Inquirer for KillOverride {
 
     fn respond(&mut self, env: &mut Environment, value: Option<&str>) -> Option<Action> {
         match value {
-            Some(yes_no) if yes_no == "y" => self.kill(env),
-            Some(yes_no) if yes_no == "n" => None,
+            Some("y") => self.kill(env),
+            Some("n") => None,
             Some(_) => self.again(),
             None => None,
         }
@@ -1445,7 +1442,7 @@ impl Inquirer for KillOverride {
 
 /// Operation: `close-window`
 fn close_window(env: &mut Environment) -> Option<Action> {
-    if let Some(_) = env.close_window() {
+    if env.close_window().is_some() {
         None
     } else {
         Action::echo_cannot_close()
@@ -1572,10 +1569,10 @@ impl SelectEditor {
     const PROMPT: &str = "select editor:";
 
     fn question(editors: Vec<(u32, EditorRef)>, place: Option<Placement>) -> Option<Action> {
-        Action::as_question(SelectEditor { editors, place }.to_box())
+        Action::as_question(SelectEditor { editors, place }.into_box())
     }
 
-    fn to_box(self) -> Box<dyn Inquirer> {
+    fn into_box(self) -> Box<dyn Inquirer> {
         Box::new(self)
     }
 }
@@ -1779,7 +1776,7 @@ pub fn open_editor(config: ConfigurationRef, path: &str) -> Result<EditorRef> {
     // Create file buffer with position set at top.
     buffer.set_pos(0);
     let editor = Editor::mutable(config, Source::as_file(path, time), Some(buffer));
-    Ok(editor.to_ref())
+    Ok(editor.into_ref())
 }
 
 /// Combines [`write_editor`] and [`update_editor`] into a single operation.
@@ -1815,12 +1812,8 @@ fn update_editor(editor: &EditorRef, path: &str, timestamp: SystemTime) {
 /// of the file in storage.
 fn stale_editor(editor: &EditorRef) -> Result<bool> {
     let editor = editor.borrow();
-    let stale = if let Source::File(path, timestamp) = editor.source() {
-        if let Some(timestamp) = timestamp {
-            io::get_time(path)? > *timestamp
-        } else {
-            false
-        }
+    let stale = if let Source::File(path, Some(timestamp)) = editor.source() {
+        io::get_time(path)? > *timestamp
     } else {
         false
     };
@@ -1941,7 +1934,7 @@ fn base_dir(editor: &EditorRef) -> PathBuf {
 }
 
 /// Predefined mapping of editing operations to editing functions.
-pub const OP_MAPPINGS: [(&'static str, OpFn); 76] = [
+pub const OP_MAPPINGS: [(&str, OpFn); 76] = [
     // --- exit and cancellation ---
     ("quit", quit),
     // --- help ---

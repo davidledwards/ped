@@ -77,7 +77,7 @@ impl Workspace {
         let size = Self::query_size();
         let shared_color = Color::new(config.theme.echo_fg, config.theme.text_bg);
         let mut this = Workspace {
-            config: config.to_ref(),
+            config: config.into_ref(),
             size,
             views_origin: Point::ORIGIN,
             views_size: size - Self::VIEWS_SIZE_ADJUST,
@@ -92,7 +92,7 @@ impl Workspace {
     }
 
     /// Turns the workspace into a [`WorkspaceRef`].
-    pub fn to_ref(self) -> WorkspaceRef {
+    pub fn into_ref(self) -> WorkspaceRef {
         Rc::new(RefCell::new(self))
     }
 
@@ -356,10 +356,10 @@ impl Workspace {
             Size::new(rows, self.views_size.cols),
             self.config.clone(),
         );
-        View::new(id, window.to_ref())
+        View::new(id, window.into_ref())
     }
 
     fn create_zombie(&self, id: u32) -> View {
-        View::new(id, Window::zombie().to_ref())
+        View::new(id, Window::zombie().into_ref())
     }
 }

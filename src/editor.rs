@@ -860,7 +860,7 @@ impl Editor {
     }
 
     /// Turns the editor into a [`EditorRef`].
-    pub fn to_ref(self) -> EditorRef {
+    pub fn into_ref(self) -> EditorRef {
         Rc::new(RefCell::new(self))
     }
 
@@ -1224,7 +1224,7 @@ impl ImmutableEditor for EditorKernel {
     }
 
     fn detach(&mut self) {
-        self.attach(Window::zombie().to_ref(), Align::Auto);
+        self.attach(Window::zombie().into_ref(), Align::Auto);
     }
 
     fn align_cursor(&mut self, align: Align) {
@@ -1304,14 +1304,12 @@ impl ImmutableEditor for EditorKernel {
                     // equivalent to current row of cursor.
                     self.set_top_line(self.cursor.row)
                 }
+            } else if rows > self.cursor.row {
+                // Cursor would have moved beyond top of display.
+                self.set_top_line(0)
             } else {
-                if rows > self.cursor.row {
-                    // Cursor would have moved beyond top of display.
-                    self.set_top_line(0)
-                } else {
-                    // Cursor remains visible without changing top line.
-                    self.cursor.row - rows
-                }
+                // Cursor remains visible without changing top line.
+                self.cursor.row - rows
             };
             let try_col = self.snap_col.take().unwrap_or(self.cursor.col);
             self.snap_col = Some(try_col);
@@ -1330,14 +1328,12 @@ impl ImmutableEditor for EditorKernel {
                 // always move down without reaching bottom of buffer.
                 self.down_top_line(rows);
                 self.cursor.row
+            } else if self.cursor.row + rows < self.rows {
+                // Cursor remains visible without changing top line.
+                self.cursor.row + rows
             } else {
-                if self.cursor.row + rows < self.rows {
-                    // Cursor remains visible without changing top line.
-                    self.cursor.row + rows
-                } else {
-                    // Cursor would have moved beyond bottom of display.
-                    self.set_top_line(self.rows - 1)
-                }
+                // Cursor would have moved beyond bottom of display.
+                self.set_top_line(self.rows - 1)
             };
             let try_col = self.snap_col.take().unwrap_or(self.cursor.col);
             self.snap_col = Some(try_col);
@@ -1470,7 +1466,7 @@ impl ImmutableEditor for EditorKernel {
                 self.snap_col = Some(try_col);
                 let col = self.cur_line.snap_col(try_col, self.cols);
                 self.cur_pos = self.cur_line.pos_of(col);
-                (self.rows - 1 as u32, col)
+                (self.rows - 1_u32, col)
             };
             self.align_syntax();
             self.cursor = Point::new(row, col);
@@ -1560,7 +1556,7 @@ impl ImmutableEditor for EditorKernel {
         Capture {
             pos: self.cur_pos,
             cursor: self.cursor,
-            mark: self.mark.clone(),
+            mark: self.mark,
         }
     }
 
@@ -1585,8 +1581,8 @@ impl ImmutableEditor for EditorKernel {
 
     fn render(&mut self) {
         // Renders visible buffer content.
-        let draw = Draw::new(&self);
-        let render = Render::new(&self);
+        let draw = Draw::new(self);
+        let render = Render::new(self);
         let rest = self
             .buffer
             .borrow()
@@ -1694,7 +1690,7 @@ impl EditorKernel {
     /// Creates a new editor using `source` and an optional `buffer`, which if `None`
     /// automatically creates an empty buffer.
     fn new(config: ConfigurationRef, source: Source, buffer: Option<Buffer>) -> EditorKernel {
-        let buffer = buffer.unwrap_or_else(|| Buffer::new()).to_ref();
+        let buffer = buffer.unwrap_or_default().into_ref();
         let cur_pos = buffer.borrow().get_pos();
 
         // Constructs syntax configuration based on type of buffer and file extension,
@@ -1703,14 +1699,14 @@ impl EditorKernel {
             config
                 .registry
                 .find(path)
-                .map(|syntax| syntax.clone())
-                .unwrap_or_else(|| Syntax::default())
+                .cloned()
+                .unwrap_or_else(Syntax::default)
         } else if let Source::Ephemeral(_) = &source {
             config
                 .registry
                 .find(source.to_string())
-                .map(|syntax| syntax.clone())
-                .unwrap_or_else(|| Syntax::default())
+                .cloned()
+                .unwrap_or_else(Syntax::default)
         } else {
             Syntax::default()
         };
@@ -1723,7 +1719,7 @@ impl EditorKernel {
 
         // Additional settings.
         let tab_hard = config.settings.tab_hard;
-        let tab_cols = config.settings.tab_size as u32;
+        let tab_cols = config.settings.tab_size;
 
         EditorKernel {
             config,
@@ -1732,7 +1728,7 @@ impl EditorKernel {
             clock: 0,
             undo: Vec::new(),
             redo: Vec::new(),
-            tokenizer: tokenizer.to_ref(),
+            tokenizer: tokenizer.into_ref(),
             tokenize_cost,
             tokenize_clock: 0,
             syntax_cursor,
@@ -1743,8 +1739,8 @@ impl EditorKernel {
             snap_col: None,
             cursor: Point::ORIGIN,
             mark: None,
-            canvas: Canvas::zero().to_ref(),
-            banner: Banner::none().to_ref(),
+            canvas: Canvas::zero().into_ref(),
+            banner: Banner::none().into_ref(),
             rows: 0,
             cols: 0,
             margin_cols: 0,
@@ -1803,8 +1799,7 @@ impl EditorKernel {
             .backward(pos)
             .index()
             .skip_while(|(_, c)| c.is_whitespace())
-            .skip_while(|(_, c)| !c.is_whitespace())
-            .next()
+            .find(|(_, c)| c.is_whitespace())
             .map(|(pos, _)| pos + 1)
             .unwrap_or(0)
     }
@@ -1815,8 +1810,7 @@ impl EditorKernel {
             .forward(pos)
             .index()
             .skip_while(|(_, c)| !c.is_whitespace())
-            .skip_while(|(_, c)| c.is_whitespace())
-            .next()
+            .find(|(_, c)| !c.is_whitespace())
             .map(|(pos, _)| pos)
             .unwrap_or(self.buffer().size())
     }
@@ -1842,7 +1836,7 @@ impl EditorKernel {
             };
 
             // Log change to buffer.
-            if let Some(_) = log {
+            if log.is_some() {
                 self.log(Change::Insert(self.cur_pos, text.to_vec()));
             }
 

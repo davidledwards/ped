@@ -53,7 +53,7 @@ impl Environment {
                     Source::Ephemeral(name.to_string()),
                     None,
                 )
-                .to_ref(),
+                .into_ref(),
             );
         }
         let editor_id_seq = editor_map.len() as u32;
@@ -164,10 +164,9 @@ impl Environment {
     pub fn open_window(&mut self, editor_id: u32, place: Placement, align: Align) -> Option<u32> {
         self.find_editor_view_id(editor_id).or_else(|| {
             let view_id = self.workspace_mut().open_view(place);
-            view_id.map(|view_id| {
+            view_id.inspect(|&view_id| {
                 self.reattach_views();
                 self.attach_to_editor(view_id, editor_id, align);
-                view_id
             })
         })
     }
@@ -247,11 +246,10 @@ impl Environment {
     pub fn kill_window_for(&mut self, view_id: u32) -> Option<u32> {
         let editor_id = self.get_view_editor_id_unchecked(view_id);
         let next_id = self.close_window_for(view_id);
-        next_id.map(|next_id| {
+        next_id.inspect(|_| {
             if !self.is_builtin(editor_id) {
                 self.remove_editor_unchecked(editor_id);
             }
-            next_id
         })
     }
 
@@ -262,15 +260,11 @@ impl Environment {
     /// Closes the editor of `editor_id`, but only if the editor is not attached to a
     /// window and not a builtin, returning `editor_id` if closed and `None` otherwise.
     pub fn close_editor(&mut self, editor_id: u32) -> Option<u32> {
-        if let Some(_) = self.find_editor_view_id(editor_id) {
+        if self.find_editor_view_id(editor_id).is_some() || self.is_builtin(editor_id) {
             None
         } else {
-            if self.is_builtin(editor_id) {
-                None
-            } else {
-                self.remove_editor_unchecked(editor_id);
-                Some(editor_id)
-            }
+            self.remove_editor_unchecked(editor_id);
+            Some(editor_id)
         }
     }
 

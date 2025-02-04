@@ -67,7 +67,7 @@ impl Colors {
     pub fn lookup(&self, name: &str) -> Option<u8> {
         self.color_map
             .get(name)
-            .map(|color| *color)
+            .copied()
             .or_else(|| name.parse::<u8>().ok())
     }
 
@@ -151,7 +151,7 @@ impl ColorVisitor {
     const ERROR_MSG: &str = "color values must be in the range of [0, 255]";
 }
 
-impl<'a> Visitor<'a> for ColorVisitor {
+impl Visitor<'_> for ColorVisitor {
     type Value = ColorValue;
 
     fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {

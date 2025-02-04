@@ -60,7 +60,7 @@ impl Canvas {
     }
 
     /// Turns the canvas into a [`CanvasRef`].
-    pub fn to_ref(self) -> CanvasRef {
+    pub fn into_ref(self) -> CanvasRef {
         Rc::new(RefCell::new(self))
     }
 

@@ -1,6 +1,5 @@
 //! A complete collection of errors.
 
-use regex_lite;
 use std::error;
 use std::fmt::{self, Display, Formatter};
 use std::io;

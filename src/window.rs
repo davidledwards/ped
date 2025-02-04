@@ -12,7 +12,6 @@ use crate::sys;
 use std::cell::RefCell;
 use std::ops::Range;
 use std::rc::Rc;
-use std::usize;
 
 pub struct Banner {
     canvas: Canvas,
@@ -116,7 +115,7 @@ impl Banner {
     }
 
     /// Turns the banner into a [`BannerRef`].
-    pub fn to_ref(self) -> BannerRef {
+    pub fn into_ref(self) -> BannerRef {
         Rc::new(RefCell::new(self))
     }
 
@@ -295,8 +294,8 @@ impl Window {
         );
         let mut this = Window {
             size,
-            canvas: canvas.to_ref(),
-            banner: banner.to_ref(),
+            canvas: canvas.into_ref(),
+            banner: banner.into_ref(),
         };
         this.draw();
         this
@@ -305,8 +304,8 @@ impl Window {
     pub fn zombie() -> Window {
         Window {
             size: Size::ZERO,
-            canvas: Canvas::zero().to_ref(),
-            banner: Banner::none().to_ref(),
+            canvas: Canvas::zero().into_ref(),
+            banner: Banner::none().into_ref(),
         }
     }
 
@@ -314,7 +313,7 @@ impl Window {
         self.size == Size::ZERO
     }
 
-    pub fn to_ref(self) -> WindowRef {
+    pub fn into_ref(self) -> WindowRef {
         Rc::new(RefCell::new(self))
     }
 

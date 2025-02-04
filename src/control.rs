@@ -65,7 +65,7 @@ impl Controller {
 
     pub fn new(keyboard: Keyboard, workspace: Workspace) -> Controller {
         let config = workspace.config().clone();
-        let workspace = workspace.to_ref();
+        let workspace = workspace.into_ref();
         let env = Environment::new(workspace.clone());
         let echo = Echo::new(workspace.clone());
         let input = InputEditor::new(workspace.clone());
@@ -85,7 +85,7 @@ impl Controller {
 
     /// Opens the collection of `files`, placing each successive editor at the bottom
     /// of the workspace.
-    pub fn open(&mut self, files: &Vec<String>) -> Result<()> {
+    pub fn open(&mut self, files: &[String]) -> Result<()> {
         let view_id = self.env.get_active_view_id();
         for (i, path) in files.iter().enumerate() {
             let path = sys::canonicalize(sys::working_dir().join(path)).as_string();
@@ -114,12 +114,10 @@ impl Controller {
             let key = self.keyboard.read().unwrap_or(Key::None);
             if key == Key::None {
                 self.process_background();
+            } else if let Step::Quit = self.process_key(key) {
+                break;
             } else {
-                if let Step::Quit = self.process_key(key) {
-                    break;
-                } else {
-                    self.show_cursor();
-                }
+                self.show_cursor();
             }
         }
     }
@@ -150,7 +148,7 @@ impl Controller {
             self.clear_echo();
             if !self.clear_keys() {
                 let mut editor = self.env.get_active_editor().borrow_mut();
-                if let Some(_) = editor.clear_mark() {
+                if editor.clear_mark().is_some() {
                     editor.render();
                 }
             }
@@ -298,7 +296,7 @@ impl Controller {
         let key_seq = &self.key_seq;
         let text = format!(
             "{}: undefined {}",
-            key::pretty(&key_seq),
+            key::pretty(key_seq),
             if key_seq.len() == 1 {
                 "key"
             } else {
@@ -314,13 +312,13 @@ impl Controller {
     }
 
     fn clear_echo(&mut self) {
-        if let Some(_) = self.last_echo.take() {
+        if self.last_echo.take().is_some() {
             self.echo.clear();
         }
     }
 
     fn resize_echo(&mut self) {
-        if let Some(_) = self.last_echo {
+        if self.last_echo.is_some() {
             self.echo.resize();
         }
     }
@@ -331,13 +329,13 @@ impl Controller {
     }
 
     fn clear_question(&mut self) {
-        if let Some(_) = self.question.take() {
+        if self.question.take().is_some() {
             self.input.disable();
         }
     }
 
     fn resize_question(&mut self) {
-        if let Some(_) = self.question {
+        if self.question.is_some() {
             self.input.resize();
         }
     }

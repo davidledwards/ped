@@ -94,7 +94,7 @@ impl Tokenizer {
     }
 
     /// Turns the tokenizer into a [`TokenizerRef`].
-    pub fn to_ref(self) -> TokenizerRef {
+    pub fn into_ref(self) -> TokenizerRef {
         Rc::new(RefCell::new(self))
     }
 
@@ -172,12 +172,7 @@ impl Tokenizer {
                 self.find_forward(cursor.token, pos)
             };
             let color = self.color(token.index);
-            Cursor {
-                pos,
-                token,
-                color,
-                ..cursor
-            }
+            Cursor { pos, token, color }
         }
     }
 

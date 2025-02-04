@@ -85,7 +85,7 @@ impl Buffer {
     }
 
     /// Turns the buffer into a [`BufferRef`].
-    pub fn to_ref(self) -> BufferRef {
+    pub fn into_ref(self) -> BufferRef {
         Rc::new(RefCell::new(self))
     }
 
@@ -370,7 +370,7 @@ impl Buffer {
                 // occurs:
                 // - enough bytes have been encoded to reach trigger, or
                 // - end of buffer
-                let _ = writer.write_all(chunk.as_slice())?;
+                writer.write_all(chunk.as_slice())?;
                 count += chunk.len();
                 chunk.clear();
             }
@@ -387,7 +387,7 @@ impl Buffer {
     /// value of `pos` > [`size`](Self::size).
     pub fn forward(&self, pos: usize) -> Forward<'_> {
         Forward {
-            buffer: &self,
+            buffer: self,
             pos: cmp::min(pos, self.size),
         }
     }
@@ -401,7 +401,7 @@ impl Buffer {
     /// value of `pos` > [`size`](Self::size).
     pub fn backward(&self, pos: usize) -> Backward<'_> {
         Backward {
-            buffer: &self,
+            buffer: self,
             pos: cmp::min(pos, self.size),
         }
     }
@@ -451,8 +451,7 @@ impl Buffer {
             // This calculation is safe from panic since capacity is always <= MAX_CAPACITY
             // and addition would never overflow because result is sufficiently smaller than
             // usize::MAX.
-            (self.capacity + need + Self::GROW_CAPACITY - 1) / Self::GROW_CAPACITY
-                * Self::GROW_CAPACITY
+            (self.capacity + need).div_ceil(Self::GROW_CAPACITY) * Self::GROW_CAPACITY
         };
 
         // Allocate new buffer and copy contents of old buffer.
@@ -489,6 +488,12 @@ impl Buffer {
     fn dealloc(buf: NonNull<char>, capacity: usize) {
         let layout = Layout::array::<char>(capacity).unwrap();
         unsafe { alloc::dealloc(buf.as_ptr() as *mut u8, layout) }
+    }
+}
+
+impl Default for Buffer {
+    fn default() -> Buffer {
+        Self::new()
     }
 }
 

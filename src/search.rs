@@ -102,7 +102,7 @@ impl TermPattern {
             while pos <= stop_pos {
                 // Pattern matching occurs right-to-left.
                 let mut i = pat_len;
-                while i > 0 && self.pattern[i - 1] == self.buf_at(&buffer, pos + i - 1) {
+                while i > 0 && self.pattern[i - 1] == self.buf_at(buffer, pos + i - 1) {
                     i -= 1;
                 }
                 if i == 0 {
@@ -178,7 +178,7 @@ impl RegexPattern {
         // Convert starting position into an offset.
         let pos_offset = etc::pos_to_offset(buffer, pos);
 
-        self.regex.find_at(buffer, pos_offset).and_then(|m| {
+        self.regex.find_at(buffer, pos_offset).map(|m| {
             // Convert starting and ending offsets into their respective character
             // positions.
             let Range { start, end } = m.range();
@@ -186,7 +186,7 @@ impl RegexPattern {
 
             // This trick saves us from rescanning entire buffer to find ending offset.
             let end_pos = start_pos + etc::offset_to_pos(&buffer[start..], end - start);
-            Some((start_pos, end_pos))
+            (start_pos, end_pos)
         })
     }
 }

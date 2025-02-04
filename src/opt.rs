@@ -106,7 +106,7 @@ where
     if let Some(value) = next_arg {
         value
             .parse::<T>()
-            .or_else(|_| Err(Error::invalid_value(arg, &value)))
+            .map_err(|_| Error::invalid_value(arg, &value))
     } else {
         Err(Error::expected_value(arg))
     }

@@ -227,9 +227,7 @@ impl Completer for NumberCompleter {
     }
 
     fn evaluate(&mut self, value: &str) -> Option<String> {
-        if value.trim().len() == 0 {
-            None
-        } else if let Ok(_) = value.trim().parse::<u32>() {
+        if value.trim().len() == 0 || value.trim().parse::<u32>().is_ok() {
             None
         } else {
             self.hint.clone()
@@ -297,7 +295,7 @@ impl Completer for ListCompleter {
     fn evaluate(&mut self, value: &str) -> Option<String> {
         let count = self.refresh(value);
         let hint = if count == 0 {
-            format!(" (no matches)")
+            " (no matches)".to_string()
         } else if count == 1 {
             format!(" ({})", self.match_for(0))
         } else {
@@ -309,7 +307,7 @@ impl Completer for ListCompleter {
     fn suggest(&mut self, _: &str) -> (Option<String>, Option<String>) {
         let count = self.matches.len();
         if count == 0 {
-            (None, Some(format!(" (no matches)")))
+            (None, Some(" (no matches)".to_string()))
         } else if count == 1 {
             let replace = self.match_for(0).to_string();
             (Some(replace), None)
@@ -380,8 +378,8 @@ impl FileCompleter {
         let path = &self.matches[index];
         path.strip_prefix(&dir)
             .map(|suffix| {
-                if suffix.starts_with("/") {
-                    suffix[1..].to_string()
+                if let Some(suffix) = suffix.strip_prefix("/") {
+                    suffix.to_string()
                 } else {
                     suffix.to_string()
                 }
@@ -396,7 +394,7 @@ impl FileCompleter {
             .collect()
     }
 
-    fn matches(comps: &Vec<String>, prefix: &str) -> Vec<String> {
+    fn matches(comps: &[String], prefix: &str) -> Vec<String> {
         comps
             .iter()
             .filter(|path| path.to_lowercase().starts_with(&prefix.to_lowercase()))
@@ -441,7 +439,7 @@ impl Completer for FileCompleter {
         } else {
             let count = self.matches.len();
             if count == 0 {
-                (None, Some(format!(" (no matches)")))
+                (None, Some(" (no matches)".to_string()))
             } else if count == 1 {
                 // Replace input value when single match exists.
                 let replace = self.replace_match(0);

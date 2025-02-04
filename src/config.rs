@@ -195,7 +195,7 @@ impl Theme {
     fn apply(&mut self, ext: Option<ExternalTheme>, colors: &Colors) -> Result<()> {
         fn resolve(color: u8, try_color: &Option<ColorValue>, colors: &Colors) -> Result<u8> {
             if let Some(try_color) = try_color {
-                if let Some(color) = colors.lookup_value(&try_color) {
+                if let Some(color) = colors.lookup_value(try_color) {
                     Ok(color)
                 } else {
                     Err(Error::invalid_color(&try_color.to_string()))
@@ -273,7 +273,7 @@ impl Configuration {
     }
 
     /// Turns the configuration into a [`ConfigurationRef`].
-    pub fn to_ref(self) -> ConfigurationRef {
+    pub fn into_ref(self) -> ConfigurationRef {
         Rc::new(self)
     }
 

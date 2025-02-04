@@ -28,7 +28,7 @@ pub fn help_editor(config: ConfigurationRef) -> EditorRef {
         Source::as_ephemeral(HELP_EDITOR_NAME),
         help_buffer(),
     )
-    .to_ref()
+    .into_ref()
 }
 
 fn help_buffer() -> Buffer {
@@ -48,7 +48,7 @@ pub fn keys_editor(config: ConfigurationRef) -> EditorRef {
         Source::as_ephemeral(KEYS_EDITOR_NAME),
         keys_buffer(),
     )
-    .to_ref()
+    .into_ref()
 }
 
 /// Returns a formatted list of available keys.
@@ -86,7 +86,7 @@ fn prepare_keys() -> Vec<String> {
 /// Returns an ephemeral editor, named `@operations`, containing a list of available
 /// editing operations.
 pub fn ops_editor(config: ConfigurationRef) -> EditorRef {
-    Editor::readonly(config, Source::as_ephemeral(OPS_EDITOR_NAME), ops_buffer()).to_ref()
+    Editor::readonly(config, Source::as_ephemeral(OPS_EDITOR_NAME), ops_buffer()).into_ref()
 }
 
 /// Returns a formatted list of available editing operations.
@@ -124,7 +124,7 @@ fn prepare_ops() -> Vec<String> {
 /// Returns an ephemeral editor, named `@bindings`, containing a list of key bindings.
 pub fn bindings_editor(config: ConfigurationRef) -> EditorRef {
     let buffer = bindings_buffer(config.bindings.bindings());
-    Editor::readonly(config, Source::as_ephemeral(BINDINGS_EDITOR_NAME), buffer).to_ref()
+    Editor::readonly(config, Source::as_ephemeral(BINDINGS_EDITOR_NAME), buffer).into_ref()
 }
 
 /// Returns a TOML-formatted list of key bindings.
@@ -175,7 +175,7 @@ fn prepare_bindings(bindings: &HashMap<Vec<Key>, String>) -> BTreeMap<String, St
 /// and values.
 pub fn colors_editor(config: ConfigurationRef) -> EditorRef {
     let buffer = colors_buffer(config.colors.colors());
-    Editor::readonly(config, Source::as_ephemeral(COLORS_EDITOR_NAME), buffer).to_ref()
+    Editor::readonly(config, Source::as_ephemeral(COLORS_EDITOR_NAME), buffer).into_ref()
 }
 
 /// Returns a TOML-formatted list of color names and values.
@@ -227,7 +227,8 @@ fn prepare_colors(colors: &HashMap<String, u8>) -> IndexMap<String, u8> {
 
 /// Returns a TOML-formatted list of theme color names and values.
 pub fn theme_content(theme: &Theme) -> String {
-    const COLORS: [(&str, fn(&Theme) -> u8); 13] = [
+    type ColorFn = fn(&Theme) -> u8;
+    const COLORS: [(&str, ColorFn); 13] = [
         ("text-fg", |t| t.text_fg),
         ("text-bg", |t| t.text_bg),
         ("select-bg", |t| t.select_bg),

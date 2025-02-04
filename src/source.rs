@@ -28,17 +28,11 @@ impl Source {
     }
 
     pub fn is_file(&self) -> bool {
-        match self {
-            Self::File(_, _) => true,
-            _ => false,
-        }
+        matches!(self, Self::File(_, _))
     }
 
     pub fn is_ephemeral(&self) -> bool {
-        match self {
-            Self::Ephemeral(_) => true,
-            _ => false,
-        }
+        matches!(self, Self::Ephemeral(_))
     }
 }
 
