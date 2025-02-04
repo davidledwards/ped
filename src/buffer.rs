@@ -131,7 +131,6 @@ impl Buffer {
 
     /// Returns the character at `pos`, or `None` if `pos` is not less than
     /// [`size`](Self::size).
-    #[allow(dead_code)]
     pub fn get_char(&self, pos: usize) -> Option<char> {
         if pos < self.size {
             Some(*self.get_char_unchecked(pos))

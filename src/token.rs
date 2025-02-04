@@ -183,7 +183,7 @@ impl Tokenizer {
     }
 
     /// Finds the cursor that is `n` characters before `cursor`.
-    #[allow(dead_code)]
+    #[allow(dead_code, reason = "possible future use")]
     pub fn backward(&self, cursor: Cursor, n: usize) -> Cursor {
         let pos = cursor.pos.saturating_sub(n);
         self.find(cursor, pos)

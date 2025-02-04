@@ -675,6 +675,7 @@ impl Line {
     }
 }
 
+#[allow(clippy::derivable_impls, reason = "retain expressiveness")]
 impl Default for Line {
     fn default() -> Line {
         Line {

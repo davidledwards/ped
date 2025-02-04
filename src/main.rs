@@ -14,14 +14,6 @@
 //! See the License for the specific language governing permissions and
 //! limitations under the License.
 
-// Disable lints that are primarily cosmetic.
-#![allow(
-    clippy::len_zero,
-    clippy::derivable_impls,
-    clippy::manual_range_contains,
-    clippy::comparison_chain
-)]
-
 mod ansi;
 mod bind;
 mod buffer;

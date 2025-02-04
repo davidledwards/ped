@@ -23,7 +23,7 @@ pub trait Inquirer {
     /// optional _hint_.
     ///
     /// The default implementation does nothing and returns `None`.
-    #[allow(unused_variables)]
+    #[allow(unused_variables, reason = "retain expressiveness")]
     fn react(&mut self, env: &mut Environment, value: &str, key: &Key) -> Option<String> {
         None
     }

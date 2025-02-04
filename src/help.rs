@@ -1,8 +1,9 @@
 //! A collection of functions related to help.
 
-// Necessary to disable warnings from infallible uses of write!() that do not
-// check return values.
-#![allow(unused_must_use)]
+#![allow(
+    unused_must_use,
+    reason = "disable warnings from infallible calls to write!()"
+)]
 
 use crate::buffer::Buffer;
 use crate::config::{ConfigurationRef, Theme};

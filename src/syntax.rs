@@ -29,6 +29,7 @@ use std::ops::Range;
 use std::path::Path;
 
 /// A registry of syntax configurations.
+#[derive(Default)]
 pub struct Registry {
     /// A map of canonical syntax names to syntax configurations.
     syntax_map: HashMap<String, Syntax>,
@@ -277,15 +278,6 @@ impl Registry {
     fn read_file(path: &Path) -> Result<ExternalConfig> {
         let content = fs::read_to_string(path).map_err(|e| Error::io(&path.as_string(), e))?;
         toml::from_str::<ExternalConfig>(&content).map_err(|e| Error::syntax(&path.as_string(), &e))
-    }
-}
-
-impl Default for Registry {
-    fn default() -> Registry {
-        Registry {
-            syntax_map: HashMap::new(),
-            re_list: Vec::new(),
-        }
     }
 }
 

@@ -25,6 +25,7 @@ pub struct Options {
     pub files: Vec<String>,
 }
 
+#[allow(clippy::derivable_impls, reason = "retain expressiveness")]
 impl Default for Options {
     fn default() -> Options {
         Options {

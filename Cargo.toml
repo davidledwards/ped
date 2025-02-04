@@ -15,3 +15,8 @@ toml = "0.8"
 regex-lite = "0.1"
 serde = { version = "1.0", features = ["derive"] }
 indexmap = { version = "2.7", features = ["serde"] }
+
+[lints.clippy]
+len_zero = "allow"
+manual_range_contains = "allow"
+comparison_chain = "allow"
