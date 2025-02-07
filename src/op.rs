@@ -1630,9 +1630,9 @@ fn describe_editor(env: &mut Environment) -> Option<Action> {
         ("EOF".to_string(), "".to_string())
     };
     let text = format!(
-        "characters: {} | lines: {} | cursor: {}{}",
-        buffer.size(),
+        "lines: {} | chars: {} | cursor: {}{}",
         buffer.line_of(usize::MAX) + 1,
+        buffer.size(),
         c_char,
         c_code,
     );

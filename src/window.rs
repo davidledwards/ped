@@ -43,7 +43,7 @@ impl Banner {
     const LEFT_MARGIN_COLS: u32 = 1;
 
     /// Number of columns allocated to right margin.
-    const RIGHT_MARGIN_COLS: u32 = 2;
+    const RIGHT_MARGIN_COLS: u32 = 1;
 
     /// Prefix to use when truncating the source.
     const SOURCE_ELLIPSIS: &str = "...";
@@ -62,7 +62,7 @@ impl Banner {
     const LINE_LIMIT: u32 = u32::pow(10, Self::LINE_COLS);
 
     /// Number of columns allocated to column numbers.
-    const COL_COLS: u32 = 4;
+    const COL_COLS: u32 = 5;
 
     /// Maximum column number that can be shown based on allocated columns.
     const COL_LIMIT: u32 = u32::pow(10, Self::COL_COLS);
