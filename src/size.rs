@@ -65,6 +65,12 @@ impl Point {
     pub const fn new(row: u32, col: u32) -> Point {
         Point { row, col }
     }
+
+    /// Returns `true` if this point is adjacent to and follows `p`.
+    #[inline(always)]
+    pub fn follows(&self, p: Point) -> bool {
+        self.row == p.row && self.col == p.col + 1
+    }
 }
 
 impl Display for Point {

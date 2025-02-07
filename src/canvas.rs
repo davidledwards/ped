@@ -14,7 +14,7 @@ use crate::grid::{Cell, Grid};
 use crate::size::{Point, Size};
 use crate::writer::Writer;
 use std::cell::RefCell;
-use std::cmp;
+use std::cmp::{self, Ordering};
 use std::ops::Range;
 use std::rc::Rc;
 
@@ -190,11 +190,23 @@ impl Canvas {
     fn draw_cell(&mut self, p: Point, cell: Cell, hint: Option<(Point, Cell)>) {
         match hint {
             Some((prev_p, prev_cell)) => {
-                if p.row != prev_p.row || p.col != prev_p.col + 1 {
+                if !p.follows(prev_p) {
                     self.writer.set_cursor(p);
                 }
-                if cell.color != prev_cell.color {
-                    self.writer.set_color(cell.color);
+                match (
+                    cell.color.fg.cmp(&prev_cell.color.fg),
+                    cell.color.bg.cmp(&prev_cell.color.bg),
+                ) {
+                    (Ordering::Equal, Ordering::Equal) => (),
+                    (Ordering::Equal, _) => {
+                        self.writer.set_color_bg(cell.color.bg);
+                    }
+                    (_, Ordering::Equal) => {
+                        self.writer.set_color_fg(cell.color.fg);
+                    }
+                    (_, _) => {
+                        self.writer.set_color(cell.color);
+                    }
                 }
             }
             None => {

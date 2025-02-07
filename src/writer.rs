@@ -62,6 +62,16 @@ impl Writer {
         self
     }
 
+    pub fn set_color_fg(&mut self, fg: u8) -> &mut Writer {
+        self.out.push_str(ansi::set_color_fg(fg).as_str());
+        self
+    }
+
+    pub fn set_color_bg(&mut self, bg: u8) -> &mut Writer {
+        self.out.push_str(ansi::set_color_bg(bg).as_str());
+        self
+    }
+
     pub fn write(&mut self, c: char) -> &mut Writer {
         self.out.push(c);
         self
