@@ -251,6 +251,7 @@ impl Controller {
                 self.env.resize();
                 self.resize_echo();
                 self.resize_question();
+                self.show_cursor();
                 None
             } else {
                 // Keep waiting.
