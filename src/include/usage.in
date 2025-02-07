@@ -27,7 +27,7 @@ Configuration
   --bare-syntax, -B  : ignore syntax configurations
 
 Help
-  --help, -h         : print this information
+  --help, -h         : print this help
   --version, -v      : print version information
   --source           : print repository URL for this version
 

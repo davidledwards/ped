@@ -2,6 +2,17 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
+## [0.19.0](https://github.com/davidledwards/ped/tree/v0.19.0) - `2025-02-06`
+
+### Changed
+
+- Show column number on banner bar up to `99999` before displaying `-----`
+- Optimized display performance by reducing amount of ANSI sequences written to terminal
+
+### Fixed
+
+- Cursor not being positioned correctly after resizing terminal
+
 ## [0.18.0](https://github.com/davidledwards/ped/tree/v0.18.0) - `2025-01-31`
 
 ### Added
