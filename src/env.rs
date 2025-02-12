@@ -289,6 +289,7 @@ impl Environment {
                 self.remove_view(view_id);
             }
             self.reattach_views();
+            self.focus(self.active_view_id);
         }
     }
 
