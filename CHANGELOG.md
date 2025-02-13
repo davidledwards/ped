@@ -2,6 +2,12 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
+## [0.19.1](https://github.com/davidledwards/ped/tree/v0.19.1) - `2025-02-06`
+
+### Fixed
+
+- Banner bar of the _active_ window was being redrawn with the _inactive_ background color when the terminal was resized
+
 ## [0.19.0](https://github.com/davidledwards/ped/tree/v0.19.0) - `2025-02-06`
 
 ### Changed
