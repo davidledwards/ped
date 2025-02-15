@@ -4,9 +4,16 @@ This file contains relevant information for each release. Please refer to the co
 
 ## [0.20.0](https://github.com/davidledwards/ped/tree/v0.20.0) - `2025-02-??`
 
+### Added
+
+- CLI option `--describe` that prints the description of an operation
+
 ### Changed
 
-- TOML output for `--bindings`, `--colors`, and `--theme` CLI options now use single quote for strings to avoid escaping backslash
+- `@help` window dynamically generates key bindings with descriptions rather than using static content
+- `@operations` window shows _description_ in addition to name of operation
+- TOML output for CLI option `--bindings`, `--colors`, and `--theme` now use single quote for strings to avoid escaping backslash
+- `C-h` is now a restricted key that cannot be rebound
 
 ## [0.19.1](https://github.com/davidledwards/ped/tree/v0.19.1) - `2025-02-12`
 

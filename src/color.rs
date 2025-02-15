@@ -92,6 +92,7 @@ impl Colors {
     }
 
     /// Predefined mapping of ANSI standard and extended colors.
+    #[rustfmt::skip]
     const COLOR_MAPPINGS: [(&str, u8); 34] = [
         // --- ANSI colors ---
         ("black", 0),
@@ -110,6 +111,7 @@ impl Colors {
         ("bright-magenta", 13),
         ("bright-cyan", 14),
         ("bright-white", 15),
+
         // --- custom colors ---
         ("pale-green", 30),
         ("charcoal-mist", 60),

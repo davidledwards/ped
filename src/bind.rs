@@ -144,8 +144,9 @@ impl Bindings {
     }
 
     /// A collection of key sequences that are restricted from being rebound.
-    const RESTRICTED_KEYS: [&[Key]; 6] = [
+    const RESTRICTED_KEYS: [&[Key]; 7] = [
         &[Key::Control(7)],   // C-g
+        &[Key::Control(8)],   // C-h
         &[Key::Control(9)],   // C-i (tab)
         &[Key::Control(13)],  // C-m (ret)
         &[Key::Control(17)],  // C-q

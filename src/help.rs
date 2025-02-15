@@ -1,15 +1,13 @@
 //! A collection of functions related to help.
 
-#![allow(
-    unused_must_use,
-    reason = "disable warnings from infallible calls to write!()"
-)]
+#![allow(unused_must_use, reason = "infallible calls to write!()")]
 
 use crate::buffer::Buffer;
 use crate::config::{ConfigurationRef, Theme};
 use crate::editor::{Editor, EditorRef};
 use crate::etc;
 use crate::key::{self, Key, KEY_MAPPINGS};
+use crate::op;
 use crate::op::OP_MAPPINGS;
 use crate::source::Source;
 use indexmap::IndexMap;
@@ -24,20 +22,26 @@ pub const COLORS_EDITOR_NAME: &str = "colors";
 
 /// Returns an ephemeral editor, named `@help`, containing general help content.
 pub fn help_editor(config: ConfigurationRef) -> EditorRef {
-    Editor::readonly(
-        config,
-        Source::as_ephemeral(HELP_EDITOR_NAME),
-        help_buffer(),
-    )
-    .into_ref()
+    let buffer = help_buffer(config.bindings.bindings());
+    Editor::readonly(config, Source::as_ephemeral(HELP_EDITOR_NAME), buffer).into_ref()
 }
 
-fn help_buffer() -> Buffer {
+fn help_buffer(bindings: &HashMap<Vec<Key>, String>) -> Buffer {
+    // Calculate maximum width of key sequences to align output.
+    let bindings = prepare_bindings(bindings);
+    let key_width = bindings
+        .keys()
+        .fold(0, |width, k| if k.len() > width { k.len() } else { width });
+
+    // Emit both static and dynamic content.
     let mut buf = Buffer::new();
-    writeln!(buf, include_str!("include/help-header.in"));
-    writeln!(buf, "[Build]");
+    write!(buf, include_str!("include/help.in"));
     writeln!(buf, "{}\n", etc::version());
     write!(buf, include_str!("include/help-keys.in"));
+    for (key_seq, op) in bindings {
+        let desc = op::describe(&op).unwrap_or("");
+        writeln!(buf, "{key_seq:<key_width$}   {desc}");
+    }
     buf.set_pos(0);
     buf
 }
@@ -94,32 +98,41 @@ pub fn ops_editor(config: ConfigurationRef) -> EditorRef {
 pub fn ops_content() -> String {
     let ops = prepare_ops();
     let mut out = String::new();
-    for op in ops {
+    for (op, _) in ops {
         writeln!(out, "{op}");
     }
     out
 }
 
 fn ops_buffer() -> Buffer {
-    const HEADER: &str = "[Operations]";
+    const HEADER_OP: &str = "[Operation]";
+    const HEADER_DESC: &str = "[Description]";
 
+    // Calculate maximum width of key sequences to align output.
     let ops = prepare_ops();
+    let key_width = ops.keys().fold(HEADER_OP.len(), |width, k| {
+        if k.len() > width {
+            k.len()
+        } else {
+            width
+        }
+    });
+
+    // Emit formatted operations.
     let mut buf = Buffer::new();
-    writeln!(buf, "{HEADER}");
-    for op in ops {
-        writeln!(buf, "{op}");
+    writeln!(buf, "{:<key_width$}   {}", HEADER_OP, HEADER_DESC);
+    for (op, desc) in ops {
+        writeln!(buf, "{op:<key_width$}   {desc}");
     }
     buf.set_pos(0);
     buf
 }
 
-fn prepare_ops() -> Vec<String> {
-    let mut ops = OP_MAPPINGS
+fn prepare_ops() -> BTreeMap<String, String> {
+    OP_MAPPINGS
         .iter()
-        .map(|(op, _)| op.to_string())
-        .collect::<Vec<_>>();
-    ops.sort();
-    ops
+        .map(|(op, _, desc)| (op.to_string(), desc.to_string()))
+        .collect::<BTreeMap<_, _>>()
 }
 
 /// Returns an ephemeral editor, named `@bindings`, containing a list of key bindings.

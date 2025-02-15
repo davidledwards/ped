@@ -98,6 +98,7 @@ echo-fg = "funky-red"
 #
 #   C-q : to ensure the user is able to quit ped
 #   C-g : to ensure the user is able to cancel any operation
+#   C-h : to ensure the user is able to show general help
 #   ESC : this key is a prefix of many other keys
 #   tab : has a ubiquitous meaning
 #   ret : has a ubiquitous meaning

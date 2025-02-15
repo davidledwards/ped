@@ -47,7 +47,7 @@ mod writer;
 
 use crate::config::Configuration;
 use crate::control::Controller;
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::key::Keyboard;
 use crate::opt::Options;
 use crate::syntax::Registry;
@@ -130,6 +130,13 @@ fn run_opts(opts: &Options) -> Result<()> {
     } else if opts.theme {
         print!("{}", help::theme_content(&config.theme));
         Ok(())
+    } else if let Some(ref op) = opts.describe {
+        if let Some(desc) = op::describe(op) {
+            println!("{desc}");
+            Ok(())
+        } else {
+            Err(Error::invalid_op(op))
+        }
     } else {
         run_config(opts, config)
     }

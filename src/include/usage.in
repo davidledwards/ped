@@ -19,6 +19,7 @@ Interrogation
   --bindings         : print key bindings in TOML format
   --colors           : print color names in TOML format
   --theme            : print color theme in TOML format
+  --describe OP      : print descripion of operation (--ops shows list)
 
 Configuration
   --config, -C FILE  : load configuration from FILE

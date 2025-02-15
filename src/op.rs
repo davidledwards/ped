@@ -32,6 +32,9 @@ use std::time::SystemTime;
 /// A function type that implements an editing operation.
 pub type OpFn = fn(&mut Environment) -> Option<Action>;
 
+/// Map of canonical names to editing operations.
+pub type OpMap = HashMap<&'static str, OpFn>;
+
 /// An action returned by an [`OpFn`] that is carried out by a controller orchestrating
 /// calls to such functions.
 pub enum Action {
@@ -39,9 +42,6 @@ pub enum Action {
     Echo(String),
     Question(Box<dyn Inquirer>),
 }
-
-/// Map of editing operations to editing functions.
-pub type OpMap = HashMap<&'static str, OpFn>;
 
 impl Action {
     fn as_quit() -> Option<Action> {
@@ -1934,99 +1934,194 @@ fn base_dir(editor: &EditorRef) -> PathBuf {
 }
 
 /// Predefined mapping of editing operations to editing functions.
-pub const OP_MAPPINGS: [(&str, OpFn); 76] = [
+#[rustfmt::skip]
+pub const OP_MAPPINGS: [(&str, OpFn, &str); 76] = [
     // --- exit and cancellation ---
-    ("quit", quit),
+    ("quit", quit,
+        "ask to save dirty editors and quit"),
+
     // --- help ---
-    ("help", help),
-    ("help-keys", help_keys),
-    ("help-ops", help_ops),
-    ("help-bindings", help_bindings),
-    ("help-colors", help_colors),
+    ("help", help,
+        "show or hide @help window"),
+    ("help-keys", help_keys,
+        "show or hide @keys window"),
+    ("help-ops", help_ops,
+        "show or hide @operations window"),
+    ("help-bindings", help_bindings,
+        "show or hide @bindings window"),
+    ("help-colors", help_colors,
+        "show or hide @colors window"),
+
     // --- navigation and selection ---
-    ("move-backward", move_backward),
-    ("move-backward-word", move_backward_word),
-    ("move-backward-select", move_backward_select),
-    ("move-backward-word-select", move_backward_word_select),
-    ("move-forward", move_forward),
-    ("move-forward-word", move_forward_word),
-    ("move-forward-select", move_forward_select),
-    ("move-forward-word-select", move_forward_word_select),
-    ("move-up", move_up),
-    ("move-up-select", move_up_select),
-    ("move-down", move_down),
-    ("move-down-select", move_down_select),
-    ("move-up-page", move_up_page),
-    ("move-up-page-select", move_up_page_select),
-    ("move-down-page", move_down_page),
-    ("move-down-page-select", move_down_page_select),
-    ("move-start", move_start),
-    ("move-start-select", move_start_select),
-    ("move-end", move_end),
-    ("move-end-select", move_end_select),
-    ("move-top", move_top),
-    ("move-top-select", move_top_select),
-    ("move-bottom", move_bottom),
-    ("move-bottom-select", move_bottom_select),
-    ("scroll-up", scroll_up),
-    ("scroll-up-select", scroll_up_select),
-    ("scroll-down", scroll_down),
-    ("scroll-down-select", scroll_down_select),
-    ("scroll-center", scroll_center),
-    ("set-mark", set_mark),
-    ("goto-line", goto_line),
+    ("move-backward", move_backward,
+        "move cursor backward one character"),
+    ("move-backward-word", move_backward_word,
+        "move cursor backward one word"),
+    ("move-backward-select", move_backward_select,
+        "move cursor backward one character while selecting text"),
+    ("move-backward-word-select", move_backward_word_select,
+        "move cursor backward one word while selecting text"),
+    ("move-forward", move_forward,
+        "move cursor forward one character"),
+    ("move-forward-word", move_forward_word,
+        "move cursor forward one word"),
+    ("move-forward-select", move_forward_select,
+        "move cursor forward one character while selecting text"),
+    ("move-forward-word-select", move_forward_word_select,
+        "move cursor forward one word while selecting text"),
+    ("move-up", move_up,
+        "move cursor up one line"),
+    ("move-up-select", move_up_select,
+        "move cursor up one line while selecting text"),
+    ("move-down", move_down,
+        "move cursor down one line"),
+    ("move-down-select", move_down_select,
+        "move cursor down one line while selecting text"),
+    ("move-up-page", move_up_page,
+        "move cursor up one page"),
+    ("move-up-page-select", move_up_page_select,
+        "move cursor up one page while selecting text"),
+    ("move-down-page", move_down_page,
+        "move cursor down one page"),
+    ("move-down-page-select", move_down_page_select,
+        "move cursor down one page while selecting text"),
+    ("move-start", move_start,
+        "move cursor to start of line"),
+    ("move-start-select", move_start_select,
+        "move cursor to start of line while selecting text"),
+    ("move-end", move_end,
+        "move cursor to end of line"),
+    ("move-end-select", move_end_select,
+        "move cursor to end of line while selecting text"),
+    ("move-top", move_top,
+        "move cursor to top of buffer"),
+    ("move-top-select", move_top_select,
+        "move cursor to top of buffer while selecting text"),
+    ("move-bottom", move_bottom,
+        "move cursor to bottom of buffer"),
+    ("move-bottom-select", move_bottom_select,
+        "move cursor to bottom of buffer while selecting text"),
+    ("scroll-up", scroll_up,
+        "scroll contents of window up one line"),
+    ("scroll-up-select", scroll_up_select,
+        "scroll contents of window up one line while selecting text"),
+    ("scroll-down", scroll_down,
+        "scroll contents of window down one line"),
+    ("scroll-down-select", scroll_down_select,
+        "scroll contents of window down one line while selecting text"),
+    ("scroll-center", scroll_center,
+        "redraw window and align cursor to center, then bottom and top when repeated"),
+    ("set-mark", set_mark,
+        "set or unset mark for selecting text"),
+    ("goto-line", goto_line,
+        "move cursor to line"),
+
     // --- insertion and removal ---
-    ("insert-line", insert_line),
-    ("insert-tab", insert_tab),
-    ("remove-before", remove_before),
-    ("remove-after", remove_after),
-    ("remove-start", remove_start),
-    ("remove-end", remove_end),
-    ("undo", undo),
-    ("redo", redo),
+    ("insert-line", insert_line,
+        "insert line break"),
+    ("insert-tab", insert_tab,
+        "insert soft or hard tab"),
+    ("remove-before", remove_before,
+        "remove character before cursor"),
+    ("remove-after", remove_after,
+        "remove character after cursor"),
+    ("remove-start", remove_start,
+        "remove characters from start of line to cursor"),
+    ("remove-end", remove_end,
+        "remove characters from cursor to end of line"),
+    ("undo", undo,
+        "undo last change"),
+    ("redo", redo,
+        "reapply last undo"),
+
     // --- selection actions ---
-    ("copy", copy),
-    ("paste", paste),
-    ("cut", cut),
+    ("copy", copy,
+        "copy selection, or entire line if nothing selected, to clipboard"),
+    ("paste", paste,
+        "paste contents of clipboard"),
+    ("cut", cut,
+        "cut and copy selection, or entire line if nothing selected, to clipboard"),
+
     // --- search ---
-    ("search", search),
-    ("search-case", search_case),
-    ("search-regex", search_regex),
-    ("search-regex-case", search_regex_case),
-    ("search-next", search_next),
+    ("search", search,
+        "case-insensitive search using term"),
+    ("search-case", search_case,
+        "case-sensitive search using term"),
+    ("search-regex", search_regex,
+        "case-insensitive search using regular expression"),
+    ("search-regex-case", search_regex_case,
+        "case-sensitive search using regular expression"),
+    ("search-next", search_next,
+        "search for next match"),
+
     // --- file handling ---
-    ("open-file", open_file),
-    ("open-file-top", open_file_top),
-    ("open-file-bottom", open_file_bottom),
-    ("open-file-above", open_file_above),
-    ("open-file-below", open_file_below),
-    ("save-file", save_file),
-    ("save-file-as", save_file_as),
+    ("open-file", open_file,
+        "open file in current window"),
+    ("open-file-top", open_file_top,
+        "open file in new window at top of workspace"),
+    ("open-file-bottom", open_file_bottom,
+        "open file in new window at bottom of workspace"),
+    ("open-file-above", open_file_above,
+        "open file in new window above current window"),
+    ("open-file-below", open_file_below,
+        "open file in new window below current window"),
+    ("save-file", save_file,
+        "save file"),
+    ("save-file-as", save_file_as,
+        "save file as another name"),
+
     // --- editor handling ---
-    ("select-editor", select_editor),
-    ("select-editor-top", select_editor_top),
-    ("select-editor-bottom", select_editor_bottom),
-    ("select-editor-above", select_editor_above),
-    ("select-editor-below", select_editor_below),
-    ("prev-editor", prev_editor),
-    ("next-editor", next_editor),
+    ("select-editor", select_editor,
+        "switch to editor in current window"),
+    ("select-editor-top", select_editor_top,
+        "switch to editor in new window at top of workspace"),
+    ("select-editor-bottom", select_editor_bottom,
+        "switch to editor in new window at bottom of workspace"),
+    ("select-editor-above", select_editor_above,
+        "switch to editor in new window above current window"),
+    ("select-editor-below", select_editor_below,
+        "switch to editor in new window below current window"),
+    ("prev-editor", prev_editor,
+        "switch to previous editor in current window"),
+    ("next-editor", next_editor,
+        "switch to next editor in current window"),
+
     // --- window handling ---
-    ("kill-window", kill_window),
-    ("close-window", close_window),
-    ("close-other-windows", close_other_windows),
-    ("top-window", top_window),
-    ("bottom-window", bottom_window),
-    ("prev-window", prev_window),
-    ("next-window", next_window),
+    ("kill-window", kill_window,
+        "close current window and editor"),
+    ("close-window", close_window,
+        "close current window"),
+    ("close-other-windows", close_other_windows,
+        "close all windows other than current window"),
+    ("top-window", top_window,
+        "move to window at top of workspace"),
+    ("bottom-window", bottom_window,
+        "move to window at bottom of workspace"),
+    ("prev-window", prev_window,
+        "move to window above current window"),
+    ("next-window", next_window,
+        "move to window below current window"),
+
     // --- behaviors ---
-    ("describe-editor", describe_editor),
-    ("tab-mode", tab_mode),
+    ("describe-editor", describe_editor,
+        "show editor information"),
+    ("tab-mode", tab_mode,
+        "toggle between soft and hard tab insertion mode"),
 ];
 
+/// Returns a mapping of editing operations to editing functions.
 pub fn init_op_map() -> OpMap {
     let mut op_map = OpMap::new();
-    for (op, op_fn) in OP_MAPPINGS {
+    for (op, op_fn, _) in OP_MAPPINGS {
         op_map.insert(op, op_fn);
     }
     op_map
+}
+
+/// Returns a description of `op`.
+pub fn describe(op: &str) -> Option<&'static str> {
+    OP_MAPPINGS
+        .iter()
+        .find(|(name, _, _)| *name == op)
+        .map(|(_, _, desc)| *desc)
 }

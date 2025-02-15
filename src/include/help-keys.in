@@ -1,90 +1,11 @@
-[Notation]
-  C-<key>    is     CONTROL + <key>
-  S-<key>    is     SHIFT + <key>
-  M-<key>    is     ESCAPE (or META) + <key>
+[Key Notation]
+C-<key> → CONTROL + <key>
+S-<key> → SHIFT + <key>
+M-<key> → ESCAPE (or META) + <key>
 
-[General]
-  C-q               Quit ped
-  C-g               Cancel command
-  C-h               Toggle @help window
+[General Keys]
+C-q   quit ped
+C-g   cancel operation
+C-h   show or hide this window
 
-[Navigation]
-  C-b  ←            Move backward one character
-  C-f  →            Move forward one character
-  C-p  ↑            Move up one line
-  C-n  ↓            Move down one line
-  C-a  HOME         Move to start of line
-  C-e  END          Move to end of line
-  M-p  PAGEUP       Move up one page
-  M-n  PAGEDOWN     Move down one page
-  M-a  C-HOME       Move to top of editor
-  M-e  C-END        Move to bottom of editor
-  M-b  C-←          Move backward one word
-  M-f  C-→          Move forward one word
-  C-↑               Scroll up one line
-  C-↓               Scroll down one line
-  C-/               Go to line number
-
-[Editing]
-  RET               Insert line break
-  DEL               Remove character before cursor
-  C-d               Remove character after cursor
-  C-j               Remove characters from start of line to cursor
-  C-k               Remove characters from cursor to end of line
-  C-u               Undo last change
-  C-r               Redo last undo
-
-[Selection]
-  C-SPACE           Set/Unset mark
-  C-c               Copy selection or line to clipboard
-  C-x               Cut selection or line and copy to clipboard
-  C-v               Paste contents of clipboard
-
-  As an alternative to setting a mark using C-SPACE, pressing SHIFT while
-  navigating will select a region of text.
-
-[Search]
-  C-\               Search using term (case-insensitive)
-  M-C-\             Search using term (case-sensitive)
-  M-\               Search using regular expression (case-insensitive)
-  M-M-\             Search using regular expression (case-sensitive)
-  C-]               Search for next match
-
-[Files]
-  C-o               Open file in current window
-  M-o a             Open file in new window at top of workspace
-  M-o e             Open file in new window at bottom of workspace
-  M-o p             Open file in new window above current window
-  M-o n             Open file in new window below current window
-  C-s               Save file
-  M-s               Save file as another name
-
-[Editors]
-  C-y               Switch to editor in current window
-  M-y a             Switch to editor in new window at top of workspace
-  M-y e             Switch to editor in new window at bottom of workspace
-  M-y p             Switch to editor in new window above current window
-  M-y n             Switch to editor in new window below current window
-  M-,               Switch to previous editor in current window
-  M-.               Switch to next editor in current window
-
-[Windows]
-  C-l               Redraw window and center cursor
-  C-w               Close window and editor
-  M-w 0             Close window
-  M-w 1             Close all other windows
-  M-w a             Move to window at top of workspace
-  M-w e             Move to window at bottom of workspace
-  M-w p  M-<        Move to window above current window
-  M-w n  M->        Move to window below current window
-
-[Behaviors]
-  C-t               Show position and size of editor
-  M-t t             Toggle between soft/hard tab inserts
-
-[Help]
-  C-h               Toggle @help window (general help)
-  M-h k             Toggle @keys window (available keys)
-  M-h o             Toggle @operations window (available operations)
-  M-h b             Toggle @bindings window (key bindings)
-  M-h c             Toggle @colors window (color names)
+[All Keys]

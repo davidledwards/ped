@@ -311,15 +311,18 @@ impl Configuration {
         Bindings::new(&bindings).unwrap_or_else(|e| panic!("{e}: default bindings failed"))
     }
 
+    #[rustfmt::skip]
     const DEFAULT_BINDINGS: [(&'static str, &'static str); 92] = [
         // --- exit and cancellation ---
         ("C-q", "quit"),
+
         // --- help ---
         ("C-h", "help"),
         ("M-h:k", "help-keys"),
         ("M-h:o", "help-ops"),
         ("M-h:b", "help-bindings"),
         ("M-h:c", "help-colors"),
+
         // --- navigation and selection ---
         ("C-b", "move-backward"),
         ("left", "move-backward"),
@@ -366,6 +369,7 @@ impl Configuration {
         ("C-l", "scroll-center"),
         ("C-@", "set-mark"),
         ("C-_", "goto-line"),
+
         // --- insertion and removal ---
         ("ret", "insert-line"),
         ("tab", "insert-tab"),
@@ -375,16 +379,19 @@ impl Configuration {
         ("C-k", "remove-end"),
         ("C-u", "undo"),
         ("C-r", "redo"),
+
         // --- selection actions ---
         ("C-c", "copy"),
         ("C-v", "paste"),
         ("C-x", "cut"),
-        // --- search next ---
+
+        // --- search ---
         ("C-\\", "search"),
         ("M-C-\\", "search-case"),
         ("M-\\", "search-regex"),
         ("M-M-\\", "search-regex-case"),
         ("C-]", "search-next"),
+
         // --- file handling ---
         ("C-o", "open-file"),
         ("M-o:a", "open-file-top"),
@@ -393,6 +400,7 @@ impl Configuration {
         ("M-o:n", "open-file-below"),
         ("C-s", "save-file"),
         ("M-s", "save-file-as"),
+
         // --- editor handling ---
         ("C-y", "select-editor"),
         ("M-y:a", "select-editor-top"),
@@ -401,6 +409,7 @@ impl Configuration {
         ("M-y:n", "select-editor-below"),
         ("M-,", "prev-editor"),
         ("M-.", "next-editor"),
+
         // --- window handling ---
         ("C-w", "kill-window"),
         ("M-w:0", "close-window"),
@@ -411,6 +420,7 @@ impl Configuration {
         ("M-<", "prev-window"),
         ("M-w:n", "next-window"),
         ("M->", "next-window"),
+
         // --- behaviors ---
         ("C-t", "describe-editor"),
         ("M-t:t", "tab-mode"),
