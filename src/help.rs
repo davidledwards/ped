@@ -134,7 +134,7 @@ pub fn bindings_content(bindings: &HashMap<Vec<Key>, String>) -> String {
     let mut out = String::new();
     for (key_seq, op) in bindings {
         let key_seq = key_seq.replace(' ', ":");
-        writeln!(out, "\"{key_seq}\" = \"{op}\"");
+        writeln!(out, "'{key_seq}' = '{op}'");
     }
     out
 }
@@ -184,7 +184,7 @@ pub fn colors_content(colors: &HashMap<String, u8>) -> String {
     let colors = prepare_colors(colors);
     let mut out = String::new();
     for (name, color) in colors {
-        writeln!(out, "{name} = {color}");
+        writeln!(out, "'{name}' = {color}");
     }
     out
 }
@@ -247,7 +247,7 @@ pub fn theme_content(theme: &Theme) -> String {
 
     let mut out = String::new();
     for (name, t_fn) in COLORS {
-        writeln!(out, "{name} = {}", t_fn(theme));
+        writeln!(out, "'{name}' = {}", t_fn(theme));
     }
     out
 }

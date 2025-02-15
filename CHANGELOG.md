@@ -2,6 +2,12 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
+## [0.20.0](https://github.com/davidledwards/ped/tree/v0.20.0) - `2025-02-??`
+
+### Changed
+
+- TOML output for `--bindings`, `--colors`, and `--theme` CLI options now use single quote for strings to avoid escaping backslash
+
 ## [0.19.1](https://github.com/davidledwards/ped/tree/v0.19.1) - `2025-02-12`
 
 ### Fixed
