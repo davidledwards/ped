@@ -12,9 +12,9 @@ The *ped*estrian text editor.
 
 The genesis of this project stemmed from a desire to learn the [Rust](https://www.rust-lang.org/) programming language while also building something useful and nontrivial.
 
-During my university years studying computer science, I spent evenings and weekends developing a text editor for MS-DOS in Turbo Pascal 3.0. Unfortunately, the source code seems to have been lost forever, but rest assured that reviewing the code today would likely be a dreadful experience.
-
 This is a hobbyist project with the goal of building a fully functional terminal-based editor supporting multiple buffers and windows, regular expression search, syntax highlighting, and perhaps other features yet to be decided. I plan to develop most everything from scratch as opposed to using prebuilt libraries. The desire is to learn, not to go fast.
+
+An [evolving narrative](DESIGN.md) of the editor explores many of the design choices in greater detail.
 
 ## Install
 
@@ -90,13 +90,75 @@ This ignores syntax configurations only. Note that the configuration file is sti
 ped --bare-syntax README.md
 ```
 
+## Keys
+
+The editor comes prebuilt with a default set of opinionated key bindings. Until the project reaches version `1.0`, these builtin key bindings may change.
+
+These key bindings can be enumerated from the CLI, the output of which may be included in a configuration file under the `[bindings]` section. See [.pedrc](.pedrc) for more details on modifying key bindings.
+
+Prints the key bindings.
+
+```shell
+ped --bindings
+```
+
+Note that the prior command also reflects any modifications from a configuration file. This alternative command will print default bindings only.
+
+```shell
+ped --bare --bindings
+```
+
+Prints a list of available keys that can be used in constructing key sequences.
+
+```shell
+ped --keys
+```
+
+Prints a list of available operations that to which keys can be bound.
+
+```shell
+ped --ops
+```
+
+Prints a brief description of the `undo` operation.
+
+```shell
+ped --describe undo
+```
+
+While running `ped`, typing `C-h` will show general help information that also contains a list of all key bindings. In other words, the same content as `ped --bindings`.
+
 ## Colors
 
 The color mechanism in `ped` adheres to the [ANSI 8-bit color standard](https://en.wikipedia.org/wiki/ANSI_escape_code#8-bit). Where applicable in configuration files, colors can always be referred to by their numeric value in the range of `0` to `255`.
 
-However, in order to make configuration a bit more friendly, `ped` defines a set of names for standard colors in the range of `0` to `15`, as well as a few creatively named colors in the extended range of `16` to `255`. These colors can be enumerated by running `ped --colors`. The extended colors are likely to evolve over time, but there is no intention of producing an exhaustive list of names.
+However, in order to make configuration a bit more friendly, `ped` defines a set of builtin names for standard colors in the range of `0` to `15`, as well as a few creatively named colors in the extended range of `16` to `255`. The extended colors are likely to evolve over time, but there is no intention of producing an exhaustive list of names.
 
-As I was experimenting with different color combinations, I decided to write a CLI program [tcolor](https://github.com/davidledwards/tcolor) that shows what colors look like on the terminal. The program is quite simple but also effective in visually colors.
+Prints a list of color names.
+
+```shell
+ped --colors
+```
+
+Note that the prior command also shows any color additions or modifications from a configuration file. The following command only prints builtin colors.
+
+```shell
+ped --bare --colors
+```
+
+Prints the current color theme settings, the output of which can be included in a configuration file under the `[theme]` section.
+
+```shell
+ped --theme
+```
+
+Since the prior command reflects any theme modifications from a configuration file, the following shows only the default theme settings.
+
+```shell
+ped --bare --theme
+```
+
+In the course of experimenting with different color combinations, I decided to write a CLI program [tcolor](https://github.com/davidledwards/tcolor) that shows what colors look like on the terminal. The program is quite simple but also effective in visually colors.
 
 ## Limitations
 

@@ -1,21 +1,188 @@
 # Design
 
-The core data structure for managing text is a [gap buffer](https://en.wikipedia.org/wiki/Gap_buffer) defined in `buffer.rs`, which turns out to be very efficient for insertion and removal operations. This is the only module that contains _unsafe_ Rust by design, primarily because the data structure requires something similar to a `Vec`, which could have been used but would have been too restrictive and less efficient. The simple idea behind the gap buffer that makes insertion and removal so efficient, _O(1)_, is that as the cursor moves so does the text before and after the gap. In essence, the cursor always points to the start of the gap, making insertion and removal a constant-time operation. This implementation has been slightly modified to defer any movement of text until a mutating change occurs.
+## Once Upon a Time
 
-The only other module that contains _unsafe_ Rust, by necessity, is `term.rs`, which makes calls to the C runtime library to interact with the terminal.
+During my sophomore year of college, rather than attending brain-eroding keggers on weekends, I spent my waking hours writing a text editor from scratch. It was a cerebral alternative to drinking, for sure. The editor was written in [Turbo Pascal 3.0](https://en.wikipedia.org/wiki/Turbo_Pascal) and ran on MS-DOS. At the time, I owned a [Tandy 1000](https://en.wikipedia.org/wiki/Tandy_1000) with `256 KB` of memory and a `20 MB` hard drive. Despite the seemingly meager configuration by modern standards, it was plenty of memory to do some clever things.
 
-The display of text on the terminal is ultimately done using ANSI control sequences, but there are intermediate steps in the process that optimize the amount of data sent to the terminal. A key component of the display architecture is a _canvas_ that is essentially an abstraction over _stdout_. Central to the design of the canvas is the combination of a _front_ and _back_ grid, a two-dimensional data structure. The front grid is a faithful representation of what the user sees, whereas the back grid is a cache of pending updates. The idea is that a series of writes are applied to the back grid, and then a subsequent draw request will generate a minimal set of ANSI commands based on the differences between the front and back grids.
+The motivation for writing a text editor is a bit unclear, but I do recall a strong desire stemming from a side conversation with a professor while enrolled in a course on data structures. He introduced me to [gap buffers](https://en.wikipedia.org/wiki/Gap_buffer), which were predominantly used in the implementation of text editors due to their space and compute efficiency. Today, many text editors utilize less efficient models, such as _vectors of strings_, as the scarcity of memory present in 1988 no longer exists.
 
-The rendering process is a possibly novel approach, as I did zero research on existing methods implemented in other editors. Since the text buffer is not organized as a collection of lines, but rather a contiguous array of characters with a gap in the middle, efficient rendering turned out to be one of the more difficult problems to solve. These core challenges include scrolling, insertion and removal of text, and line wrapping among others. It became evident early in design iterations that the rendering algorithms could be kept simple by only concerning themselves with the text visible on the display. That may seem obvious, but it is not necessarily intuitive when thinking through possible solutions. Notably, the rendering algorithm is based on two critical reference points in the buffer: one representing the top line of the display, and the other representing the line of the cursor. All movement and mutating operations are relative to these two points of reference. An earlier version used only one reference point, the current line, but it became clear that tracking the top line made a number of operations more efficient. The tradeoff with this algorithmic approach is that the majority of movement operations are _O(n)_, but in practice, these tend to be small distances, so the complexity that would come with implementing something more efficient than _O(n)_ would be hard to justify.
+Unfortunately, the source code for that text editor has been lost forever. The bits are probably resting in perpetuity on a 5.25-inch floppy disk, whereabouts unknown. I do confess to a deep curiosity of inspecting what my mind was thinking at the time, but I also know that a retrospective code review might also be a dreadful experience albeit amusing. Regardless, it was a reasonably functional editor with overlapping windows and a contextual help system, all wrapped into a `90 KB` binary.
 
-A _keyboard_ abstraction encapsulates the terminal, which is switched to _raw_ mode as part of initialization. The job of the keyboard is to interpret ANSI control sequences read from _stdin_ and turn those into _keys_. A key, or a sequence of keys, is bound to some editing operation, whether it be the simple insertion of a character or something more complex such as pasting text from the clipboard. In order to make the association between _key sequence_ and _editing operation_ more flexible, this binding process happens at runtime using a finite set of key names and editing operations. While `ped` does provide default bindings, these can be altered through configuration files.
+## Fast Forward
 
-An _editor_ is perhaps one of the more complicated data structures that combines a _buffer_ and a _window_. The purpose of the editor is to implement editing primitives that modify the underlying buffer and then determine how those changes are rendered in the window. The editing operations, which are bound to keys at runtime, are actually defined outside of the _editor_ in `op.rs`. The idea is that all current and future operations can be built using the editor primitives.
+Somewhere around 2022, I found myself becoming increasingly interested in [Rust](https://www.rust-lang.org/) primarily because of its fundamental goal of proving the correctness of programs. Much of my early career was spent developing cross-platform middleware systems in C++, so there was also a secondary desire to gravitate back to fast, memory-efficient languages.
 
-The entire editing experience is facilitated by a central _controller_, which in a simplified sense, reads keys and calls their corresponding editing operations. The controller also manages the workspace, which contains a collection of windows, and provides a restricted _environment_ to functions that implement editing operations. It also coordinates interaction with the user in the form of _questions_, such as opening a file or asking to save a dirty buffer.
+A wonderful way of learning a new programming language is to build something nontrivial. Simple programs are practical ways to get started, but embracing a complex problem is necessary to fully understand and appreciate the capabilites and limitations of a language. A text editor was a natural choice for me because of the life-changing experience of building one during my college years.
 
-The concept of a _question_ is implemented using an _inquirer_ combined with a _completer_, both of which are abstractions that allow the controller to deal only with the general problem. This design allows the development of arbitrarily complex interactions, such as the _open file_ dialog that provides file completion assistance.
+## Goals
 
-The _workspace_ supports multiple windows that split vertically with equal allocation of screen real estate. This was an early decision to keep the windowing system simple, at least for now. The workspace also manages resizing of windows when a change in the terminal size is detected.
+Bear in mind that writing a text editor is a hobbyist endeavor. There is no commercial interest whatsoever and it's not as though the world needs yet another text editor. My goal was to become reasonably proficient at Rust and to build something I could actually use. Personally, writing software as a hobby is as much about artistic expression as it is logical precision, so the code should be beautiful to read.
 
-The implementation of _syntax_ highlighting uses familiar constructs, such as regular expressions to define tokens, as well as external configuration files that are discovered and loaded at runtime. The algorithmic challenge that became evident quite early in the design process was how to apply color updates efficiently as changes were occurring in the buffer. The fundamental problem is that the insertion or removal of text requires some degree of rescanning because existing tokens may be invalidated and new tokens may be recognized. However, it is not immediately obvious where to start the rescanning process. A classic example that illustrates the problem is the multi-line comment. Suppose the comment is opened on line 1 with a `/*`, but never closed. This implies that the comment token is never recognized. Now, suppose the comment is closed on line 1000 with `*/`. The entire buffer would need to be rescanned to correctly tokenize the text. In the interest of simplicity, I chose to rescan the entire buffer when changes are made. The tokenization process produces a vector of _spans_ that map to recognized tokens in the buffer. This data structure is very efficient for navigation and scrolling even though it requires _O(n)_ time to move forward and backward. It also aligns well with the rendering process. Insertion and removal of text uses a clever trick, essentially expanding a span during insertion or collapsing spans upon removal. These operations are very efficient, executing in _O(1)_ time. More importantly, the rescanning process can be deferred while making the immediate rendering operation behave as one might expect even though coloring for a brief period of time may not be entirely accurate. The need to rescan is detected and executed in background processing, which occurs between keystrokes. It turns out that the CPU is sitting idle most of the time, which makes background processing the ideal place to perform this relatively costly tokenization. Despite the deferral of rescanning, this operation is being executed on the same thread as the controller, so the cost of tokenization must be sensitive to the perception of sluggish responsiveness to users.
+This recent professional break provided a window of opportunity to immerse myself in development. A formidable obstacle to writing a text editor _as a side project_ is that many of the hard interior problems require a substantial upfront cognitive investment. It is quite difficult to simply context-switch in and out of the project with a few hours here and there, as progress depends on retaining a handful of complex ideas in short-term memory.
+
+In the spirit of learning, a tertiary objective was to develop as much as possible by hand as opposed to relying on external prebuilt libraries. Speed of development was clearly _not_ a goal. A noteworthy side effect of reducing the dependency on external libraries is that programs tend to be smaller. As of this writing, the size of the executable is only `1.6 MB`.
+
+## Getting Started
+
+A project of this size requires frequent iteration with some kind of working program that may not even resemble an editor during the early stages. It just needs to be something that facilitates incremental progress with very short feedback cycles.
+
+The first module on deck was terminal handling and the design of a `Keyboard` abstraction. The core job of this type is to read sequences of bytes from the terminal and convert them to `Key` values. So, the first working version of the editor was essentially a program that would echo keys. Interestingly, this work led to the development of a separate utility, called [keyb](https://github.com/davidledwards/keyb), that echoes raw bytes read from the terminal. This utility proved quite useful as it allowed me to rapidly observe ANSI control sequences generated by all sorts of key combinations.
+
+In order to read bytes from the terminal without buffering, which is the behavior required for this type of editor, the terminal must be configured in _raw_ mode. Doing so means dipping into the operating system to modify the terminal settings. This is one area where an external library is useful and not worth the time to roll your own.
+
+## Gap Buffer
+
+The gap buffer is a relatively simple and straightforward data structure to implement. The objective was not to build a general-purpose gap buffer, but rather something that was designed specifically for the needs of the editor.
+
+It turns out that designing the buffer necessitated a journey into the world of _unsafe_ Rust. None of the collection types in the standard library correctly fit the problem at hand. It seems reasonable to assume that `Vec` (a vector) would be a suitable type since a gap buffer is essentially a contiguous array of characters, but `Vec` behaves in a way that would make it clumsy to use as a backing store for a gap buffer.
+
+A critical component of the buffer implementation is the iterator type, both _forward_ and _backward_. Many of the higher-level editing functions are built on top of these iterators, so performance and efficiency was paramount. This module, among all others, arguably contains the most extensive collection of unit tests, particularly because it makes use of _unsafe_ Rust.
+
+## Reflections on Unsafe Rust
+
+Even though Rust touts itself as a safe systems programming language, a compulsory underworld exists where the safety guardrails do not apply. Many of the foundational parts of the standard library are actually constructed from these _unsafe_ building blocks. Most of the types and functions we interact with in Rust, by design, live in the _safe_ world. However, as a systems programming language, Rust must be able to interact with foreign interfaces that are not inherently safe.
+
+An unintended yet beneficial side effect of implementing the gap buffer using _unsafe_ Rust was a deeper appreciation of the language and its safety guarantees. It is worth noting that the notion of _unsafe_ does not imply that all guardrails are stripped. In fact, while Rust makes it possible to do many unsafe things, it also makes it intentional and hard to do bad things. It feels like the language designers struck the right balance by forcing developers to express the intentionality of unsafe endeavors. As it turns out, there is an entire [book](https://doc.rust-lang.org/nomicon/index.html) dedicated to the dark side of _unsafe_ Rust.
+
+## Drawing Output
+
+Since this is a terminal-based editor, drawing text is rather simple in comparison to graphical user interfaces. The display can be conceptualized as a two-dimensional vector of fixed-width characters. Algorithmically, it is useful to model the display in this manner despite the fact that this two-dimensional space is not memory-mapped in a way that makes writing to the terminal convenient.
+
+Displaying text on the terminal is done by emitting ANSI control sequences. All modern terminals support the standard collection of sequences that give us everything we need to fully control the display. Compared to a hypothetical memory-mapped vector where displaying text would be highly performant, ANSI commands require more expensive parsing by the terminal emulator. As such, it is crucial to minimize the number of control sequences in order to maximize display performance.
+
+The editor introduces a `Canvas` abstraction over the terminal display that organize a given area as an adddressable two-dimensional grid. All display updates are orchestrated through a canvas. Key to optimal performance, the implementation makes use of a _front_ and _back_ grid. Think of the front grid as a faithful representation of what the user sees on the display, and the back grid as an uncommitted staging area for updates.
+
+Display changes are written to the _back_ grid, and then at some point the canvas is asked to send those updates to the terminal. The _front_ grid is reconciled with the _back_ grid by first computing the set of differences, which is then piped through an algorithm that minimizes the number of ANSI control sequences generated. For example, one such optimization occurs when two characters that changed are adjacent to each other. In this case, emitting a _set-cursor-position_ command for the second character can be eliminated.
+
+## Rendering Text
+
+Equipped with a _buffer_, a _canvas_, and the ability to read _keys_, I began to focus on text rendering. This turned out to be one of the more difficult problems. On the surface, text rendering may appear to be a simple problem, but there are lots of scenarios and edge cases to consider. One of the mistakes I made in the first implementation was spending too much time trying to optimize for edge cases. As you can imagine, the code was unnecessarily complicated. In retrospect, that mistake was a critical learning opportunity, as it led to a second implementation that was remarkably simple in comparison.
+
+The initial rendering work was done in the context of navigation only. Text insertion and removal would come later. The primary objective was to move around the entire body of text with smooth scrolling and high-performance drawing. Any signs of sluggish response would be a major impediment to adoption.
+
+The program at this point would load text into a buffer, create a canvas over the entire display, read a limited set of keys from the terminal, and call navigation functions to move around the body of text.
+
+The `Editor` type is where the `Buffer` and `Canvas` types come together, essentially coordinating movement and mutations. When a user presses a key to move down one page, the buffer position and the display change accordingly. Similarly, when a user inserts or removes text, the buffer contents are modified and the display reflects that change. Note that the binding of _keys_ to editing _operations_ is a higher-level concern that sits outside of the core `Editor` type.
+
+## Workspace
+
+An early decision when contemplating design goals was to support multiple, tiled windows. Normally, one would opt for a prebuilt library, such as [tui](https://docs.rs/tui/0.19.0/tui/), to build a terminal user interface. However, as mentioned earlier, a key objective of the project was to build as much as possible from scratch. This meant developing precisely what was needed as opposed to a fully-featured framework.
+
+The `Workspace` takes full control of the terminal display and organizes the space as a collection of equally-sized windows. Importantly, it makes certain that critical invariants always hold true. An example is that at least one window must always exist.
+
+When a new window is opened or an existing window is closed, all windows are resized accordingly. Simplicity of design was the primary reason for the equal distribution of space. Whether or not this was a wise choice remains to be seen, but thus far, the usability seems to be working reasonably well.
+
+The workspace also provides a shared region that is never allocated to windows. The shared region is currently a single row at the bottom of the display. It is used for the dual purpose of providing feedback messages and interacting with the user.
+
+With a rudimentary but functioning workspace, it was now possible to begin working on window-related workflows.
+
+## Modifying Text
+
+The initial phase of developing the `Editor` was focused on navigation only. With that capability in place, my attention turned towards building primitives for mutating the buffer. An important discovery during this process was that essentiallly all mutating operations could be reduced to _insert_ or _remove_ functions. This greatly simplified the source code, as virtually all of the coordination pertaining to buffer changes, undo logging, and canvas updates could be encapsulated in those functions.
+
+## Simplified Rendering
+
+As previously mentioned, the first pass at text rendering was mired in complexity. A fundamentally different approach was needed. That process led to a simplified algorithm that is arguably just as performant as the prior generation.
+
+The new algorithm is quite simple. If we know the buffer position corresponding to the top-left cell on the canvas, then the rendering process boils down to iterating from that position and writing text to the canvas.
+
+The process is a bit more involved, though. Each cell in the canvas contains a foreground and background color in addition to the character itself. Selecting the color depends on a number of factors, such as whether that character is contained in a _selection_ or if the character is part of a _token_ recognized by syntax highlighting. Even the character itself may be displayed in a way that is different from its value in the buffer, such as showing a special glyph like `↵` rather than the normal blank for end-of-line. All of these color and character decisions execute in _O(1)_ time, so the rendering algorithm is very efficient.
+
+Once the rendering algorithm terminates, the canvas is drawn. As mentioned earlier, this is also a compute-efficient process because only the differences between the _front_ and _back_ grid are sent to the terminal display. In practice, inserting a single character into a buffer only changes one or perhaps a handful of cells on the canvas, so the actual number of ANSI commands sent to the terminal tend to be relatively small.
+
+## Terminal Resizing
+
+It goes without saying that all modern terminal emulators can be resized with a few clicks of the mouse. Because this feature is so common, an important design goal was to support dynamic resizing of the editor and its windows when such events were detected. Otherwise, the user would need to exit and restart the editor.
+
+This was not a simple problem by any stretch. Fortunately, most of the complexity is contained inside `Workspace` where a number of critical invariants could be enforced.
+
+When the terminal is placed into _raw_ mode, we also register a signal handler that is called by the operating system every time the size of the terminal changes. All of this is buried inside the terminal module, as it requires _unsafe_ code, but there is a simple public interface that allows us to detect changes and query the terminal.
+
+The `Workspace` is clever in that it provides a single method to _resize_ itself. The detection of a terminal size change and the subsequent invocation of this method is orchestrated by the main controller, which is discussed later. The challenge with resizing is that you have no control over the size itself. It turns out that certain boundary conditions need to be enforced and those conditions may be violated as a consequence of resizing.
+
+To illustrate, consider one such reasonble boundary: a limit on the number of windows that can be opened. The workspace will enforce an upper bound on the number of windows based on the current size of the terminal. If opening a new window would violate the minimum size contraint, then the operation is rejected. Imagine a user has opened the maximum number of windows, and then resizes the terminal by making it smaller. Doing so would violate the minimum size invariant, so the workspace needs to do something sensible that upholds these invariants. In this particular case, the workspace will start to close windows until the invariant is satisfied. The buffers are retained, as expected, but the windows disappear.
+
+The controller that detects changes does not immediately resize the workspace. As the user expands or contracts the terminal, this may generate a large number of events, but ideally we only want to resize on the last event. Once a size change is detected, a short period of time must expire without any further events before resizing happens.
+
+## Undo and Redo
+
+The ability to _undo_ a change is arguably one of the most useful features of any editor. Oddly enough, this was not implemented in the college-era text editor.
+
+Surprisingly, _undo_ and _redo_ were relatively simple to implement. Conceptually, both are just stacks of recent changes capturing enough information to restore the buffer to its prior state.
+
+## Binding Keys
+
+Not unlike most text editors, binding _keys_ to editing _operations_ is a process that occurs at runtime during the early stages of initialization. The default built-in configuration binds all possible editing operations to an opinionated set of keys.
+
+By design, the editor will exit prematurely if any of the key bindings are malformed or reference nonexistent editing operations. There also exists a small number of restricted keys that cannot be rebound, and attempting to do so will cause the editor to terminate.
+
+Once all key bindings finish, we end up with a map of key sequences to editing operations. It turns out that a simple map is not entirely sufficient for the main controller to do its job of reading keys and calling corresponding operations.
+
+Consider what happens when two bindings share the same prefix of keys. Suppose the key sequence of the first binding is `ESC` + `a`, and the second is `ESC` + `b`. When the controller reads `ESC`, it tries to find a binding in the map, but no such binding exists. However, it needs to wait for the next key, which might be `a` or `b`. But, how does it know when to wait as opposed to recognize that a key sequence has no binding?
+
+A simple and efficient solution is to construct a set of prefixes from all key sequences. When the controller is unable to find a binding for a given key sequence, it waits for the next key only if the key sequence exists in the set of prefixes. Otherwise, it knows that the sequence is invalid.
+
+In the previous example, `ESC` exists as a prefix, so the controller waits for the next key. If the next key is `a`, then it finds a bound operation and dispatches accordingly. But, if the next key is `z`, not only does it not find a bound operation, `ESC` + `z` is not a prefix, so it knows that the sequence is invalid.
+
+## Editing Operations
+
+On the other side of a key binding is a function that carries out a specific operation, such as inserting text from the clipboard or saving a buffer. These operations are finite and addressable by name. Since key binding occurs at runtime, names provide a necessary level of indirection.
+
+To illustrate, one such binding associates the key sequence `M-\` (shorthand for `ESC` + `\`) to the operation `search-regex`. During the key binding process, `search-regex` is resolved to a function pointer, which is then associated with the key sequence. If a name given in any binding cannot be resolved, then the process fails, causing the editor to terminate prematurely.
+
+All editing operations are defined in a separate module. This is essentially where many of the other building blocks come together to form a functioning editor.
+
+- akin to the business logic of an editor
+- user interactions, such as opening files, searching, etc.
+- constrained by what is accessible through environment
+
+## Main Controller
+
+TODO
+- one big loop
+- reads keys and calls functions
+- detects terminal size changes and resizes workspace
+- coordinates interacton with users
+- performs background work, such as tokenization
+
+OLD
+- The entire editing experience is facilitated by a central _controller_, which in a simplified sense, reads keys and calls their corresponding editing operations. The controller also manages the workspace, which contains a collection of windows, and provides a restricted _environment_ to functions that implement editing operations. It also coordinates interaction with the user in the form of _questions_, such as opening a file or asking to save a dirty buffer.
+
+## User Interaction
+
+TODO
+- inquirer abstraction for soliciting input from user
+- completer abstraction to assist with inquirers
+- predefined set of completers: null, yes/no, number, lists, files
+
+OLD
+- The concept of a _question_ is implemented using an _inquirer_ combined with a _completer_, both of which are abstractions that allow the controller to deal only with the general problem. This design allows the development of arbitrarily complex interactions, such as the _open file_ dialog that provides file completion assistance.
+
+## Incremental Search
+
+TODO
+- started with non-incremental search
+- pattern abstraction so we could transparently use term- and regex-based
+- inquirer trait makes it possible for incremental
+- challenge with regex search is that buffer must be converted to string first
+- but, we convert once since the contents do not change during incremental
+- term search uses Boyer-Moore and operates over the buffer itself
+- regex uses external library
+
+## Syntax Highlighting
+
+TODO
+- uses external syntax config files
+- TOML format
+- used external library to deserialize files
+- separate repo project to manage config files, can be cloned to ~/.ped/syntax
+- regex-based tokens with colors assigned
+- all token regexes combined into single regex via disjunction
+- will tokenizer after change if cost falls below threshold
+- otherwise, do this in the background
+- challenge of how to update after changes, decide to re-tokenize entire buffer
+- vector of spans
+- how it fits into the rendering process
+
+OLD
+- The implementation of _syntax_ highlighting uses familiar constructs, such as regular expressions to define tokens, as well as external configuration files that are discovered and loaded at runtime. The algorithmic challenge that became evident quite early in the design process was how to apply color updates efficiently as changes were occurring in the buffer. The fundamental problem is that the insertion or removal of text requires some degree of rescanning because existing tokens may be invalidated and new tokens may be recognized. However, it is not immediately obvious where to start the rescanning process. A classic example that illustrates the problem is the multi-line comment. Suppose the comment is opened on line 1 with a `/*`, but never closed. This implies that the comment token is never recognized. Now, suppose the comment is closed on line 1000 with `*/`. The entire buffer would need to be rescanned to correctly tokenize the text. In the interest of simplicity, I chose to rescan the entire buffer when changes are made. The tokenization process produces a vector of _spans_ that map to recognized tokens in the buffer. This data structure is very efficient for navigation and scrolling even though it requires _O(n)_ time to move forward and backward. It also aligns well with the rendering process. Insertion and removal of text uses a clever trick, essentially expanding a span during insertion or collapsing spans upon removal. These operations are very efficient, executing in _O(1)_ time. More importantly, the rescanning process can be deferred while making the immediate rendering operation behave as one might expect even though coloring for a brief period of time may not be entirely accurate. The need to rescan is detected and executed in background processing, which occurs between keystrokes. It turns out that the CPU is sitting idle most of the time, which makes background processing the ideal place to perform this relatively costly tokenization. Despite the deferral of rescanning, this operation is being executed on the same thread as the controller, so the cost of tokenization must be sensitive to the perception of sluggish responsiveness to users.
