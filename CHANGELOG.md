@@ -2,6 +2,17 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
+## [0.21.0](https://github.com/davidledwards/ped/tree/v0.21.0) - `2025-02-16`
+
+### Added
+
+- CLI option `--[no-]track-lateral` to enable or disable tracking of lateral mouse events
+- Configuration option `track-lateral`
+
+### Changed
+
+- Lateral mouse tracking is now _disabled_ by default
+
 ## [0.20.0](https://github.com/davidledwards/ped/tree/v0.20.0) - `2025-02-15`
 
 ### Added

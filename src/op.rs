@@ -1710,32 +1710,36 @@ pub fn track_down(env: &mut Environment, p: Point, select: bool) {
 /// Moves the cursor backward for the editor associated with `p`, which represents a
 /// point whose origin is the top-left position of the terminal display.
 pub fn track_backward(env: &mut Environment, p: Point, select: bool) {
-    let view = env.workspace().locate_view(p);
-    if let Some((view_id, _)) = view {
-        let mut editor = env.get_view_editor(view_id).borrow_mut();
-        if select {
-            editor.set_soft_mark();
-        } else {
-            editor.clear_soft_mark();
+    if env.workspace().config().settings.track_lateral {
+        let view = env.workspace().locate_view(p);
+        if let Some((view_id, _)) = view {
+            let mut editor = env.get_view_editor(view_id).borrow_mut();
+            if select {
+                editor.set_soft_mark();
+            } else {
+                editor.clear_soft_mark();
+            }
+            editor.move_backward(1);
+            editor.render();
         }
-        editor.move_backward(1);
-        editor.render();
     }
 }
 
 /// Moves the cursor forward for the editor associated with `p`, which represents a
 /// point whose origin is the top-left position of the terminal display.
 pub fn track_forward(env: &mut Environment, p: Point, select: bool) {
-    let view = env.workspace().locate_view(p);
-    if let Some((view_id, _)) = view {
-        let mut editor = env.get_view_editor(view_id).borrow_mut();
-        if select {
-            editor.set_soft_mark();
-        } else {
-            editor.clear_soft_mark();
+    if env.workspace().config().settings.track_lateral {
+        let view = env.workspace().locate_view(p);
+        if let Some((view_id, _)) = view {
+            let mut editor = env.get_view_editor(view_id).borrow_mut();
+            if select {
+                editor.set_soft_mark();
+            } else {
+                editor.clear_soft_mark();
+            }
+            editor.move_forward(1);
+            editor.render();
         }
-        editor.move_forward(1);
-        editor.render();
     }
 }
 

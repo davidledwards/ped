@@ -58,6 +58,7 @@ pub struct Settings {
     pub eol: bool,
     pub tab_hard: bool,
     pub tab_size: u32,
+    pub track_lateral: bool,
 }
 
 pub struct Theme {
@@ -97,6 +98,9 @@ struct ExternalSettings {
 
     #[serde(rename = "tab-size")]
     tab_size: Option<u32>,
+
+    #[serde(rename = "track-lateral")]
+    track_lateral: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -151,6 +155,7 @@ impl Settings {
             self.eol = ext.eol.unwrap_or(self.eol);
             self.tab_hard = ext.tab_hard.unwrap_or(self.tab_hard);
             self.tab_size = ext.tab_size.unwrap_or(self.tab_size);
+            self.track_lateral = ext.track_lateral.unwrap_or(self.track_lateral);
         }
     }
 
@@ -161,6 +166,7 @@ impl Settings {
         self.eol = opts.eol.unwrap_or(self.eol);
         self.tab_hard = opts.tab_hard.unwrap_or(self.tab_hard);
         self.tab_size = opts.tab_size.unwrap_or(self.tab_size);
+        self.track_lateral = opts.track_lateral.unwrap_or(self.track_lateral);
     }
 }
 
@@ -172,6 +178,7 @@ impl Default for Settings {
             eol: false,
             tab_hard: false,
             tab_size: 4,
+            track_lateral: false,
         }
     }
 }

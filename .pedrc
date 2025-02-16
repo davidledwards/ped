@@ -24,6 +24,10 @@ tab-hard = true
 # Default = 4
 tab-size = 8
 
+# Tracks lateral mouse movement as left and right scrolling events.
+# Default = false
+track-lateral = true
+
 # This section contains custom-defined color names that map to color values.
 #
 # Colors are values in the range of [0, 255] and follow the 8-bit ANSI standard
