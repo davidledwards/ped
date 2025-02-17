@@ -23,7 +23,7 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
 
     steps:
       - uses: actions/checkout@v4
@@ -50,8 +50,11 @@ jobs:
 
       - name: Create Release
         run: |
-          gh release create ${{ env.TAG }} \
-            --title ${{ env.VERSION }} --generate-notes
+          TAG_EXISTS=$(gh release view ${{ env.TAG }} 2>&1)
+          if [[ "${TAG_EXISTS}" == "release not found" ]];
+            gh release create ${{ env.TAG }} \
+              --title ${{ env.VERSION }} --generate-notes
+          fi
 
       - name: Upload Artifacts
         run: |
