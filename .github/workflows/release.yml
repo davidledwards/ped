@@ -55,3 +55,5 @@ jobs:
           shasum -a 256 ${TAR_FILE} > ${SHA_FILE}
 
           gh release upload --clobber ${{ env.TAG }} ${TAR_FILE} ${SHA_FILE}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
