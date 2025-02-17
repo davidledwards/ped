@@ -51,7 +51,7 @@ jobs:
       - name: Create Release
         run: |
           TAG_EXISTS=$(gh release view ${{ env.TAG }} 2>&1)
-          if [[ "${TAG_EXISTS}" == "release not found" ]];
+          if [[ "${TAG_EXISTS}" == "release not found" ]]; then
             gh release create ${{ env.TAG }} \
               --title ${{ env.VERSION }} --generate-notes
           fi
