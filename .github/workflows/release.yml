@@ -22,6 +22,9 @@ jobs:
 
     runs-on: ${{ matrix.os }}
 
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -45,6 +48,11 @@ jobs:
           cargo build --release --target ${{ matrix.target }}
           cargo test --release --target ${{ matrix.target }} --no-fail-fast
 
+      - name: Create Release
+        run: |
+          gh release create ${{ env.TAG }} \
+            --title ${{ env.VERSION }} --generate-notes
+
       - name: Upload Artifacts
         run: |
           BIN_DIR="target/${{ matrix.target }}/release"
@@ -55,5 +63,3 @@ jobs:
           shasum -a 256 ${TAR_FILE} > ${SHA_FILE}
 
           gh release upload --clobber ${{ env.TAG }} ${TAR_FILE} ${SHA_FILE}
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
