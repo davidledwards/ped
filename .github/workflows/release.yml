@@ -41,10 +41,8 @@ jobs:
           VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r ".packages[0].version")
           echo "VERSION=${VERSION}" >> $GITHUB_ENV
 
-      - name: Build and Test
+      - name: Build
         run: |
-          echo "building version ${{ env.VERSION }} for {{ matrix.target }}"
-          cargo build --release
-          cargo test --release --no-fail-fast
-          # tar -czf ${TAR_FILE} ${TARGET_DIR}/ped
-          # shasum -a 256 ${TAR_FILE} > ${TAR_FILE}.sha256
+          echo "building version ${{ env.VERSION }} for ${{ matrix.target }}"
+          cargo build --release --target ${{ matrix.target }}
+          cargo test --release --target ${{ matrix.target }} --no-fail-fast
