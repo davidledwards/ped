@@ -33,21 +33,25 @@ jobs:
           override: true
           target: ${{ matrix.target }}
 
-      - name: Set Version
+      - name: Set Variables
         run: |
           VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r ".packages[0].version")
           echo "VERSION=${VERSION}" >> $GITHUB_ENV
-          TARGET_DIR="target/${{ matrix.target }}/release"
-          echo "TARGET_DIR=${TARGET_DIR}" >> $GITHUB_ENV
+          TAG="v${VERSION}"
+          echo "TAG=${TAG}" >> $GITHUB_ENV
 
       - name: Build
         run: |
-          echo "building version ${{ env.VERSION }} for ${{ matrix.target }}"
           cargo build --release --target ${{ matrix.target }}
           cargo test --release --target ${{ matrix.target }} --no-fail-fast
 
       - name: Upload Artifacts
         run: |
-          TAR_FILE="${{ env.TARGET_DIR }}/ped-${{ env.VERSION }}-${{ matrix.target }}.tar.gz"
-          tar -czf ${TAR_FILE} "${{ env.TARGET_DIR }}/ped"
-          shasum -a 256 ${TAR_FILE} > "${TAR_FILE}.sha256"
+          BIN_DIR="target/${{ matrix.target }}/release"
+          TAR_FILE="${BIN_DIR}/ped-${{ env.VERSION }}-${{ matrix.target }}.tar.gz"
+          SHA_FILE="${TAR_FILE}".sha256
+
+          tar -czf ${TAR_FILE} "${BIN_DIR}/ped"
+          shasum -a 256 ${TAR_FILE} > ${SHA_FILE}
+
+          gh release upload --clobber ${{ env.TAG }} ${TAR_FILE} ${SHA_FILE}
