@@ -1,7 +1,12 @@
 name: CI
 
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
 
 env:
   CARGO_TERM_COLOR: always
@@ -21,13 +26,11 @@ jobs:
             target: i686-unknown-linux-gnu
 
     runs-on: ${{ matrix.os }}
-
     env:
       GH_TOKEN: ${{ github.token }}
 
     steps:
       - uses: actions/checkout@v4
-
       - name: Install gcc-multilib
         if: matrix.target == 'i686-unknown-linux-gnu'
         run: |

@@ -9,13 +9,11 @@ env:
 jobs:
   create-release:
     runs-on: macos-latest
-
     env:
       GH_TOKEN: ${{ github.token }}
 
     steps:
       - uses: actions/checkout@v4
-
       - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
@@ -31,7 +29,6 @@ jobs:
 
   build-and-upload:
     needs: create-release
-
     strategy:
       matrix:
         include:
@@ -45,13 +42,11 @@ jobs:
             target: i686-unknown-linux-gnu
 
     runs-on: ${{ matrix.os }}
-
     env:
       GH_TOKEN: ${{ github.token }}
 
     steps:
       - uses: actions/checkout@v4
-
       - name: Install gcc-multilib
         if: matrix.target == 'i686-unknown-linux-gnu'
         run: |
