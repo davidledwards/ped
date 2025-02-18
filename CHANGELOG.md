@@ -2,6 +2,12 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
+## [0.22.0](https://github.com/davidledwards/ped/tree/v0.21.0) - `2025-02-17`
+
+### Changed
+
+- Release process from shell script to GitHub Actions
+
 ## [0.21.0](https://github.com/davidledwards/ped/tree/v0.21.0) - `2025-02-16`
 
 ### Added
