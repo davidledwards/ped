@@ -28,6 +28,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install gcc-multilib
+        if: matrix.target == 'i686-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install gcc-multilib
+
       - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
