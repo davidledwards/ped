@@ -27,7 +27,7 @@ jobs:
       - name: Create Release
         run: |
           VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r ".packages[0].version")
-          gh release create v${TAG} --title ${VERSION} --generate-notes
+          gh release create v${VERSION} --title ${VERSION} --generate-notes
 
   build-and-upload:
     strategy:
