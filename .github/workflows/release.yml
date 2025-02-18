@@ -7,7 +7,7 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  release:
+  create-release:
     runs-on: macos-latest
 
     env:
@@ -22,14 +22,14 @@ jobs:
           profile: minimal
           toolchain: stable
           override: true
-          target: ${{ matrix.target }}
+          target: aarch64-apple-darwin
 
       - name: Create Release
         run: |
           VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r ".packages[0].version")
           gh release create v${TAG} --title ${VERSION} --generate-notes
 
-  build:
+  build-and-upload:
     strategy:
       matrix:
         include:
