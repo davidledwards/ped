@@ -169,10 +169,6 @@ In the course of experimenting with different color combinations, I decided to w
 - Control characters other than `\t` and `\n` are shown as `¿`, though one can place the cursor under such characters and press `C-t` to see the Unicode code point.
 - A target binary does not exist for Windows.
 
-## Release
-
-Instructions for building and releasing can be found [here](RELEASE.md).
-
 ## Contributing
 
 Please refer to the [contribution guidelines](CONTRIBUTING.md) when reporting bugs and suggesting improvements.
