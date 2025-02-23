@@ -10,6 +10,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
 
     steps:
+      - uses: actions/checkout@v4
       - name: Trigger Publish for Homebrew
         run: |
           TAG=$(gh release view --json tagName --jq ".tagName")
