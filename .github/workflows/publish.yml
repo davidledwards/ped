@@ -13,7 +13,9 @@ jobs:
       - name: Trigger Publish for Homebrew
         run: |
           TAG=$(gh release view --json tagName --jq ".tagName")
-          curl -X POST \
+          echo "TAG=${TAG}"
+
+          curl -v -X POST \
             -H "Accept: application/vnd.github.everest-preview+json" \
             -H "Authorization: token ${{ env.GH_TOKEN }}" \
             https://api.github.com/repos/davidledwards/homebrew-ped/dispatches \
