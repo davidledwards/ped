@@ -52,6 +52,7 @@ use crate::key::Keyboard;
 use crate::opt::Options;
 use crate::syntax::Registry;
 use crate::workspace::Workspace;
+use std::io::{Write, stderr, stdout};
 use std::ops::Drop;
 use std::process::ExitCode;
 
@@ -63,14 +64,16 @@ struct RestoreTerminal;
 
 impl Drop for RestoreTerminal {
     fn drop(&mut self) {
-        restore_term().unwrap_or_else(|e| println!("error restoring terminal: {e}"));
+        restore_term().unwrap_or_else(|e| {
+            let _ = writeln!(stderr(), "error restoring terminal: {e}");
+        });
     }
 }
 
 fn main() -> ExitCode {
     match run() {
         Err(e) => {
-            println!("{e}");
+            let _ = writeln!(stderr(), "{e}");
             ExitCode::from(1)
         }
         Ok(_) => ExitCode::SUCCESS,
@@ -80,19 +83,19 @@ fn main() -> ExitCode {
 fn run() -> Result<()> {
     let opts = Options::parse(std::env::args().skip(1))?;
     if opts.help {
-        println!("{USAGE}");
+        writeln!(stdout(), "{USAGE}")?;
         Ok(())
     } else if opts.version {
-        println!("{}", etc::version());
+        writeln!(stdout(), "{}", etc::version())?;
         Ok(())
     } else if opts.source {
-        println!("{}", etc::SOURCE_URL);
+        writeln!(stdout(), "{}", etc::SOURCE_URL)?;
         Ok(())
     } else if opts.keys {
-        print!("{}", help::keys_content());
+        write!(stdout(), "{}", help::keys_content())?;
         Ok(())
     } else if opts.ops {
-        print!("{}", help::ops_content());
+        write!(stdout(), "{}", help::ops_content())?;
         Ok(())
     } else {
         run_opts(&opts)
@@ -122,17 +125,20 @@ fn run_opts(opts: &Options) -> Result<()> {
     };
 
     if opts.bindings {
-        print!("{}", help::bindings_content(config.bindings.bindings()));
+        let content = help::bindings_content(config.bindings.bindings());
+        write!(stdout(), "{}", content)?;
         Ok(())
     } else if opts.colors {
-        print!("{}", help::colors_content(config.colors.colors()));
+        let content = help::colors_content(config.colors.colors());
+        write!(stdout(), "{}", content)?;
         Ok(())
     } else if opts.theme {
-        print!("{}", help::theme_content(&config.theme));
+        let content = help::theme_content(&config.theme);
+        write!(stdout(), "{}", content)?;
         Ok(())
     } else if let Some(ref op) = opts.describe {
         if let Some(desc) = op::describe(op) {
-            println!("{desc}");
+            writeln!(stdout(), "{desc}")?;
             Ok(())
         } else {
             Err(Error::invalid_op(op))
@@ -156,21 +162,23 @@ fn run_config(opts: &Options, config: Configuration) -> Result<()> {
 
 fn prepare_term() -> Result<()> {
     term::init()?;
-    print!(
+    write!(
+        stdout(),
         "{}{}{}",
         ansi::alt_screen(true),
         ansi::track_mouse(true),
         ansi::clear_screen()
-    );
+    )?;
     Ok(())
 }
 
 fn restore_term() -> Result<()> {
-    print!(
+    write!(
+        stdout(),
         "{}{}{}",
         ansi::clear_screen(),
         ansi::track_mouse(false),
         ansi::alt_screen(false)
-    );
+    )?;
     term::restore()
 }

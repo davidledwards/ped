@@ -31,8 +31,9 @@ impl Writer {
     /// Sends buffered changes to standard output.
     pub fn send(&mut self) {
         if self.out.len() > 0 {
-            print!("{}", self.out);
-            let _ = io::stdout().flush();
+            let mut stdout = io::stdout();
+            let _ = write!(stdout, "{}", self.out);
+            let _ = stdout.flush();
             self.out.clear();
         }
     }

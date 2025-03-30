@@ -2,7 +2,13 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
-## [0.22.0](https://github.com/davidledwards/ped/tree/v0.21.0) - `2025-02-17`
+## [0.23.0](https://github.com/davidledwards/ped/tree/v0.23.0) - `2025-03-30`
+
+### Fixed
+
+- Panic in certain edge cases when writing to `stdout` and pipe is broken by receiver, e.g. `ped -h | echo`
+
+## [0.22.0](https://github.com/davidledwards/ped/tree/v0.22.0) - `2025-02-17`
 
 ### Changed
 

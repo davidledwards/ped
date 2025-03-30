@@ -175,3 +175,9 @@ impl Display for Error {
         }
     }
 }
+
+impl From<io::Error> for Error {
+    fn from(cause: io::Error) -> Error {
+        Error::Os { cause }
+    }
+}
