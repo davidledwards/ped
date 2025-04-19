@@ -2,6 +2,12 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
+## [0.24.0](https://github.com/davidledwards/ped/tree/v0.24.0) - `2025-04-19`
+
+### Changed
+
+- Undo/Redo correctly restores _dirtiness_ state of buffer, i.e. undoing a series of edits starting from an _undirty_ buffer will restore the buffer to an _undirty_ state
+
 ## [0.23.0](https://github.com/davidledwards/ped/tree/v0.23.0) - `2025-03-30`
 
 ### Fixed
