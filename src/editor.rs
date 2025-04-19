@@ -363,8 +363,8 @@ struct EditorKernel {
     /// display.
     syntax_cursor: Cursor,
 
-    /// An indication that unsaved changes have been made to the buffer.
-    dirty: bool,
+    /// The value of `clock` when the buffer was most recently committed to storage.
+    commit_clock: u64,
 
     /// Buffer position corresponding to the cursor.
     cur_pos: usize,
@@ -1144,11 +1144,11 @@ impl ImmutableEditor for EditorKernel {
     }
 
     fn is_dirty(&self) -> bool {
-        self.dirty
+        self.clock > self.commit_clock
     }
 
     fn clear_dirty(&mut self) {
-        self.dirty = false;
+        self.commit_clock = self.clock;
         self.show_banner();
     }
 
@@ -1597,7 +1597,7 @@ impl ImmutableEditor for EditorKernel {
         // Renders additional information.
         self.banner
             .borrow_mut()
-            .set_dirty(self.dirty)
+            .set_dirty(self.is_dirty())
             .set_location(self.location())
             .draw();
     }
@@ -1733,7 +1733,7 @@ impl EditorKernel {
             tokenize_cost,
             tokenize_clock: 0,
             syntax_cursor,
-            dirty: false,
+            commit_clock: 0,
             cur_pos,
             top_line: Line::default(),
             cur_line: Line::default(),
@@ -1787,7 +1787,7 @@ impl EditorKernel {
     fn show_banner(&mut self) {
         self.banner
             .borrow_mut()
-            .set_dirty(self.dirty)
+            .set_dirty(self.is_dirty())
             .set_source(self.source.clone())
             .set_syntax(self.tokenizer().syntax().name.clone())
             .set_location(self.location())
@@ -1866,7 +1866,6 @@ impl EditorKernel {
             let col = self.cur_line.col_of(self.cur_pos);
             self.snap_col = None;
             self.cursor = Point::new(row, col);
-            self.dirty = true;
             self.clock += 1;
             self.possibly_tokenize(false);
         }
@@ -1950,7 +1949,6 @@ impl EditorKernel {
             let col = self.cur_line.col_of(self.cur_pos);
             self.snap_col = None;
             self.cursor = Point::new(row, col);
-            self.dirty = true;
             self.clock += 1;
             self.possibly_tokenize(false);
             text
