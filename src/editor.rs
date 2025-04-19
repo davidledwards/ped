@@ -344,11 +344,13 @@ struct EditorKernel {
     /// A logical clock that increments with each change to the buffer.
     clock: u64,
 
-    /// A stack containing changes to the buffer that can be _undone_.
-    undo: Vec<Change>,
+    /// A stack containing changes to the buffer that can be _undone_, where each
+    /// entry is associated with the value of `clock` prior to the change.
+    undo: Vec<(u64, Change)>,
 
-    /// A stack containing changes to the buffer that can be _redone_.
-    redo: Vec<Change>,
+    /// A stack containing changes to the buffer that can be _redone_, where each
+    /// entry is associated with the value of `clock` prior to the change.
+    redo: Vec<(u64, Change)>,
 
     /// Tokenizes the buffer for syntax coloring.
     tokenizer: TokenizerRef,
@@ -432,12 +434,14 @@ enum Change {
     /// values are defined as:
     /// - buffer position prior to removal
     /// - text removed
+    /// - indicates _soft_ selection
     RemoveSelectionBefore(usize, Vec<char>, bool),
 
     /// Represents the removal of selected text that comes after the cursor, where
     /// values are defined as:
     /// - buffer position prior to removal
     /// - text removed
+    /// - indicates _soft_ selection
     RemoveSelectionAfter(usize, Vec<char>, bool),
 }
 
@@ -1144,7 +1148,12 @@ impl ImmutableEditor for EditorKernel {
     }
 
     fn is_dirty(&self) -> bool {
-        self.clock > self.commit_clock
+        // It might seem reasonable to expect `clock > commit_clock` is more correct
+        // when determining dirtiness of buffer since it would not make sense that
+        // commit_clock occurs after most recent change. However, changes in undo
+        // stack can be applied after buffer is committed to storage, making it possible
+        // for commit_clock to appear after latest change.
+        self.clock != self.commit_clock
     }
 
     fn clear_dirty(&mut self) {
@@ -1534,9 +1543,13 @@ impl ImmutableEditor for EditorKernel {
     }
 
     fn undo(&mut self) -> bool {
-        if let Some(change) = self.undo.pop() {
+        if let Some((clock, change)) = self.undo.pop() {
             self.undo_change(&change);
-            self.redo.push(change);
+            self.redo.push((clock, change));
+
+            // Restored clock must represent pre-change value since undo is as if
+            // change was never applied by user.
+            self.clock = clock;
             true
         } else {
             false
@@ -1544,9 +1557,13 @@ impl ImmutableEditor for EditorKernel {
     }
 
     fn redo(&mut self) -> bool {
-        if let Some(change) = self.redo.pop() {
+        if let Some((clock, change)) = self.redo.pop() {
             self.redo_change(&change);
-            self.undo.push(change);
+            self.undo.push((clock, change));
+
+            // Restored clock must represent post-change value since redo is
+            // effectively equivalent to change entered by user.
+            self.clock = clock + 1;
             true
         } else {
             false
@@ -1572,7 +1589,7 @@ impl ImmutableEditor for EditorKernel {
     }
 
     fn tokenize(&mut self) -> bool {
-        if self.tokenize_clock < self.clock {
+        if self.tokenize_clock != self.clock {
             self.possibly_tokenize(true);
             true
         } else {
@@ -1839,6 +1856,7 @@ impl EditorKernel {
             // Log change to buffer.
             if log.is_some() {
                 self.log(Change::Insert(self.cur_pos, text.to_vec()));
+                self.clock = cmp::max(self.clock, self.commit_clock) + 1;
             }
 
             // Update tokenizer with insertion range.
@@ -1866,7 +1884,6 @@ impl EditorKernel {
             let col = self.cur_line.col_of(self.cur_pos);
             self.snap_col = None;
             self.cursor = Point::new(row, col);
-            self.clock += 1;
             self.possibly_tokenize(false);
         }
     }
@@ -1932,6 +1949,7 @@ impl EditorKernel {
                         });
                     }
                 }
+                self.clock = cmp::max(self.clock, self.commit_clock) + 1;
             }
 
             // Update tokenizer with removal range.
@@ -1949,7 +1967,6 @@ impl EditorKernel {
             let col = self.cur_line.col_of(self.cur_pos);
             self.snap_col = None;
             self.cursor = Point::new(row, col);
-            self.clock += 1;
             self.possibly_tokenize(false);
             text
         }
@@ -2057,15 +2074,19 @@ impl EditorKernel {
         const UNDO_SOFT_LIMIT: usize = 1024;
         const UNDO_HARD_LIMIT: usize = 1280;
 
-        if let Some(top) = self.undo.pop() {
+        if let Some((clock, top)) = self.undo.pop() {
             if let Some(combined) = change.possibly_combine(&top) {
-                self.undo.push(combined);
+                // Use clock value of prior change when current change is combined
+                // since subsequent undo would restore all combined changes.
+                self.undo.push((clock, combined));
             } else {
-                self.undo.push(top);
-                self.undo.push(change);
+                // Restore original change since latest change cannot be combined.
+                self.undo.push((clock, top));
+                self.undo.push((self.clock, change));
             }
         } else {
-            self.undo.push(change);
+            // Capture clock value which represents state prior to change.
+            self.undo.push((self.clock, change));
         }
         self.redo.clear();
 
