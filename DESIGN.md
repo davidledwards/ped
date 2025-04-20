@@ -110,6 +110,8 @@ The ability to _undo_ a change is arguably one of the most useful features of an
 
 Surprisingly, _undo_ and _redo_ were relatively simple to implement. Conceptually, both are just stacks of recent changes capturing enough information to restore the buffer to its prior state.
 
+When changes are pushed onto the undo stack, an internal clock is captured as well. This internal clock is essentially a sequence that captures the notion of edits to the underlying buffer. Every change to the buffer increments the clock. The clock value prior to the change is recorded, as we need to restore this value should a change be undone. This is important because the notion of a _dirty_ buffer is based on a simple comparison of the current clock and the value of the clock when it was last committed to storage. In essence, if a series of changes were applied to a _clean_ buffer and then subsequently undone, the resulting state would again be a _clean_ buffer.
+
 ## Binding Keys
 
 Not unlike most text editors, binding _keys_ to editing _operations_ is a process that occurs at runtime during the early stages of initialization. The default built-in configuration binds all possible editing operations to an opinionated set of keys.
@@ -138,25 +140,25 @@ All editing operations are defined in a separate module. This is essentially whe
 
 ## Main Controller
 
-TODO
-- one big loop
-- reads keys and calls functions
-- detects terminal size changes and resizes workspace
-- coordinates interacton with users
-- performs background work, such as tokenization
+The _controller_ is essentially a loop that terminates when `C-q` is pressed. Inside this loop, it reads keys and dispatches them accordingly. It also runs background processing when no keys are waiting to be read.
 
-OLD
-- The entire editing experience is facilitated by a central _controller_, which in a simplified sense, reads keys and calls their corresponding editing operations. The controller also manages the workspace, which contains a collection of windows, and provides a restricted _environment_ to functions that implement editing operations. It also coordinates interaction with the user in the form of _questions_, such as opening a file or asking to save a dirty buffer.
+In the majority of cases, keys are dispatched to the active editor. Aside from special keys that cannot be rebound, the controller is largely unaware of what actions that editor takes as a result of any given key. Given a key sequence, it asks the key binding interface to return a function pointer, which it then invokes if found.
+
+The controller uses a nifty strategy for processing key sequences. Since the loop can only read individual keys, it builds up a sequence of keys until that sequence is recognized by the key binding interface. It knows whether or not the current sequence forms a prefix of a valid sequence and waits for the next key. If a sequence does not form a prefix, then it resets the key sequence and tells the user that the sequence is unrecognized.
+
+When the controller invokes the function pointer, that function might return a result that requires interaction with the user. Again, the controller is unaware of the type of question, rather it simply facilitates the interaction with the user. When such an interaction is in progress, the main loop will continue to read keys, but those keys will be dispatched to a special input editor.
+
+During idle periods when no keys are ready in the input buffer, the controller will run a few things in the background. In particular, it will detect changes to the terminal size and resize the workspace. Additionally, it will perform syntax highlighting on the active editor if highlighting was deferred for any reason, usually because the inline cost exceeds a threshold that would lead to sluggish performance.
 
 ## User Interaction
 
-TODO
-- inquirer abstraction for soliciting input from user
-- completer abstraction to assist with inquirers
-- predefined set of completers: null, yes/no, number, lists, files
+Any type of interaction with the user outside of modifying the contents of a buffer is accomplished using a generalized interface.
 
-OLD
-- The concept of a _question_ is implemented using an _inquirer_ combined with a _completer_, both of which are abstractions that allow the controller to deal only with the general problem. This design allows the development of arbitrarily complex interactions, such as the _open file_ dialog that provides file completion assistance.
+An example of user interaction occurs when `C-o` is pressed, the default binding of which opens a file. This requires the user to enter the file name, hence the need for interaction.
+
+The _controller_ coordinates this interaction by recognizing that an operation bound to a key sequence returns a _question_ response. A question contains an implementation of an _inquirer_ combined with a _completer_, both of which are abstractions that allow the controller to deal only with the general problem of user input.
+
+Conceptually, an _inquirer_ represents the dialog and the acceptance of values provided by the user, whereas the _completer_ complements the inquirer by enhancing the dialog as it responds to individual keys. As an example, the _open file_ inquirer will use a _file_ completer that reads the underlying file system as the user enters text, providing features like auto-complete and tabbing through potential matches.
 
 ## Incremental Search
 
