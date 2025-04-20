@@ -142,13 +142,13 @@ All editing operations are defined in a separate module. This is essentially whe
 
 The _controller_ is essentially a loop that terminates when `C-q` is pressed. Inside this loop, it reads keys and dispatches them accordingly. It also runs background processing when no keys are waiting to be read.
 
-In the majority of cases, keys are dispatched to the active editor. Aside from special keys that cannot be rebound, the controller is largely unaware of what actions that editor takes as a result of any given key. Given a key sequence, it asks the key binding interface to return a function pointer, which it then invokes if found.
+In the majority of cases, keys are dispatched to the active editor. Aside from special keys that cannot be rebound, the controller is largely unaware of what actions an editor takes as a result of any given key. Given a key sequence, it asks the key binding interface to return a function pointer, which it then invokes if found.
 
 The controller uses a nifty strategy for processing key sequences. Since the loop can only read individual keys, it builds up a sequence of keys until that sequence is recognized by the key binding interface. It knows whether or not the current sequence forms a prefix of a valid sequence and waits for the next key. If a sequence does not form a prefix, then it resets the key sequence and tells the user that the sequence is unrecognized.
 
 When the controller invokes the function pointer, that function might return a result that requires interaction with the user. Again, the controller is unaware of the type of question, rather it simply facilitates the interaction with the user. When such an interaction is in progress, the main loop will continue to read keys, but those keys will be dispatched to a special input editor.
 
-During idle periods when no keys are ready in the input buffer, the controller will run a few things in the background. In particular, it will detect changes to the terminal size and resize the workspace. Additionally, it will perform syntax highlighting on the active editor if highlighting was deferred for any reason, usually because the inline cost exceeds a threshold that would lead to sluggish performance.
+During idle periods when no keys are present in the input buffer, the controller will run a few housekeeping operations in the background. In particular, it will detect changes to the terminal size and resize the workspace. Additionally, it will perform syntax highlighting on the active editor if highlighting was deferred for any reason, usually because the inline cost exceeds a threshold that would lead to sluggish performance.
 
 ## User Interaction
 
