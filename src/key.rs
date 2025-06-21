@@ -65,10 +65,13 @@ pub const END: Key = Key::End(Shift::Off, Ctrl::Off);
 /// Map of key names to [`Key`]s.
 pub type KeyMap = HashMap<&'static str, Key>;
 
+type Byte = std::result::Result<u8, std::io::Error>;
+type Input = Box<dyn Iterator<Item = Byte>>;
+
 /// A keyboard that reads bytes from the terminal and produces corresponding [`Key`]s.
 pub struct Keyboard {
     /// A non-blocking stream of bytes from standard input.
-    stdin: Bytes<Stdin>,
+    stdin: Input,
 
     /// An optional byte previously read but pushed back for processing.
     stdin_waiting: Option<u8>,
@@ -153,7 +156,7 @@ impl Keyboard {
     /// Creates a new keyboard reader.
     pub fn new() -> Keyboard {
         Keyboard {
-            stdin: io::stdin().bytes(),
+            stdin: Box::new(io::stdin().bytes()),
             stdin_waiting: None,
         }
     }
@@ -607,4 +610,59 @@ pub fn init_key_map() -> KeyMap {
         key_map.insert(name, key);
     }
     key_map
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const FOO: &str = "\x1b[";
+
+    struct StringInput {
+        bytes: Vec<u8>,
+        pos: usize,
+    }
+
+    impl StringInput {
+        fn new(input: &str) -> StringInput {
+            StringInput {
+                bytes: input.to_owned().into_bytes(),
+                pos: 0,
+            }
+        }
+    }
+
+    impl Iterator for StringInput {
+        type Item = Byte;
+
+        fn next(&mut self) -> Option<Byte> {
+            if self.pos < self.bytes.len() {
+                let b = Some(Ok(self.bytes[self.pos]));
+                self.pos += 1;
+                b
+            } else {
+                None
+            }
+        }
+    }
+
+    #[test]
+    fn todo() -> Result<()> {
+        const INPUT: &str = "abc";
+
+        let mut keyb = keyboard(INPUT);
+        for c in INPUT.as_bytes() {
+            let key = keyb.read()?;
+            assert_eq!(key, Key::Char(*c as char))
+        }
+        assert_eq!(keyb.read()?, Key::None);
+        Ok(())
+    }
+
+    fn keyboard(input: &str) -> Keyboard {
+        Keyboard {
+            stdin: Box::new(StringInput::new(input)),
+            stdin_waiting: None,
+        }
+    }
 }
