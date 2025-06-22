@@ -14,7 +14,7 @@ use crate::env::{Environment, Focus};
 use crate::error::Result;
 use crate::etc::{PACKAGE_NAME, PACKAGE_VERSION};
 use crate::input::{Directive, InputEditor};
-use crate::key::{self, Key, Keyboard, Shift, CTRL_G};
+use crate::key::{self, CTRL_G, Key, Keyboard, Shift};
 use crate::op::{self, Action};
 use crate::size::Point;
 use crate::sys::{self, AsString};
@@ -153,14 +153,19 @@ impl Controller {
                 }
             }
         } else if let Key::ScrollUp(shift, row, col) = key {
+            self.clear_echo();
             op::track_up(&mut self.env, Point::new(row, col), shift == Shift::On);
         } else if let Key::ScrollDown(shift, row, col) = key {
+            self.clear_echo();
             op::track_down(&mut self.env, Point::new(row, col), shift == Shift::On);
         } else if let Key::ScrollLeft(shift, row, col) = key {
+            self.clear_echo();
             op::track_backward(&mut self.env, Point::new(row, col), shift == Shift::On);
         } else if let Key::ScrollRight(shift, row, col) = key {
+            self.clear_echo();
             op::track_forward(&mut self.env, Point::new(row, col), shift == Shift::On);
         } else if let Key::ButtonPress(row, col) = key {
+            self.clear_echo();
             op::set_focus(&mut self.env, Point::new(row, col));
         } else if let Key::ButtonRelease(_, _) = key {
             // Absorb since this event serve no purpose at this time.
