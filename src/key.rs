@@ -4,7 +4,7 @@ use crate::error::{Error, Result};
 use std::cmp;
 use std::collections::HashMap;
 use std::fmt;
-use std::io::{self, Bytes, Read, Stdin};
+use std::io::{self, Read};
 use std::str;
 
 /// The set of keys recognized by [`Keyboard`]s.
@@ -65,12 +65,15 @@ pub const END: Key = Key::End(Shift::Off, Ctrl::Off);
 /// Map of key names to [`Key`]s.
 pub type KeyMap = HashMap<&'static str, Key>;
 
+/// A byte read from a potentially error-prone input source.
 type Byte = std::result::Result<u8, std::io::Error>;
+
+/// An input source that produces bytes.
 type Input = Box<dyn Iterator<Item = Byte>>;
 
 /// A keyboard that reads bytes from the terminal and produces corresponding [`Key`]s.
 pub struct Keyboard {
-    /// A non-blocking stream of bytes from standard input.
+    /// A non-blocking input source that produces a stream of bytes.
     stdin: Input,
 
     /// An optional byte previously read but pushed back for processing.
@@ -615,24 +618,34 @@ pub fn init_key_map() -> KeyMap {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::iter::once;
 
-    const FOO: &str = "\x1b[";
-
-    struct StringInput {
+    struct SyntheticInput {
         bytes: Vec<u8>,
         pos: usize,
     }
 
-    impl StringInput {
-        fn new(input: &str) -> StringInput {
-            StringInput {
-                bytes: input.to_owned().into_bytes(),
+    impl SyntheticInput {
+        fn empty() -> SyntheticInput {
+            SyntheticInput {
+                bytes: vec![],
                 pos: 0,
             }
         }
+
+        fn using_bytes(input: Vec<u8>) -> SyntheticInput {
+            SyntheticInput {
+                bytes: input,
+                pos: 0,
+            }
+        }
+
+        fn using_str(input: &str) -> SyntheticInput {
+            Self::using_bytes(input.to_owned().into_bytes())
+        }
     }
 
-    impl Iterator for StringInput {
+    impl Iterator for SyntheticInput {
         type Item = Byte;
 
         fn next(&mut self) -> Option<Byte> {
@@ -647,21 +660,146 @@ mod tests {
     }
 
     #[test]
-    fn todo() -> Result<()> {
-        const INPUT: &str = "abc";
+    fn read_empty() -> Result<()> {
+        let mut keyb = keyboard(SyntheticInput::empty());
+        assert_eq!(keyb.read()?, Key::None);
+        Ok(())
+    }
 
-        let mut keyb = keyboard(INPUT);
-        for c in INPUT.as_bytes() {
+    #[test]
+    fn read_ascii_chars() -> Result<()> {
+        let input: Vec<u8> = (32..127).collect();
+        let mut keyb = keyboard(SyntheticInput::using_bytes(input.clone()));
+        for c in input {
             let key = keyb.read()?;
-            assert_eq!(key, Key::Char(*c as char))
+            assert_eq!(key, Key::Char(c as char));
         }
         assert_eq!(keyb.read()?, Key::None);
         Ok(())
     }
 
-    fn keyboard(input: &str) -> Keyboard {
+    #[test]
+    fn read_control_chars() -> Result<()> {
+        let input: Vec<u8> = (0..27).chain(28..32).chain(once(127)).collect();
+        let mut keyb = keyboard(SyntheticInput::using_bytes(input.clone()));
+        for c in input {
+            let key = keyb.read()?;
+            assert_eq!(key, Key::Control(c));
+        }
+        assert_eq!(keyb.read()?, Key::None);
+        Ok(())
+    }
+
+    #[test]
+    fn read_escape() -> Result<()> {
+        let mut keyb = keyboard(SyntheticInput::using_bytes(vec![27]));
+        assert_eq!(keyb.read()?, Key::Control(27));
+        assert_eq!(keyb.read()?, Key::None);
+        Ok(())
+    }
+
+    #[test]
+    fn read_unicode_chars() -> Result<()> {
+        const INPUT: &str = "«ƿǎǓ±ţƹǅĠŷŌȈïĚſ°ǼȎ¢ÁǑī0ÄŐĢśŧ¶";
+        let mut keyb = keyboard(SyntheticInput::using_str(INPUT));
+        for c in INPUT.chars() {
+            let key = keyb.read()?;
+            assert_eq!(key, Key::Char(c));
+        }
+        assert_eq!(keyb.read()?, Key::None);
+        Ok(())
+    }
+
+    #[test]
+    fn read_malformed_unicode() -> Result<()> {
+        const MALFORMED_UNICODE: [u8; 4] = [0xf0, 0x90, 0x80, 0x28];
+        let mut keyb = keyboard(SyntheticInput::using_bytes(MALFORMED_UNICODE.to_vec()));
+        match keyb.read() {
+            Err(Error::Utf8 { bytes, cause: _ }) => {
+                assert_eq!(bytes, MALFORMED_UNICODE);
+                Ok(())
+            }
+            Err(e) => panic!("{e}: error not expected"),
+            Ok(key) => panic!("{key}: expecting UTF-8 decoding error"),
+        }
+    }
+
+    #[test]
+    fn read_ss3_fn_keys() -> Result<()> {
+        const TESTS: [(&str, Key); 4] = [
+            ("\x1bOP", Key::Function(1)),
+            ("\x1bOQ", Key::Function(2)),
+            ("\x1bOR", Key::Function(3)),
+            ("\x1bOS", Key::Function(4)),
+        ];
+
+        let input = TESTS
+            .iter()
+            .map(|(seq, _)| seq.to_string())
+            .collect::<String>();
+
+        let mut keyb = keyboard(SyntheticInput::using_str(&input));
+        for (_, k) in TESTS {
+            let key = keyb.read()?;
+            assert_eq!(key, k);
+        }
+        assert_eq!(keyb.read()?, Key::None);
+        Ok(())
+    }
+
+    #[test]
+    fn read_mouse_buttons() -> Result<()> {
+        const TESTS: [(&str, Key); 4] = [
+            ("\x1b[<0;1;1M", Key::ButtonPress(0, 0)),
+            ("\x1b[<0;1;1m", Key::ButtonRelease(0, 0)),
+            ("\x1b[<0;7;9M", Key::ButtonPress(8, 6)),
+            ("\x1b[<0;24;87m", Key::ButtonRelease(86, 23)),
+        ];
+
+        let input = TESTS
+            .iter()
+            .map(|(seq, _)| seq.to_string())
+            .collect::<String>();
+
+        let mut keyb = keyboard(SyntheticInput::using_str(&input));
+        for (_, k) in TESTS {
+            let key = keyb.read()?;
+            assert_eq!(key, k);
+        }
+        assert_eq!(keyb.read()?, Key::None);
+        Ok(())
+    }
+
+    #[test]
+    fn read_mouse_scrolling() -> Result<()> {
+        const TESTS: [(&str, Key); 8] = [
+            ("\x1b[<64;1;2M", Key::ScrollUp(Shift::Off, 1, 0)),
+            ("\x1b[<65;2;3M", Key::ScrollDown(Shift::Off, 2, 1)),
+            ("\x1b[<66;3;4M", Key::ScrollRight(Shift::Off, 3, 2)),
+            ("\x1b[<67;4;5M", Key::ScrollLeft(Shift::Off, 4, 3)),
+            ("\x1b[<68;1;2M", Key::ScrollUp(Shift::On, 1, 0)),
+            ("\x1b[<69;2;3M", Key::ScrollDown(Shift::On, 2, 1)),
+            ("\x1b[<70;3;4M", Key::ScrollRight(Shift::On, 3, 2)),
+            ("\x1b[<71;4;5M", Key::ScrollLeft(Shift::On, 4, 3)),
+        ];
+
+        let input = TESTS
+            .iter()
+            .map(|(seq, _)| seq.to_string())
+            .collect::<String>();
+
+        let mut keyb = keyboard(SyntheticInput::using_str(&input));
+        for (_, k) in TESTS {
+            let key = keyb.read()?;
+            assert_eq!(key, k);
+        }
+        assert_eq!(keyb.read()?, Key::None);
+        Ok(())
+    }
+
+    fn keyboard(input: SyntheticInput) -> Keyboard {
         Keyboard {
-            stdin: Box::new(StringInput::new(input)),
+            stdin: Box::new(input),
             stdin_waiting: None,
         }
     }
