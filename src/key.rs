@@ -197,8 +197,8 @@ impl Keyboard {
     /// the sequence is unrecognized.
     fn read_escape(&mut self) -> Result<Key> {
         let key = match self.next()? {
-            Some(b'[') => self.read_ansi()?,
-            Some(b'O') => self.read_fn()?,
+            Some(b'[') => self.read_csi()?,
+            Some(b'O') => self.read_ss3()?,
             Some(b) => {
                 self.push_back(b);
                 Key::Control(27)
@@ -209,10 +209,14 @@ impl Keyboard {
     }
 
     /// Reads a sequence of bytes prefixed with `ESC O`.
-    ///
-    /// Only the first four function keys are encoded in this manner.
-    fn read_fn(&mut self) -> Result<Key> {
+    fn read_ss3(&mut self) -> Result<Key> {
         let key = match self.next()? {
+            Some(b'A') => Key::Up(Shift::Off, Ctrl::Off),
+            Some(b'B') => Key::Down(Shift::Off, Ctrl::Off),
+            Some(b'C') => Key::Right(Shift::Off, Ctrl::Off),
+            Some(b'D') => Key::Left(Shift::Off, Ctrl::Off),
+            Some(b'F') => Key::End(Shift::Off, Ctrl::Off),
+            Some(b'H') => Key::Home(Shift::Off, Ctrl::Off),
             // F1-F4
             Some(b @ b'P'..=b'S') => Key::Function(b - b'P' + 1),
             _ => Key::None,
@@ -226,7 +230,7 @@ impl Keyboard {
     /// possible that some well-formed ANSI sequences will be ignored because they
     /// simply are not recognized. If the sequence is unrecognized or malformed, then
     /// [`Key::None`] is returned.
-    fn read_ansi(&mut self) -> Result<Key> {
+    fn read_csi(&mut self) -> Result<Key> {
         let key = match self.next()? {
             Some(b'<') => self.read_mouse()?,
             Some(b) => self.push_back(b).read_key()?,
@@ -237,25 +241,33 @@ impl Keyboard {
 
     /// Reads a VT or xterm key sequence prefixed with `ESC [`.
     fn read_key(&mut self) -> Result<Key> {
-        // Optional key code or key modifier depending on trailing byte.
-        let key_code = match self.read_number()? {
-            Some(n) => cmp::max(1, n),
-            None => 1,
-        } as u8;
+        // Key code is optional when sequence is terminated with anything other
+        // then `~`. Terminal should not yield value of 0, but silently adjust to
+        // default value of 1 if such condition arises.
+        let key_code = self.read_number()?.map(|n| cmp::max(1, n) as u8);
 
-        // Optional key modifier, which is bitmask.
-        let key_mod = if self.read_literal(b";")?.is_some() {
-            match self.read_number()? {
-                Some(n) => cmp::max(1, n),
-                None => 1,
-            }
+        // Key modifier is optional and, if detected by delineator, then value should
+        // follow, but is assumed to be absent if no value is present.
+        let key_mod = if let Some(_) = self.read_literal(b";")? {
+            self.read_number()?.map(|n| cmp::max(1, n) as u8)
         } else {
-            1
-        } as u8;
+            None
+        };
 
         let key = match self.next()? {
-            Some(b'~') => map_vt(key_code, key_mod),
-            Some(b) => map_xterm(b, key_mod),
+            Some(b'~') => {
+                if let Some(key_code) = key_code {
+                    map_vt(key_code, key_mod.unwrap_or(1))
+                } else {
+                    // Key code must exist when ~ terminates sequence.
+                    Key::None
+                }
+            }
+            Some(b) => {
+                // When key modifier is absent, interpret key code as modifier.
+                let key_mod = key_mod.or(key_code);
+                map_xterm(b, key_mod.unwrap_or(1))
+            }
             None => Key::None,
         };
         Ok(key)
@@ -434,8 +446,8 @@ fn map_vt(key_code: u8, key_mod: u8) -> Key {
         (6, (shift, ctrl)) => Key::PageDown(shift, ctrl),
         (7, (shift, ctrl)) => Key::Home(shift, ctrl),
         (8, (shift, ctrl)) => Key::End(shift, ctrl),
-        // F0-F5
-        (code @ 10..=15, _) => Key::Function(code - 10),
+        // F1-F5
+        (code @ 11..=15, _) => Key::Function(code - 10),
         // F6-F10
         (code @ 17..=21, _) => Key::Function(code - 11),
         // F11-F14
@@ -725,75 +737,218 @@ mod tests {
     }
 
     #[test]
-    fn read_ss3_fn_keys() -> Result<()> {
-        const TESTS: [(&str, Key); 4] = [
+    fn read_keys() -> Result<()> {
+        #[rustfmt::skip]
+        const TESTS: [(&str, Key); 120] = [
+            // Key: Delete
+            ("\x1b[3~", Key::Control(127)),
+
+            // Key: Shift+Tab
+            ("\x1b[Z", Key::ShiftTab),
+
+            // Key: Up
+            // -- SHIFT off, CTRL off
+            ("\x1b[A", Key::Up(Shift::Off, Ctrl::Off)),
+            ("\x1b[1;1A", Key::Up(Shift::Off, Ctrl::Off)),
+            ("\x1bOA", Key::Up(Shift::Off, Ctrl::Off)),
+            // -- SHIFT on, CTRL off
+            ("\x1b[2A", Key::Up(Shift::On, Ctrl::Off)),
+            ("\x1b[1;2A", Key::Up(Shift::On, Ctrl::Off)),
+            // -- SHIFT off, CTRL on
+            ("\x1b[5A", Key::Up(Shift::Off, Ctrl::On)),
+            ("\x1b[1;5A", Key::Up(Shift::Off, Ctrl::On)),
+            // -- SHIFT on, CTRL on
+            ("\x1b[6A", Key::Up(Shift::On, Ctrl::On)),
+            ("\x1b[1;6A", Key::Up(Shift::On, Ctrl::On)),
+
+            // Key: Down
+            // -- SHIFT off, CTRL off
+            ("\x1b[B", Key::Down(Shift::Off, Ctrl::Off)),
+            ("\x1b[1;1B", Key::Down(Shift::Off, Ctrl::Off)),
+            ("\x1bOB", Key::Down(Shift::Off, Ctrl::Off)),
+            // -- SHIFT on, CTRL off
+            ("\x1b[2B", Key::Down(Shift::On, Ctrl::Off)),
+            ("\x1b[1;2B", Key::Down(Shift::On, Ctrl::Off)),
+            // -- SHIFT off, CTRL on
+            ("\x1b[5B", Key::Down(Shift::Off, Ctrl::On)),
+            ("\x1b[1;5B", Key::Down(Shift::Off, Ctrl::On)),
+            // -- SHIFT on, CTRL on
+            ("\x1b[6B", Key::Down(Shift::On, Ctrl::On)),
+            ("\x1b[1;6B", Key::Down(Shift::On, Ctrl::On)),
+
+            // Key: Right
+            // -- SHIFT off, CTRL off
+            ("\x1b[C", Key::Right(Shift::Off, Ctrl::Off)),
+            ("\x1b[1;1C", Key::Right(Shift::Off, Ctrl::Off)),
+            ("\x1bOC", Key::Right(Shift::Off, Ctrl::Off)),
+            // -- SHIFT on, CTRL off
+            ("\x1b[2C", Key::Right(Shift::On, Ctrl::Off)),
+            ("\x1b[1;2C", Key::Right(Shift::On, Ctrl::Off)),
+            // -- SHIFT off, CTRL on
+            ("\x1b[5C", Key::Right(Shift::Off, Ctrl::On)),
+            ("\x1b[1;5C", Key::Right(Shift::Off, Ctrl::On)),
+            // -- SHIFT on, CTRL on
+            ("\x1b[6C", Key::Right(Shift::On, Ctrl::On)),
+            ("\x1b[1;6C", Key::Right(Shift::On, Ctrl::On)),
+
+            // Key: Left
+            // -- SHIFT off, CTRL off
+            ("\x1b[D", Key::Left(Shift::Off, Ctrl::Off)),
+            ("\x1b[1;1D", Key::Left(Shift::Off, Ctrl::Off)),
+            ("\x1bOD", Key::Left(Shift::Off, Ctrl::Off)),
+            // -- SHIFT on, CTRL off
+            ("\x1b[2D", Key::Left(Shift::On, Ctrl::Off)),
+            ("\x1b[1;2D", Key::Left(Shift::On, Ctrl::Off)),
+            // -- SHIFT off, CTRL on
+            ("\x1b[5D", Key::Left(Shift::Off, Ctrl::On)),
+            ("\x1b[1;5D", Key::Left(Shift::Off, Ctrl::On)),
+            // -- SHIFT on, CTRL on
+            ("\x1b[6D", Key::Left(Shift::On, Ctrl::On)),
+            ("\x1b[1;6D", Key::Left(Shift::On, Ctrl::On)),
+
+            // Key: End
+            // -- SHIFT off, CTRL off
+            ("\x1b[4~", Key::End(Shift::Off, Ctrl::Off)),
+            ("\x1b[8~", Key::End(Shift::Off, Ctrl::Off)),
+            ("\x1b[F", Key::End(Shift::Off, Ctrl::Off)),
+            ("\x1b[1;1F", Key::End(Shift::Off, Ctrl::Off)),
+            ("\x1bOF", Key::End(Shift::Off, Ctrl::Off)),
+            // -- SHIFT on, CTRL off
+            ("\x1b[4;2~", Key::End(Shift::On, Ctrl::Off)),
+            ("\x1b[8;2~", Key::End(Shift::On, Ctrl::Off)),
+            ("\x1b[2F", Key::End(Shift::On, Ctrl::Off)),
+            ("\x1b[1;2F", Key::End(Shift::On, Ctrl::Off)),
+            // -- SHIFT off, CTRL on
+            ("\x1b[4;5~", Key::End(Shift::Off, Ctrl::On)),
+            ("\x1b[8;5~", Key::End(Shift::Off, Ctrl::On)),
+            ("\x1b[5F", Key::End(Shift::Off, Ctrl::On)),
+            ("\x1b[1;5F", Key::End(Shift::Off, Ctrl::On)),
+            // -- SHIFT on, CTRL on
+            ("\x1b[4;6~", Key::End(Shift::On, Ctrl::On)),
+            ("\x1b[8;6~", Key::End(Shift::On, Ctrl::On)),
+            ("\x1b[6F", Key::End(Shift::On, Ctrl::On)),
+            ("\x1b[1;6F", Key::End(Shift::On, Ctrl::On)),
+
+            // Key: Home
+            // -- SHIFT off, CTRL off
+            ("\x1b[1~", Key::Home(Shift::Off, Ctrl::Off)),
+            ("\x1b[7~", Key::Home(Shift::Off, Ctrl::Off)),
+            ("\x1b[H", Key::Home(Shift::Off, Ctrl::Off)),
+            ("\x1b[1;1H", Key::Home(Shift::Off, Ctrl::Off)),
+            ("\x1bOH", Key::Home(Shift::Off, Ctrl::Off)),
+            // -- SHIFT on, CTRL off
+            ("\x1b[1;2~", Key::Home(Shift::On, Ctrl::Off)),
+            ("\x1b[7;2~", Key::Home(Shift::On, Ctrl::Off)),
+            ("\x1b[2H", Key::Home(Shift::On, Ctrl::Off)),
+            ("\x1b[1;2H", Key::Home(Shift::On, Ctrl::Off)),
+            // -- SHIFT off, CTRL on
+            ("\x1b[1;5~", Key::Home(Shift::Off, Ctrl::On)),
+            ("\x1b[7;5~", Key::Home(Shift::Off, Ctrl::On)),
+            ("\x1b[5H", Key::Home(Shift::Off, Ctrl::On)),
+            ("\x1b[1;5H", Key::Home(Shift::Off, Ctrl::On)),
+            // -- SHIFT on, CTRL on
+            ("\x1b[1;6~", Key::Home(Shift::On, Ctrl::On)),
+            ("\x1b[7;6~", Key::Home(Shift::On, Ctrl::On)),
+            ("\x1b[6H", Key::Home(Shift::On, Ctrl::On)),
+            ("\x1b[1;6H", Key::Home(Shift::On, Ctrl::On)),
+
+            // Key: PageUp
+            // -- SHIFT off, CTRL off
+            ("\x1b[5~", Key::PageUp(Shift::Off, Ctrl::Off)),
+            // -- SHIFT on, CTRL off
+            ("\x1b[5;2~", Key::PageUp(Shift::On, Ctrl::Off)),
+            // -- SHIFT off, CTRL on
+            ("\x1b[5;5~", Key::PageUp(Shift::Off, Ctrl::On)),
+            // -- SHIFT on, CTRL on
+            ("\x1b[5;6~", Key::PageUp(Shift::On, Ctrl::On)),
+
+            // Key: PageDown
+            // -- SHIFT off, CTRL off
+            ("\x1b[6~", Key::PageDown(Shift::Off, Ctrl::Off)),
+            // -- SHIFT on, CTRL off
+            ("\x1b[6;2~", Key::PageDown(Shift::On, Ctrl::Off)),
+            // -- SHIFT off, CTRL on
+            ("\x1b[6;5~", Key::PageDown(Shift::Off, Ctrl::On)),
+            // -- SHIFT on, CTRL on
+            ("\x1b[6;6~", Key::PageDown(Shift::On, Ctrl::On)),
+
+            // Key: F1
+            ("\x1b[11~", Key::Function(1)),
             ("\x1bOP", Key::Function(1)),
+            ("\x1b[1P", Key::Function(1)),
+
+            // Key: F2
+            ("\x1b[12~", Key::Function(2)),
             ("\x1bOQ", Key::Function(2)),
+            ("\x1b[1Q", Key::Function(2)),
+
+            // Key: F3
+            ("\x1b[13~", Key::Function(3)),
             ("\x1bOR", Key::Function(3)),
+            ("\x1b[1R", Key::Function(3)),
+
+            // Key: F4
+            ("\x1b[14~", Key::Function(4)),
             ("\x1bOS", Key::Function(4)),
-        ];
+            ("\x1b[1S", Key::Function(4)),
 
-        let input = TESTS
-            .iter()
-            .map(|(seq, _)| seq.to_string())
-            .collect::<String>();
+            // Key: F5-F20
+            ("\x1b[15~", Key::Function(5)),
+            ("\x1b[17~", Key::Function(6)),
+            ("\x1b[18~", Key::Function(7)),
+            ("\x1b[19~", Key::Function(8)),
+            ("\x1b[20~", Key::Function(9)),
+            ("\x1b[21~", Key::Function(10)),
+            ("\x1b[23~", Key::Function(11)),
+            ("\x1b[24~", Key::Function(12)),
+            ("\x1b[25~", Key::Function(13)),
+            ("\x1b[26~", Key::Function(14)),
+            ("\x1b[28~", Key::Function(15)),
+            ("\x1b[29~", Key::Function(16)),
+            ("\x1b[31~", Key::Function(17)),
+            ("\x1b[32~", Key::Function(18)),
+            ("\x1b[33~", Key::Function(19)),
+            ("\x1b[34~", Key::Function(20)),
 
-        let mut keyb = keyboard(SyntheticInput::using_str(&input));
-        for (_, k) in TESTS {
-            let key = keyb.read()?;
-            assert_eq!(key, k);
-        }
-        assert_eq!(keyb.read()?, Key::None);
-        Ok(())
-    }
-
-    #[test]
-    fn read_mouse_buttons() -> Result<()> {
-        const TESTS: [(&str, Key); 4] = [
+            // Key: ButtonPress
             ("\x1b[<0;1;1M", Key::ButtonPress(0, 0)),
-            ("\x1b[<0;1;1m", Key::ButtonRelease(0, 0)),
             ("\x1b[<0;7;9M", Key::ButtonPress(8, 6)),
+
+            // Key: ButtonRelease
+            ("\x1b[<0;1;1m", Key::ButtonRelease(0, 0)),
             ("\x1b[<0;24;87m", Key::ButtonRelease(86, 23)),
-        ];
 
-        let input = TESTS
-            .iter()
-            .map(|(seq, _)| seq.to_string())
-            .collect::<String>();
-
-        let mut keyb = keyboard(SyntheticInput::using_str(&input));
-        for (_, k) in TESTS {
-            let key = keyb.read()?;
-            assert_eq!(key, k);
-        }
-        assert_eq!(keyb.read()?, Key::None);
-        Ok(())
-    }
-
-    #[test]
-    fn read_mouse_scrolling() -> Result<()> {
-        const TESTS: [(&str, Key); 8] = [
+            // Key: ScrollUp
+            // -- SHIFT off
             ("\x1b[<64;1;2M", Key::ScrollUp(Shift::Off, 1, 0)),
-            ("\x1b[<65;2;3M", Key::ScrollDown(Shift::Off, 2, 1)),
-            ("\x1b[<66;3;4M", Key::ScrollRight(Shift::Off, 3, 2)),
-            ("\x1b[<67;4;5M", Key::ScrollLeft(Shift::Off, 4, 3)),
+            // -- SHIFT on
             ("\x1b[<68;1;2M", Key::ScrollUp(Shift::On, 1, 0)),
+
+            // Key: ScrollDown
+            // -- SHIFT off
+            ("\x1b[<65;2;3M", Key::ScrollDown(Shift::Off, 2, 1)),
+            // -- SHIFT on
             ("\x1b[<69;2;3M", Key::ScrollDown(Shift::On, 2, 1)),
+
+            // Key: ScrollRight
+            // -- SHIFT off
+            ("\x1b[<66;3;4M", Key::ScrollRight(Shift::Off, 3, 2)),
+            // -- SHIFT on
             ("\x1b[<70;3;4M", Key::ScrollRight(Shift::On, 3, 2)),
+
+            // Key: ScrollLeft
+            // -- SHIFT off
+            ("\x1b[<67;4;5M", Key::ScrollLeft(Shift::Off, 4, 3)),
+            // -- SHIFT on
             ("\x1b[<71;4;5M", Key::ScrollLeft(Shift::On, 4, 3)),
         ];
 
-        let input = TESTS
-            .iter()
-            .map(|(seq, _)| seq.to_string())
-            .collect::<String>();
-
-        let mut keyb = keyboard(SyntheticInput::using_str(&input));
-        for (_, k) in TESTS {
+        for (input, k) in TESTS {
+            let mut keyb = keyboard(SyntheticInput::using_str(input));
             let key = keyb.read()?;
             assert_eq!(key, k);
+            assert_eq!(keyb.read()?, Key::None);
         }
-        assert_eq!(keyb.read()?, Key::None);
         Ok(())
     }
 
