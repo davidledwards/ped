@@ -13,7 +13,9 @@ pub enum Key {
     None,
     Control(u8),
     Char(char),
-    ShiftTab,
+    ReverseTab,
+    Insert(Shift, Ctrl),
+    Delete(Shift, Ctrl),
     Up(Shift, Ctrl),
     Down(Shift, Ctrl),
     Left(Shift, Ctrl),
@@ -56,7 +58,7 @@ pub const TAB: Key = Key::Control(9);
 pub const CTRL_J: Key = Key::Control(10);
 pub const CTRL_K: Key = Key::Control(11);
 pub const CTRL_M: Key = Key::Control(13);
-pub const DELETE: Key = Key::Control(127);
+pub const DEL: Key = Key::Control(127);
 pub const LEFT: Key = Key::Left(Shift::Off, Ctrl::Off);
 pub const RIGHT: Key = Key::Right(Shift::Off, Ctrl::Off);
 pub const HOME: Key = Key::Home(Shift::Off, Ctrl::Off);
@@ -86,7 +88,9 @@ impl fmt::Display for Key {
             Key::None => "<none>".to_string(),
             Key::Control(b) => format!("{}", Control(*b)),
             Key::Char(c) => format!("{c}"),
-            Key::ShiftTab => format!("{}{}", Shift::On, Control(9)),
+            Key::ReverseTab => format!("{}{}", Shift::On, Control(9)),
+            Key::Insert(shift, ctrl) => format!("{shift}{ctrl}insert"),
+            Key::Delete(shift, ctrl) => format!("{shift}{ctrl}delete"),
             Key::Up(shift, ctrl) => format!("{shift}{ctrl}up"),
             Key::Down(shift, ctrl) => format!("{shift}{ctrl}down"),
             Key::Left(shift, ctrl) => format!("{shift}{ctrl}left"),
@@ -133,19 +137,22 @@ struct Control(u8);
 impl Control {
     /// Mapping of control codes to display character, excluding DEL (^?), which is
     /// handled separately.
+    #[rustfmt::skip]
     const CONTROL_CHAR: [char; 32] = [
-        '@', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q',
-        'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', '[', '\\', ']', '^', '_',
+        '@', 'a', 'b', 'c', 'd', 'e', 'f', 'g',
+        'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o',
+        'p', 'q', 'r', 's', 't', 'u', 'v', 'w',
+        'x', 'y', 'z', '[', '\\', ']', '^', '_',
     ];
 }
 
 impl fmt::Display for Control {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.0 {
-            9 => write!(f, "TAB"),
-            13 => write!(f, "RET"),
+            9 => write!(f, "tab"),
+            13 => write!(f, "ret"),
             27 => write!(f, "ESC"),
-            127 => write!(f, "DEL"),
+            127 => write!(f, "del"),
             b @ 0..32 => write!(f, "C-{}", Self::CONTROL_CHAR[b as usize]),
             b => {
                 // This should never happen, but nonetheless, format as number.
@@ -436,11 +443,8 @@ fn to_utf8(buf: &[u8]) -> Result<&str> {
 fn map_vt(key_code: u8, key_mod: u8) -> Key {
     match (key_code, map_mods(key_mod)) {
         (1, (shift, ctrl)) => Key::Home(shift, ctrl),
-        (2, _) => {
-            // INS key, but for now, just ignore.
-            Key::None
-        }
-        (3, _) => Key::Control(127),
+        (2, (shift, ctrl)) => Key::Insert(shift, ctrl),
+        (3, (shift, ctrl)) => Key::Delete(shift, ctrl),
         (4, (shift, ctrl)) => Key::End(shift, ctrl),
         (5, (shift, ctrl)) => Key::PageUp(shift, ctrl),
         (6, (shift, ctrl)) => Key::PageDown(shift, ctrl),
@@ -470,7 +474,7 @@ fn map_xterm(key_code: u8, key_mod: u8) -> Key {
         (b'D', (shift, ctrl)) => Key::Left(shift, ctrl),
         (b'F', (shift, ctrl)) => Key::End(shift, ctrl),
         (b'H', (shift, ctrl)) => Key::Home(shift, ctrl),
-        (b'Z', _) => Key::ShiftTab,
+        (b'Z', _) => Key::ReverseTab,
         // F1-F4
         (code @ b'P'..=b'S', _) => Key::Function(code - b'P' + 1),
         _ => Key::None,
@@ -525,7 +529,7 @@ pub fn pretty_keys(keys: &[Key]) -> Vec<String> {
 ///
 /// Note that [`Key::Char`] is absent from these mappings because of the impracticality
 /// of mapping all possible characters.
-pub const KEY_MAPPINGS: [(&str, Key); 90] = [
+pub const KEY_MAPPINGS: [(&str, Key); 98] = [
     ("C-@", Key::Control(0)),
     ("C-a", Key::Control(1)),
     ("C-b", Key::Control(2)),
@@ -563,7 +567,15 @@ pub const KEY_MAPPINGS: [(&str, Key); 90] = [
     ("C-_", Key::Control(31)),
     ("C-?", Key::Control(127)),
     ("del", Key::Control(127)),
-    ("S-tab", Key::ShiftTab),
+    ("S-tab", Key::ReverseTab),
+    ("insert", Key::Insert(Shift::Off, Ctrl::Off)),
+    ("S-insert", Key::Insert(Shift::On, Ctrl::Off)),
+    ("C-insert", Key::Insert(Shift::Off, Ctrl::On)),
+    ("S-C-insert", Key::Insert(Shift::On, Ctrl::On)),
+    ("delete", Key::Delete(Shift::Off, Ctrl::Off)),
+    ("S-delete", Key::Delete(Shift::On, Ctrl::Off)),
+    ("C-delete", Key::Delete(Shift::Off, Ctrl::On)),
+    ("S-C-delete", Key::Delete(Shift::On, Ctrl::On)),
     ("up", Key::Up(Shift::Off, Ctrl::Off)),
     ("S-up", Key::Up(Shift::On, Ctrl::Off)),
     ("C-up", Key::Up(Shift::Off, Ctrl::On)),
@@ -739,12 +751,30 @@ mod tests {
     #[test]
     fn read_keys() -> Result<()> {
         #[rustfmt::skip]
-        const TESTS: [(&str, Key); 120] = [
-            // Key: Delete
-            ("\x1b[3~", Key::Control(127)),
+        const TESTS: [(&str, Key); 127] = [
+            // Key: Insert
+            // -- SHIFT off, CTRL off
+            ("\x1b[2~", Key::Insert(Shift::Off, Ctrl::Off)),
+            // -- SHIFT on, CTRL off
+            ("\x1b[2;2~", Key::Insert(Shift::On, Ctrl::Off)),
+            // -- SHIFT off, CTRL on
+            ("\x1b[2;5~", Key::Insert(Shift::Off, Ctrl::On)),
+            // -- SHIFT on, CTRL on
+            ("\x1b[2;6~", Key::Insert(Shift::On, Ctrl::On)),
 
-            // Key: Shift+Tab
-            ("\x1b[Z", Key::ShiftTab),
+            // Key: Delete
+            // -- SHIFT off, CTRL off
+            ("\x1b[3~", Key::Delete(Shift::Off, Ctrl::Off)),
+            // -- SHIFT on, CTRL off
+            ("\x1b[3;2~", Key::Delete(Shift::On, Ctrl::Off)),
+            // -- SHIFT off, CTRL on
+            ("\x1b[3;5~", Key::Delete(Shift::Off, Ctrl::On)),
+            // -- SHIFT on, CTRL on
+            ("\x1b[3;6~", Key::Delete(Shift::On, Ctrl::On)),
+
+            // Key: Tab
+            // -- SHIFT on
+            ("\x1b[Z", Key::ReverseTab),
 
             // Key: Up
             // -- SHIFT off, CTRL off

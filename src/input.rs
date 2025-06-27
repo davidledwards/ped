@@ -181,7 +181,7 @@ impl InputEditor {
                 self.evaluate();
                 self.draw_input();
             }
-            DELETE => {
+            DEL => {
                 // Delete character before cursor.
                 if self.pos > 0 {
                     self.len -= 1;
