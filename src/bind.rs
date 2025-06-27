@@ -128,6 +128,15 @@ impl Bindings {
             .and_then(|op| self.op_map.get(op as &str))
     }
 
+    /// Returns a vector of keys bound to `op`, which may be empty.
+    pub fn find_key(&self, op: &str) -> Vec<Vec<Key>> {
+        self.bind_map
+            .iter()
+            .filter(|(_, o)| o as &str == op)
+            .map(|(key, _)| key.to_owned())
+            .collect()
+    }
+
     /// Returns `true` if `keys` is a prefix of at least one key sequence bound to a
     /// function pointer.
     pub fn is_prefix(&self, keys: &Vec<Key>) -> bool {
@@ -144,13 +153,9 @@ impl Bindings {
     }
 
     /// A collection of key sequences that are restricted from being rebound.
-    const RESTRICTED_KEYS: [&[Key]; 7] = [
-        &[Key::Control(7)],   // C-g
-        &[Key::Control(8)],   // C-h
-        &[Key::Control(9)],   // C-i (tab)
-        &[Key::Control(13)],  // C-m (ret)
-        &[Key::Control(17)],  // C-q
-        &[Key::Control(27)],  // C-[ (ESC)
-        &[Key::Control(127)], // C-? (del)
+    const RESTRICTED_KEYS: [&[Key]; 3] = [
+        &[Key::Control(7)],  // C-g
+        &[Key::Control(17)], // C-q
+        &[Key::Control(27)], // C-[ (ESC)
     ];
 }

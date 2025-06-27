@@ -106,9 +106,7 @@ impl Controller {
     /// [keys](Key) and calling their corresponding editing functions until instructed to
     /// quit.
     pub fn run(&mut self) {
-        self.set_echo(&format!(
-            "{PACKAGE_NAME} {PACKAGE_VERSION} | type C-h for help, C-q to quit"
-        ));
+        self.set_echo(&self.welcome());
         self.show_cursor();
         loop {
             let key = self.keyboard.read().unwrap_or(Key::None);
@@ -119,6 +117,17 @@ impl Controller {
             } else {
                 self.show_cursor();
             }
+        }
+    }
+
+    fn welcome(&self) -> String {
+        if let Some(help_key) = self.config.bindings.find_key("help").first() {
+            format!(
+                "{PACKAGE_NAME} {PACKAGE_VERSION} | type {} for help, C-q to quit",
+                key::pretty(help_key)
+            )
+        } else {
+            format!("{PACKAGE_NAME} {PACKAGE_VERSION} | type C-q to quit")
         }
     }
 

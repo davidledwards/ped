@@ -97,16 +97,12 @@ echo-fg = "funky-red"
 # line options --print-keys and --print-ops, respectively, and current key
 # bindings can be discovered using --print-bindings.
 #
-# A handful of keys are prohibited from being rebound, which are noted below
-# with an explanation as to why:
+# A minimal set of keys are prohibited from being rebound, which are noted
+# below with an explanation as to why:
 #
-#   C-q : to ensure the user is able to quit ped
-#   C-g : to ensure the user is able to cancel any operation
-#   C-h : to ensure the user is able to show general help
+#   C-q : provides a way to quit ped
+#   C-g : provides a way to cancel any operation
 #   ESC : this key is a prefix of many other keys
-#   tab : has a ubiquitous meaning
-#   ret : has a ubiquitous meaning
-#   del : has a ubiquitous meaning
 #
 [bindings]
 # A binding to a single key.
