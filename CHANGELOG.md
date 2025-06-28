@@ -2,7 +2,7 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
-## [0.25.0](https://github.com/davidledwards/ped/tree/v0.25.0) - `2025-??-??`
+## [0.25.0](https://github.com/davidledwards/ped/tree/v0.25.0) - `2025-06-28`
 
 ### Added
 
@@ -18,11 +18,16 @@ This file contains relevant information for each release. Please refer to the co
 
 ### Changed
 
-- Removed following _restricted_ keys, which previously could not be rebound:
+- Removed the following _restricted_ keys, which previously could not be rebound:
   - `C-h`
   - `C-i` or `tab`
   - `C-m` or `ret`
   - `C-?` or `del`
+- Welcome prompt in echo area will now determine which key is bound to `help` and display that key rather than assuming `C-h`, which could be rebound
+
+### Fixed
+
+- Terminal parsing was too forgiving, consequently accepting malformed ANSI sequences
 
 ## [0.24.0](https://github.com/davidledwards/ped/tree/v0.24.0) - `2025-04-19`
 

@@ -248,6 +248,8 @@ impl Keyboard {
 
     /// Reads a key sequence prefixed with `ESC [`.
     fn read_key(&mut self) -> Result<Key> {
+        // Reads an optional key code followed by an optional key modifier if `;`
+        // delineator is present.
         let (key_code, key_mod) = match self.read_number()? {
             Some(c) => {
                 let m = if let Some(_) = self.read_literal(b";")? {
