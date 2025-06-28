@@ -248,17 +248,20 @@ impl Keyboard {
 
     /// Reads a key sequence prefixed with `ESC [`.
     fn read_key(&mut self) -> Result<Key> {
-        // Key code is optional when sequence is terminated with anything other
-        // than `~` (legacy) or `u` (kitty). Terminals should not yield value of 0, but
-        // silently adjust to default value of 1 if such condition arises.
-        let key_code = self.read_number()?.map(|n| cmp::max(1, n) as u8);
-
-        // Key modifier is optional and, if detected by presence of delineator, then
-        // value should follow, but is assumed to be absent if no value is present.
-        let key_mod = if let Some(_) = self.read_literal(b";")? {
-            self.read_number()?.map(|n| cmp::max(1, n) as u8)
-        } else {
-            None
+        let (key_code, key_mod) = match self.read_number()? {
+            Some(c) => {
+                let m = if let Some(_) = self.read_literal(b";")? {
+                    if let Some(n) = self.read_number()? {
+                        Some(cmp::max(1, n) as u8)
+                    } else {
+                        return Ok(Key::None);
+                    }
+                } else {
+                    None
+                };
+                (Some(cmp::max(1, c) as u8), m)
+            }
+            None => (None, None),
         };
 
         let key = match self.next()? {
@@ -271,9 +274,14 @@ impl Keyboard {
                 }
             }
             Some(b) => {
-                // When key modifier is absent, interpret key code as modifier for
-                // VT-style sequences.
-                map_vt(b, key_mod.or(key_code).unwrap_or(1))
+                // For VT-style sequences, key code is not applicable, so both key
+                // code and key modifier cannot be present, as this would imply malformed
+                // sequence. Note also that key code is interpeted as key modifier.
+                if let None = key_mod {
+                    map_vt(b, key_code.unwrap_or(1))
+                } else {
+                    Key::None
+                }
             }
             None => Key::None,
         };
@@ -360,11 +368,15 @@ impl Keyboard {
 
     /// Reads a number until a non-ASCII-digit character is encountered.
     fn read_number(&mut self) -> Result<Option<u32>> {
-        let mut n: u32 = 0;
-        while let Some(digit) = self.read_digit()? {
-            n = n.saturating_mul(10).saturating_add(digit);
-        }
-        Ok(Some(n))
+        let n = if let Some(mut n) = self.read_digit()? {
+            while let Some(d) = self.read_digit()? {
+                n = n.saturating_mul(10).saturating_add(d);
+            }
+            Some(n)
+        } else {
+            None
+        };
+        Ok(n)
     }
 
     /// Reads the next byte and expects it to match one of the bytes in `lits`,
@@ -729,7 +741,7 @@ mod tests {
     #[test]
     fn read_keys() -> Result<()> {
         #[rustfmt::skip]
-        const TESTS: [(&str, Key); 127] = [
+        const TESTS: [(&str, Key); 109] = [
             // Key: Insert
             // -- SHIFT off, CTRL off
             ("\x1b[2~", Key::Insert(Shift::Off, Ctrl::Off)),
@@ -757,108 +769,90 @@ mod tests {
             // Key: Up
             // -- SHIFT off, CTRL off
             ("\x1b[A", Key::Up(Shift::Off, Ctrl::Off)),
-            ("\x1b[1;1A", Key::Up(Shift::Off, Ctrl::Off)),
+            ("\x1b[1A", Key::Up(Shift::Off, Ctrl::Off)),
             ("\x1bOA", Key::Up(Shift::Off, Ctrl::Off)),
             // -- SHIFT on, CTRL off
             ("\x1b[2A", Key::Up(Shift::On, Ctrl::Off)),
-            ("\x1b[1;2A", Key::Up(Shift::On, Ctrl::Off)),
             // -- SHIFT off, CTRL on
             ("\x1b[5A", Key::Up(Shift::Off, Ctrl::On)),
-            ("\x1b[1;5A", Key::Up(Shift::Off, Ctrl::On)),
             // -- SHIFT on, CTRL on
             ("\x1b[6A", Key::Up(Shift::On, Ctrl::On)),
-            ("\x1b[1;6A", Key::Up(Shift::On, Ctrl::On)),
 
             // Key: Down
             // -- SHIFT off, CTRL off
             ("\x1b[B", Key::Down(Shift::Off, Ctrl::Off)),
-            ("\x1b[1;1B", Key::Down(Shift::Off, Ctrl::Off)),
+            ("\x1b[1B", Key::Down(Shift::Off, Ctrl::Off)),
             ("\x1bOB", Key::Down(Shift::Off, Ctrl::Off)),
             // -- SHIFT on, CTRL off
             ("\x1b[2B", Key::Down(Shift::On, Ctrl::Off)),
-            ("\x1b[1;2B", Key::Down(Shift::On, Ctrl::Off)),
             // -- SHIFT off, CTRL on
             ("\x1b[5B", Key::Down(Shift::Off, Ctrl::On)),
-            ("\x1b[1;5B", Key::Down(Shift::Off, Ctrl::On)),
             // -- SHIFT on, CTRL on
             ("\x1b[6B", Key::Down(Shift::On, Ctrl::On)),
-            ("\x1b[1;6B", Key::Down(Shift::On, Ctrl::On)),
 
             // Key: Right
             // -- SHIFT off, CTRL off
             ("\x1b[C", Key::Right(Shift::Off, Ctrl::Off)),
-            ("\x1b[1;1C", Key::Right(Shift::Off, Ctrl::Off)),
+            ("\x1b[1C", Key::Right(Shift::Off, Ctrl::Off)),
             ("\x1bOC", Key::Right(Shift::Off, Ctrl::Off)),
             // -- SHIFT on, CTRL off
             ("\x1b[2C", Key::Right(Shift::On, Ctrl::Off)),
-            ("\x1b[1;2C", Key::Right(Shift::On, Ctrl::Off)),
             // -- SHIFT off, CTRL on
             ("\x1b[5C", Key::Right(Shift::Off, Ctrl::On)),
-            ("\x1b[1;5C", Key::Right(Shift::Off, Ctrl::On)),
             // -- SHIFT on, CTRL on
             ("\x1b[6C", Key::Right(Shift::On, Ctrl::On)),
-            ("\x1b[1;6C", Key::Right(Shift::On, Ctrl::On)),
 
             // Key: Left
             // -- SHIFT off, CTRL off
             ("\x1b[D", Key::Left(Shift::Off, Ctrl::Off)),
-            ("\x1b[1;1D", Key::Left(Shift::Off, Ctrl::Off)),
+            ("\x1b[1D", Key::Left(Shift::Off, Ctrl::Off)),
             ("\x1bOD", Key::Left(Shift::Off, Ctrl::Off)),
             // -- SHIFT on, CTRL off
             ("\x1b[2D", Key::Left(Shift::On, Ctrl::Off)),
-            ("\x1b[1;2D", Key::Left(Shift::On, Ctrl::Off)),
             // -- SHIFT off, CTRL on
             ("\x1b[5D", Key::Left(Shift::Off, Ctrl::On)),
-            ("\x1b[1;5D", Key::Left(Shift::Off, Ctrl::On)),
             // -- SHIFT on, CTRL on
             ("\x1b[6D", Key::Left(Shift::On, Ctrl::On)),
-            ("\x1b[1;6D", Key::Left(Shift::On, Ctrl::On)),
 
             // Key: End
             // -- SHIFT off, CTRL off
             ("\x1b[4~", Key::End(Shift::Off, Ctrl::Off)),
             ("\x1b[8~", Key::End(Shift::Off, Ctrl::Off)),
             ("\x1b[F", Key::End(Shift::Off, Ctrl::Off)),
-            ("\x1b[1;1F", Key::End(Shift::Off, Ctrl::Off)),
+            ("\x1b[1F", Key::End(Shift::Off, Ctrl::Off)),
             ("\x1bOF", Key::End(Shift::Off, Ctrl::Off)),
             // -- SHIFT on, CTRL off
             ("\x1b[4;2~", Key::End(Shift::On, Ctrl::Off)),
             ("\x1b[8;2~", Key::End(Shift::On, Ctrl::Off)),
             ("\x1b[2F", Key::End(Shift::On, Ctrl::Off)),
-            ("\x1b[1;2F", Key::End(Shift::On, Ctrl::Off)),
             // -- SHIFT off, CTRL on
             ("\x1b[4;5~", Key::End(Shift::Off, Ctrl::On)),
             ("\x1b[8;5~", Key::End(Shift::Off, Ctrl::On)),
             ("\x1b[5F", Key::End(Shift::Off, Ctrl::On)),
-            ("\x1b[1;5F", Key::End(Shift::Off, Ctrl::On)),
             // -- SHIFT on, CTRL on
             ("\x1b[4;6~", Key::End(Shift::On, Ctrl::On)),
             ("\x1b[8;6~", Key::End(Shift::On, Ctrl::On)),
             ("\x1b[6F", Key::End(Shift::On, Ctrl::On)),
-            ("\x1b[1;6F", Key::End(Shift::On, Ctrl::On)),
 
             // Key: Home
             // -- SHIFT off, CTRL off
             ("\x1b[1~", Key::Home(Shift::Off, Ctrl::Off)),
             ("\x1b[7~", Key::Home(Shift::Off, Ctrl::Off)),
             ("\x1b[H", Key::Home(Shift::Off, Ctrl::Off)),
-            ("\x1b[1;1H", Key::Home(Shift::Off, Ctrl::Off)),
+            ("\x1b[1H", Key::Home(Shift::Off, Ctrl::Off)),
             ("\x1bOH", Key::Home(Shift::Off, Ctrl::Off)),
             // -- SHIFT on, CTRL off
             ("\x1b[1;2~", Key::Home(Shift::On, Ctrl::Off)),
             ("\x1b[7;2~", Key::Home(Shift::On, Ctrl::Off)),
             ("\x1b[2H", Key::Home(Shift::On, Ctrl::Off)),
-            ("\x1b[1;2H", Key::Home(Shift::On, Ctrl::Off)),
             // -- SHIFT off, CTRL on
             ("\x1b[1;5~", Key::Home(Shift::Off, Ctrl::On)),
             ("\x1b[7;5~", Key::Home(Shift::Off, Ctrl::On)),
             ("\x1b[5H", Key::Home(Shift::Off, Ctrl::On)),
-            ("\x1b[1;5H", Key::Home(Shift::Off, Ctrl::On)),
             // -- SHIFT on, CTRL on
             ("\x1b[1;6~", Key::Home(Shift::On, Ctrl::On)),
             ("\x1b[7;6~", Key::Home(Shift::On, Ctrl::On)),
             ("\x1b[6H", Key::Home(Shift::On, Ctrl::On)),
-            ("\x1b[1;6H", Key::Home(Shift::On, Ctrl::On)),
 
             // Key: PageUp
             // -- SHIFT off, CTRL off
@@ -952,10 +946,77 @@ mod tests {
         ];
 
         for (input, k) in TESTS {
-            let mut keyb = keyboard(SyntheticInput::using_str(input));
-            let key = keyb.read()?;
-            assert_eq!(key, k);
-            assert_eq!(keyb.read()?, Key::None);
+            verify_input_done(input, k)?;
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn read_incorrect_csi_xterm() -> Result<()> {
+        const TESTS: [&str; 7] = [
+            "\x1b[~",
+            "\x1b[1",
+            "\x1b[1;",
+            "\x1b[1;~",
+            "\x1b[;1~",
+            "\x1b[1;2",
+            "\x1b[1;Z~",
+        ];
+        for input in TESTS {
+            verify_input(input, Key::None)?;
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn read_incorrect_csi_vt() -> Result<()> {
+        const TESTS: [&str; 7] = [
+            "\x1b[a",
+            "\x1b[1b",
+            "\x1b[3E",
+            "\x1b[3;A",
+            "\x1b[;3A",
+            "\x1b[;A",
+            "\x1b[1;2A",
+        ];
+        for input in TESTS {
+            verify_input(input, Key::None)?;
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn read_incorrect_ss3() -> Result<()> {
+        const TESTS: [&str; 6] = [
+            "\x1b[Oa",
+            "\x1b[OE",
+            "\x1b[OZ",
+            "\x1b[O#",
+            "\x1b[O ",
+            "\x1b[O\x1b",
+        ];
+        for input in TESTS {
+            verify_input(input, Key::None)?;
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn read_incorrect_csi_mouse() -> Result<()> {
+        const TESTS: [&str; 10] = [
+            "\x1b[<",
+            "\x1b[<0;1;3?",
+            "\x1b[<0m",
+            "\x1b[<0;1m",
+            "\x1b[<0M",
+            "\x1b[<0;M",
+            "\x1b[<;1M",
+            "\x1b[<0;1M",
+            "\x1b[<0;1;M",
+            "\x1b[<0;;M",
+        ];
+        for input in TESTS {
+            verify_input(input, Key::None)?;
         }
         Ok(())
     }
@@ -965,5 +1026,23 @@ mod tests {
             stdin: Box::new(input),
             stdin_waiting: None,
         }
+    }
+
+    fn verify_input(input: &str, expect_key: Key) -> Result<Keyboard> {
+        let mut keyb = keyboard(SyntheticInput::using_str(input));
+        let key = keyb.read()?;
+        assert_eq!(key, expect_key, "input: {}", escape_str(input));
+        Ok(keyb)
+    }
+
+    fn verify_input_done(input: &str, expect_key: Key) -> Result<()> {
+        let mut keyb = verify_input(input, expect_key)?;
+        let key = keyb.read()?;
+        assert_eq!(key, Key::None, "input: {}", escape_str(input));
+        Ok(())
+    }
+
+    fn escape_str(s: &str) -> String {
+        s.escape_default().collect()
     }
 }
