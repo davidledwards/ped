@@ -246,15 +246,15 @@ impl Keyboard {
         Ok(key)
     }
 
-    /// Reads a VT or xterm key sequence prefixed with `ESC [`.
+    /// Reads a key sequence prefixed with `ESC [`.
     fn read_key(&mut self) -> Result<Key> {
         // Key code is optional when sequence is terminated with anything other
-        // then `~`. Terminal should not yield value of 0, but silently adjust to
-        // default value of 1 if such condition arises.
+        // than `~` (legacy) or `u` (kitty). Terminals should not yield value of 0, but
+        // silently adjust to default value of 1 if such condition arises.
         let key_code = self.read_number()?.map(|n| cmp::max(1, n) as u8);
 
-        // Key modifier is optional and, if detected by delineator, then value should
-        // follow, but is assumed to be absent if no value is present.
+        // Key modifier is optional and, if detected by presence of delineator, then
+        // value should follow, but is assumed to be absent if no value is present.
         let key_mod = if let Some(_) = self.read_literal(b";")? {
             self.read_number()?.map(|n| cmp::max(1, n) as u8)
         } else {
@@ -263,17 +263,17 @@ impl Keyboard {
 
         let key = match self.next()? {
             Some(b'~') => {
+                // Key code must exist for xterm-style sequences.
                 if let Some(key_code) = key_code {
-                    map_vt(key_code, key_mod.unwrap_or(1))
+                    map_xterm(key_code, key_mod.unwrap_or(1))
                 } else {
-                    // Key code must exist when ~ terminates sequence.
                     Key::None
                 }
             }
             Some(b) => {
-                // When key modifier is absent, interpret key code as modifier.
-                let key_mod = key_mod.or(key_code);
-                map_xterm(b, key_mod.unwrap_or(1))
+                // When key modifier is absent, interpret key code as modifier for
+                // VT-style sequences.
+                map_vt(b, key_mod.or(key_code).unwrap_or(1))
             }
             None => Key::None,
         };
@@ -289,13 +289,7 @@ impl Keyboard {
 
         let col = if self.read_literal(b";")?.is_some() {
             match self.read_number()? {
-                Some(col) => {
-                    if col > 0 {
-                        col - 1
-                    } else {
-                        0
-                    }
-                }
+                Some(col) => col.saturating_sub(1),
                 None => return Ok(Key::None),
             }
         } else {
@@ -304,13 +298,7 @@ impl Keyboard {
 
         let row = if self.read_literal(b";")?.is_some() {
             match self.read_number()? {
-                Some(row) => {
-                    if row > 0 {
-                        row - 1
-                    } else {
-                        0
-                    }
-                }
+                Some(row) => row.saturating_sub(1),
                 None => return Ok(Key::None),
             }
         } else {
@@ -396,7 +384,7 @@ impl Keyboard {
     /// Returns the next byte if it matches an ASCII digit, otherwise `None`.
     fn read_digit(&mut self) -> Result<Option<u32>> {
         let digit = self.next()?.and_then(|b| {
-            if is_digit(b) {
+            if b.is_ascii_digit() {
                 Some((b - b'0') as u32)
             } else {
                 self.push_back(b);
@@ -427,20 +415,12 @@ impl Keyboard {
     }
 }
 
-/// Returns `true` if `b` is an ASCII digit.
-#[inline(always)]
-fn is_digit(b: u8) -> bool {
-    b >= b'0' && b <= b'9'
-}
-
 /// Converts the UTF-8 sequence in `buf` to a valid string slice.
 fn to_utf8(buf: &[u8]) -> Result<&str> {
     str::from_utf8(buf).map_err(|e| Error::utf8(buf, e))
 }
 
-/// Returns the key corresponding to the VT-style key code and key modifier, or
-/// [`Key::None`] if unrecognized.
-fn map_vt(key_code: u8, key_mod: u8) -> Key {
+fn map_xterm(key_code: u8, key_mod: u8) -> Key {
     match (key_code, map_mods(key_mod)) {
         (1, (shift, ctrl)) => Key::Home(shift, ctrl),
         (2, (shift, ctrl)) => Key::Insert(shift, ctrl),
@@ -464,9 +444,7 @@ fn map_vt(key_code: u8, key_mod: u8) -> Key {
     }
 }
 
-/// Returns the key corresponding to the xterm-style key code and key modifier,
-/// or [`Key::None`] if unrecognized.
-fn map_xterm(key_code: u8, key_mod: u8) -> Key {
+fn map_vt(key_code: u8, key_mod: u8) -> Key {
     match (key_code, map_mods(key_mod)) {
         (b'A', (shift, ctrl)) => Key::Up(shift, ctrl),
         (b'B', (shift, ctrl)) => Key::Down(shift, ctrl),

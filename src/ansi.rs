@@ -9,11 +9,7 @@ use crate::color::Color;
 use crate::size::Point;
 
 pub fn alt_screen(on: bool) -> &'static str {
-    if on {
-        "\x1b[?1049h"
-    } else {
-        "\x1b[?1049l"
-    }
+    if on { "\x1b[?1049h" } else { "\x1b[?1049l" }
 }
 
 pub fn track_mouse(on: bool) -> &'static str {
