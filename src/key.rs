@@ -276,13 +276,16 @@ impl Keyboard {
                 }
             }
             Some(b) => {
-                // For VT-style sequences, key code is not applicable, so both key
-                // code and key modifier cannot be present, as this would imply malformed
-                // sequence. Note also that key code is interpeted as key modifier.
-                if let None = key_mod {
-                    map_vt(b, key_code.unwrap_or(1))
+                // For VT-style sequences, key code is not applicable, but may be present
+                // only as value of `1`, which also implies that key modifier must follow.
+                // When only key code is present, it is interpreted as key modifier.
+                if let Some(key_mod) = key_mod {
+                    match key_code {
+                        Some(1) => map_vt(b, key_mod),
+                        _ => Key::None,
+                    }
                 } else {
-                    Key::None
+                    map_vt(b, key_code.unwrap_or(1))
                 }
             }
             None => Key::None,
@@ -444,16 +447,21 @@ fn map_xterm(key_code: u8, key_mod: u8) -> Key {
         (6, (shift, ctrl)) => Key::PageDown(shift, ctrl),
         (7, (shift, ctrl)) => Key::Home(shift, ctrl),
         (8, (shift, ctrl)) => Key::End(shift, ctrl),
-        // F1-F5
-        (code @ 11..=15, _) => Key::Function(code - 10),
-        // F6-F10
-        (code @ 17..=21, _) => Key::Function(code - 11),
-        // F11-F14
-        (code @ 23..=26, _) => Key::Function(code - 12),
-        // F15-F16
-        (code @ 28..=29, _) => Key::Function(code - 13),
-        // F17-F20
-        (code @ 31..=34, _) => Key::Function(code - 14),
+        (code, (Shift::Off, Ctrl::Off)) => {
+            match code {
+                // F1-F5
+                11..=15 => Key::Function(code - 10),
+                // F6-F10
+                17..=21 => Key::Function(code - 11),
+                // F11-F14
+                23..=26 => Key::Function(code - 12),
+                // F15-F16
+                28..=29 => Key::Function(code - 13),
+                // F17-F20
+                31..=34 => Key::Function(code - 14),
+                _ => Key::None,
+            }
+        }
         _ => Key::None,
     }
 }
@@ -467,8 +475,13 @@ fn map_vt(key_code: u8, key_mod: u8) -> Key {
         (b'F', (shift, ctrl)) => Key::End(shift, ctrl),
         (b'H', (shift, ctrl)) => Key::Home(shift, ctrl),
         (b'Z', _) => Key::ReverseTab,
-        // F1-F4
-        (code @ b'P'..=b'S', _) => Key::Function(code - b'P' + 1),
+        (code, (Shift::Off, Ctrl::Off)) => {
+            match code {
+                // F1-F4
+                b'P'..=b'S' => Key::Function(code - b'P' + 1),
+                _ => Key::None,
+            }
+        }
         _ => Key::None,
     }
 }
@@ -477,16 +490,16 @@ fn map_vt(key_code: u8, key_mod: u8) -> Key {
 fn map_mods(key_mod: u8) -> (Shift, Ctrl) {
     // Bitmasks for each type of recognized key modifier per ANSI standard. Note
     // that for sake of simplicity, only SHIFT and CONTROL keys are recognized.
-    const MOD_SHIFT_MASK: u8 = 0x01;
-    const MOD_CONTROL_MASK: u8 = 0x04;
-    const MOD_ALL_MASK: u8 = MOD_SHIFT_MASK | MOD_CONTROL_MASK;
+    const SHIFT_MASK: u8 = 0x01;
+    const CONTROL_MASK: u8 = 0x04;
+    const ALL_MASK: u8 = SHIFT_MASK | CONTROL_MASK;
 
     // Per ANSI standard, all key modifiers default to 1, hence the reason for
     // substraction before applying the bitmask.
-    match (key_mod - 1) & MOD_ALL_MASK {
-        MOD_SHIFT_MASK => (Shift::On, Ctrl::Off),
-        MOD_CONTROL_MASK => (Shift::Off, Ctrl::On),
-        MOD_ALL_MASK => (Shift::On, Ctrl::On),
+    match (key_mod - 1) & ALL_MASK {
+        SHIFT_MASK => (Shift::On, Ctrl::Off),
+        CONTROL_MASK => (Shift::Off, Ctrl::On),
+        ALL_MASK => (Shift::On, Ctrl::On),
         _ => (Shift::Off, Ctrl::Off),
     }
 }
@@ -743,7 +756,7 @@ mod tests {
     #[test]
     fn read_keys() -> Result<()> {
         #[rustfmt::skip]
-        const TESTS: [(&str, Key); 109] = [
+        const TESTS: [(&str, Key); 133] = [
             // Key: Insert
             // -- SHIFT off, CTRL off
             ("\x1b[2~", Key::Insert(Shift::Off, Ctrl::Off)),
@@ -772,49 +785,65 @@ mod tests {
             // -- SHIFT off, CTRL off
             ("\x1b[A", Key::Up(Shift::Off, Ctrl::Off)),
             ("\x1b[1A", Key::Up(Shift::Off, Ctrl::Off)),
+            ("\x1b[1;1A", Key::Up(Shift::Off, Ctrl::Off)),
             ("\x1bOA", Key::Up(Shift::Off, Ctrl::Off)),
             // -- SHIFT on, CTRL off
             ("\x1b[2A", Key::Up(Shift::On, Ctrl::Off)),
+            ("\x1b[1;2A", Key::Up(Shift::On, Ctrl::Off)),
             // -- SHIFT off, CTRL on
             ("\x1b[5A", Key::Up(Shift::Off, Ctrl::On)),
+            ("\x1b[1;5A", Key::Up(Shift::Off, Ctrl::On)),
             // -- SHIFT on, CTRL on
             ("\x1b[6A", Key::Up(Shift::On, Ctrl::On)),
+            ("\x1b[1;6A", Key::Up(Shift::On, Ctrl::On)),
 
             // Key: Down
             // -- SHIFT off, CTRL off
             ("\x1b[B", Key::Down(Shift::Off, Ctrl::Off)),
             ("\x1b[1B", Key::Down(Shift::Off, Ctrl::Off)),
+            ("\x1b[1;1B", Key::Down(Shift::Off, Ctrl::Off)),
             ("\x1bOB", Key::Down(Shift::Off, Ctrl::Off)),
             // -- SHIFT on, CTRL off
             ("\x1b[2B", Key::Down(Shift::On, Ctrl::Off)),
+            ("\x1b[1;2B", Key::Down(Shift::On, Ctrl::Off)),
             // -- SHIFT off, CTRL on
             ("\x1b[5B", Key::Down(Shift::Off, Ctrl::On)),
+            ("\x1b[1;5B", Key::Down(Shift::Off, Ctrl::On)),
             // -- SHIFT on, CTRL on
             ("\x1b[6B", Key::Down(Shift::On, Ctrl::On)),
+            ("\x1b[1;6B", Key::Down(Shift::On, Ctrl::On)),
 
             // Key: Right
             // -- SHIFT off, CTRL off
             ("\x1b[C", Key::Right(Shift::Off, Ctrl::Off)),
             ("\x1b[1C", Key::Right(Shift::Off, Ctrl::Off)),
+            ("\x1b[1;1C", Key::Right(Shift::Off, Ctrl::Off)),
             ("\x1bOC", Key::Right(Shift::Off, Ctrl::Off)),
             // -- SHIFT on, CTRL off
             ("\x1b[2C", Key::Right(Shift::On, Ctrl::Off)),
+            ("\x1b[1;2C", Key::Right(Shift::On, Ctrl::Off)),
             // -- SHIFT off, CTRL on
             ("\x1b[5C", Key::Right(Shift::Off, Ctrl::On)),
+            ("\x1b[1;5C", Key::Right(Shift::Off, Ctrl::On)),
             // -- SHIFT on, CTRL on
             ("\x1b[6C", Key::Right(Shift::On, Ctrl::On)),
+            ("\x1b[1;6C", Key::Right(Shift::On, Ctrl::On)),
 
             // Key: Left
             // -- SHIFT off, CTRL off
             ("\x1b[D", Key::Left(Shift::Off, Ctrl::Off)),
             ("\x1b[1D", Key::Left(Shift::Off, Ctrl::Off)),
+            ("\x1b[1;1D", Key::Left(Shift::Off, Ctrl::Off)),
             ("\x1bOD", Key::Left(Shift::Off, Ctrl::Off)),
             // -- SHIFT on, CTRL off
             ("\x1b[2D", Key::Left(Shift::On, Ctrl::Off)),
+            ("\x1b[1;2D", Key::Left(Shift::On, Ctrl::Off)),
             // -- SHIFT off, CTRL on
             ("\x1b[5D", Key::Left(Shift::Off, Ctrl::On)),
+            ("\x1b[1;5D", Key::Left(Shift::Off, Ctrl::On)),
             // -- SHIFT on, CTRL on
             ("\x1b[6D", Key::Left(Shift::On, Ctrl::On)),
+            ("\x1b[1;6D", Key::Left(Shift::On, Ctrl::On)),
 
             // Key: End
             // -- SHIFT off, CTRL off
@@ -822,19 +851,23 @@ mod tests {
             ("\x1b[8~", Key::End(Shift::Off, Ctrl::Off)),
             ("\x1b[F", Key::End(Shift::Off, Ctrl::Off)),
             ("\x1b[1F", Key::End(Shift::Off, Ctrl::Off)),
+            ("\x1b[1;1F", Key::End(Shift::Off, Ctrl::Off)),
             ("\x1bOF", Key::End(Shift::Off, Ctrl::Off)),
             // -- SHIFT on, CTRL off
             ("\x1b[4;2~", Key::End(Shift::On, Ctrl::Off)),
             ("\x1b[8;2~", Key::End(Shift::On, Ctrl::Off)),
             ("\x1b[2F", Key::End(Shift::On, Ctrl::Off)),
+            ("\x1b[1;2F", Key::End(Shift::On, Ctrl::Off)),
             // -- SHIFT off, CTRL on
             ("\x1b[4;5~", Key::End(Shift::Off, Ctrl::On)),
             ("\x1b[8;5~", Key::End(Shift::Off, Ctrl::On)),
             ("\x1b[5F", Key::End(Shift::Off, Ctrl::On)),
+            ("\x1b[1;5F", Key::End(Shift::Off, Ctrl::On)),
             // -- SHIFT on, CTRL on
             ("\x1b[4;6~", Key::End(Shift::On, Ctrl::On)),
             ("\x1b[8;6~", Key::End(Shift::On, Ctrl::On)),
             ("\x1b[6F", Key::End(Shift::On, Ctrl::On)),
+            ("\x1b[1;6F", Key::End(Shift::On, Ctrl::On)),
 
             // Key: Home
             // -- SHIFT off, CTRL off
@@ -842,19 +875,23 @@ mod tests {
             ("\x1b[7~", Key::Home(Shift::Off, Ctrl::Off)),
             ("\x1b[H", Key::Home(Shift::Off, Ctrl::Off)),
             ("\x1b[1H", Key::Home(Shift::Off, Ctrl::Off)),
+            ("\x1b[1;1H", Key::Home(Shift::Off, Ctrl::Off)),
             ("\x1bOH", Key::Home(Shift::Off, Ctrl::Off)),
             // -- SHIFT on, CTRL off
             ("\x1b[1;2~", Key::Home(Shift::On, Ctrl::Off)),
             ("\x1b[7;2~", Key::Home(Shift::On, Ctrl::Off)),
             ("\x1b[2H", Key::Home(Shift::On, Ctrl::Off)),
+            ("\x1b[1;2H", Key::Home(Shift::On, Ctrl::Off)),
             // -- SHIFT off, CTRL on
             ("\x1b[1;5~", Key::Home(Shift::Off, Ctrl::On)),
             ("\x1b[7;5~", Key::Home(Shift::Off, Ctrl::On)),
             ("\x1b[5H", Key::Home(Shift::Off, Ctrl::On)),
+            ("\x1b[1;5H", Key::Home(Shift::Off, Ctrl::On)),
             // -- SHIFT on, CTRL on
             ("\x1b[1;6~", Key::Home(Shift::On, Ctrl::On)),
             ("\x1b[7;6~", Key::Home(Shift::On, Ctrl::On)),
             ("\x1b[6H", Key::Home(Shift::On, Ctrl::On)),
+            ("\x1b[1;6H", Key::Home(Shift::On, Ctrl::On)),
 
             // Key: PageUp
             // -- SHIFT off, CTRL off
@@ -979,7 +1016,7 @@ mod tests {
             "\x1b[3;A",
             "\x1b[;3A",
             "\x1b[;A",
-            "\x1b[1;2A",
+            "\x1b[2;3A",
         ];
         for input in TESTS {
             verify_input(input, Key::None)?;
