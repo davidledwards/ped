@@ -2,6 +2,12 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
+## [0.26.0](https://github.com/davidledwards/ped/tree/v0.26.0) - `2025-06-29`
+
+### Fixed
+
+- Regression in handling key modifiers `S-` and `C-` that made some navigation keys unrecognizable
+
 ## [0.25.0](https://github.com/davidledwards/ped/tree/v0.25.0) - `2025-06-28`
 
 ### Added
