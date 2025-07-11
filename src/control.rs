@@ -285,12 +285,10 @@ impl Controller {
     /// An efficient means of detecting the very common case of a single character,
     /// allowing the controller to optimize its handling.
     fn possible_char(&self, key: &Key) -> Option<char> {
-        if self.key_seq.is_empty() {
-            if let Key::Char(c) = key {
-                Some(*c)
-            } else {
-                None
-            }
+        if self.key_seq.is_empty()
+            && let Key::Char(c) = key
+        {
+            Some(*c)
         } else {
             None
         }

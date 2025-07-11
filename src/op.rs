@@ -10,6 +10,7 @@
 //! at runtime.
 
 use crate::buffer::Buffer;
+use crate::clip::Scope;
 use crate::config::ConfigurationRef;
 use crate::editor::{Align, Capture, Editor, EditorRef, ImmutableEditor};
 use crate::env::{Environment, Focus};
@@ -716,7 +717,7 @@ fn remove_before(env: &mut Environment) -> Option<Action> {
         }
     };
     if let Some(text) = text {
-        env.set_clipboard(text);
+        env.clipboard_mut().set_text(text, Scope::Local);
     }
     None
 }
@@ -784,6 +785,15 @@ fn redo(env: &mut Environment) -> Option<Action> {
 
 /// Operation: `copy`
 fn copy(env: &mut Environment) -> Option<Action> {
+    copy_to(env, Scope::Local)
+}
+
+/// Operation: `copy-global`
+fn copy_global(env: &mut Environment) -> Option<Action> {
+    copy_to(env, Scope::Global)
+}
+
+fn copy_to(env: &mut Environment, scope: Scope) -> Option<Action> {
     let text = {
         let mut editor = env.get_active_editor().borrow_mut();
         let maybe_mark = editor.clear_mark();
@@ -794,17 +804,26 @@ fn copy(env: &mut Environment) -> Option<Action> {
         }
     };
     env.get_active_editor().borrow_mut().render();
-    env.set_clipboard(text);
+    env.clipboard_mut().set_text(text, scope);
     None
 }
 
 /// Operation: `paste`
 fn paste(env: &mut Environment) -> Option<Action> {
+    paste_from(env, Scope::Local)
+}
+
+/// Operation: `paste-global`
+fn paste_global(env: &mut Environment) -> Option<Action> {
+    paste_from(env, Scope::Global)
+}
+
+fn paste_from(env: &mut Environment, scope: Scope) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
     if let Some(editor) = editor.modify() {
-        let maybe_text = env.get_clipboard();
+        let maybe_text = env.clipboard().get_text(scope);
         if let Some(text) = maybe_text {
-            editor.insert(text);
+            editor.insert(&text);
             editor.render();
         }
         None
@@ -815,6 +834,15 @@ fn paste(env: &mut Environment) -> Option<Action> {
 
 /// Operation: `cut`
 fn cut(env: &mut Environment) -> Option<Action> {
+    cut_to(env, Scope::Local)
+}
+
+/// Operation: `cut-global`
+fn cut_global(env: &mut Environment) -> Option<Action> {
+    cut_to(env, Scope::Global)
+}
+
+fn cut_to(env: &mut Environment, scope: Scope) -> Option<Action> {
     let text = {
         let mut editor = env.get_active_editor().borrow_mut();
         if let Some(editor) = editor.modify() {
@@ -833,7 +861,7 @@ fn cut(env: &mut Environment) -> Option<Action> {
         }
     };
     if let Some(text) = text {
-        env.set_clipboard(text);
+        env.clipboard_mut().set_text(text, scope);
         None
     } else {
         Action::echo_readonly()
@@ -1939,7 +1967,7 @@ fn base_dir(editor: &EditorRef) -> PathBuf {
 
 /// Predefined mapping of editing operations to editing functions.
 #[rustfmt::skip]
-pub const OP_MAPPINGS: [(&str, OpFn, &str); 76] = [
+pub const OP_MAPPINGS: [(&str, OpFn, &str); 79] = [
     // --- exit and cancellation ---
     ("quit", quit,
         "ask to save dirty editors and quit"),
@@ -2041,10 +2069,16 @@ pub const OP_MAPPINGS: [(&str, OpFn, &str); 76] = [
     // --- selection actions ---
     ("copy", copy,
         "copy selection, or entire line if nothing selected, to clipboard"),
+    ("copy-global", copy_global,
+        "copy selection, or entire line if nothing selected, to OS clipboard"),
     ("paste", paste,
         "paste contents of clipboard"),
+    ("paste-global", paste_global,
+        "paste contents of global clipboard"),
     ("cut", cut,
         "cut and copy selection, or entire line if nothing selected, to clipboard"),
+    ("cut-global", cut_global,
+        "cut and copy selection, or entire line if nothing selected, to global clipboard"),
 
     // --- search ---
     ("search", search,

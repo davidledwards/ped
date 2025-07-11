@@ -4,6 +4,7 @@
 //! to the core [`Editor`]. A restricted set of functions is necessary not only to
 //! simplify operations, but more importantly, to enforce certain invariants.
 
+use crate::clip::{Clipboard, ClipboardRef};
 use crate::editor::{Align, Editor, EditorRef, ImmutableEditor};
 use crate::source::Source;
 use crate::window::{BannerRef, WindowRef};
@@ -23,7 +24,7 @@ pub struct Environment {
     editor_id_seq: u32,
     view_map: ViewMap,
     active_view_id: u32,
-    clipboard: Option<Vec<char>>,
+    clipboard: ClipboardRef,
 }
 
 pub enum Focus {
@@ -76,7 +77,7 @@ impl Environment {
             editor_id_seq,
             view_map,
             active_view_id,
-            clipboard: None,
+            clipboard: Clipboard::new().into_ref(),
         }
     }
 
@@ -268,16 +269,6 @@ impl Environment {
         }
     }
 
-    /// Sets the value of the clipboard to `text`.
-    pub fn set_clipboard(&mut self, text: Vec<char>) {
-        self.clipboard = Some(text);
-    }
-
-    /// Returns the value of the clipboard.
-    pub fn get_clipboard(&self) -> Option<&Vec<char>> {
-        self.clipboard.as_ref()
-    }
-
     /// Resizes the workspace, which might remove a subset of views if resizing
     /// violates the minimum size constraint for windows.
     pub fn resize(&mut self) {
@@ -395,5 +386,13 @@ impl Environment {
 
     fn workspace_mut(&self) -> RefMut<'_, Workspace> {
         self.workspace.borrow_mut()
+    }
+
+    pub fn clipboard(&self) -> Ref<'_, Clipboard> {
+        self.clipboard.borrow()
+    }
+
+    pub fn clipboard_mut(&self) -> RefMut<'_, Clipboard> {
+        self.clipboard.borrow_mut()
     }
 }

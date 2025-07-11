@@ -18,6 +18,7 @@ mod ansi;
 mod bind;
 mod buffer;
 mod canvas;
+mod clip;
 mod color;
 mod config;
 mod control;
