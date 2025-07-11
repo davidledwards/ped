@@ -2068,17 +2068,17 @@ pub const OP_MAPPINGS: [(&str, OpFn, &str); 79] = [
 
     // --- selection actions ---
     ("copy", copy,
-        "copy selection, or entire line if nothing selected, to clipboard"),
+        "copy selection or entire line if nothing selected to local clipboard"),
     ("copy-global", copy_global,
-        "copy selection, or entire line if nothing selected, to OS clipboard"),
+        "copy selection or entire line if nothing selected to global clipboard"),
     ("paste", paste,
-        "paste contents of clipboard"),
+        "paste contents of local clipboard"),
     ("paste-global", paste_global,
         "paste contents of global clipboard"),
     ("cut", cut,
-        "cut and copy selection, or entire line if nothing selected, to clipboard"),
+        "cut and copy selection or entire line if nothing selected to local clipboard"),
     ("cut-global", cut_global,
-        "cut and copy selection, or entire line if nothing selected, to global clipboard"),
+        "cut and copy selection or entire line if nothing selected to global clipboard"),
 
     // --- search ---
     ("search", search,
