@@ -32,9 +32,15 @@ impl Clipboard {
     pub fn set_text(&mut self, text: Vec<char>, scope: Scope) {
         match scope {
             Scope::Local => self.local = Some(text),
-            Scope::Global => GlobalClipboard::new()
-                .and_then(|mut clip| clip.set_text(text.iter().collect::<String>()))
-                .unwrap_or(()),
+            Scope::Global => {
+                // OS-specific clipboards behave in different ways, so recommendation
+                // is to create new instance prior to each access. Note that operations
+                // could fail, possibly because of OS limitations or nuances, so
+                // quietly ignore.
+                GlobalClipboard::new()
+                    .and_then(|mut clip| clip.set_text(text.iter().collect::<String>()))
+                    .unwrap_or(())
+            }
         }
     }
 
@@ -42,10 +48,16 @@ impl Clipboard {
     pub fn get_text(&self, scope: Scope) -> Option<Vec<char>> {
         match scope {
             Scope::Local => self.local.clone(),
-            Scope::Global => GlobalClipboard::new()
-                .and_then(|mut clip| clip.get_text())
-                .map(|text| text.chars().collect::<Vec<_>>())
-                .ok(),
+            Scope::Global => {
+                // OS-specific clipboards behave in different ways, so recommendation
+                // is to create new instance prior to each access. Note that operations
+                // could fail, possibly because of OS limitations or nuances, so
+                // quietly ignore and treat as though text does not exist on clipboard.
+                GlobalClipboard::new()
+                    .and_then(|mut clip| clip.get_text())
+                    .map(|text| text.chars().collect::<Vec<_>>())
+                    .ok()
+            }
         }
     }
 }
