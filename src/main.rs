@@ -127,15 +127,15 @@ fn run_opts(opts: &Options) -> Result<()> {
 
     if opts.bindings {
         let content = help::bindings_content(config.bindings.bindings());
-        write!(stdout(), "{}", content)?;
+        write!(stdout(), "{content}")?;
         Ok(())
     } else if opts.colors {
         let content = help::colors_content(config.colors.colors());
-        write!(stdout(), "{}", content)?;
+        write!(stdout(), "{content}")?;
         Ok(())
     } else if opts.theme {
         let content = help::theme_content(&config.theme);
-        write!(stdout(), "{}", content)?;
+        write!(stdout(), "{content}")?;
         Ok(())
     } else if let Some(ref op) = opts.describe {
         if let Some(desc) = op::describe(op) {

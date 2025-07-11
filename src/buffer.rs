@@ -445,7 +445,7 @@ impl Buffer {
     /// Increase buffer capacity by at least `need` bytes.
     fn grow(&mut self, need: usize) {
         let capacity = if need > Self::MAX_CAPACITY {
-            panic!("incremental allocation too large: {} bytes", need);
+            panic!("incremental allocation too large: {need} bytes");
         } else {
             // This calculation is safe from panic since capacity is always <= MAX_CAPACITY
             // and addition would never overflow because result is sufficiently smaller than
@@ -477,7 +477,7 @@ impl Buffer {
 
     fn alloc(capacity: usize) -> NonNull<char> {
         if capacity > Self::MAX_CAPACITY {
-            panic!("allocation too large: {} bytes", capacity);
+            panic!("allocation too large: {capacity} bytes");
         }
         let layout = Layout::array::<char>(capacity).unwrap();
         let ptr = unsafe { alloc::alloc(layout) as *mut char };

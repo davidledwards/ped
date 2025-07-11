@@ -6,7 +6,7 @@ use crate::buffer::Buffer;
 use crate::config::{ConfigurationRef, Theme};
 use crate::editor::{Editor, EditorRef};
 use crate::etc;
-use crate::key::{self, Key, KEY_MAPPINGS};
+use crate::key::{self, KEY_MAPPINGS, Key};
 use crate::op;
 use crate::op::OP_MAPPINGS;
 use crate::source::Source;
@@ -111,16 +111,12 @@ fn ops_buffer() -> Buffer {
     // Calculate maximum width of key sequences to align output.
     let ops = prepare_ops();
     let key_width = ops.keys().fold(HEADER_OP.len(), |width, k| {
-        if k.len() > width {
-            k.len()
-        } else {
-            width
-        }
+        if k.len() > width { k.len() } else { width }
     });
 
     // Emit formatted operations.
     let mut buf = Buffer::new();
-    writeln!(buf, "{:<key_width$}   {}", HEADER_OP, HEADER_DESC);
+    writeln!(buf, "{HEADER_OP:<key_width$}   {HEADER_DESC}");
     for (op, desc) in ops {
         writeln!(buf, "{op:<key_width$}   {desc}");
     }
@@ -161,16 +157,12 @@ fn bindings_buffer(bindings: &HashMap<Vec<Key>, String>) -> Buffer {
 
     // Calculate maximum width of key sequences to align output.
     let key_width = bindings.keys().fold(HEADER_KEY.len(), |width, k| {
-        if k.len() > width {
-            k.len()
-        } else {
-            width
-        }
+        if k.len() > width { k.len() } else { width }
     });
 
     // Emit formatted bindings.
     let mut buf = Buffer::new();
-    writeln!(buf, "{:<key_width$}   {}", HEADER_KEY, HEADER_OP);
+    writeln!(buf, "{HEADER_KEY:<key_width$}   {HEADER_OP}");
     for (key_seq, op) in bindings {
         writeln!(buf, "{key_seq:<key_width$}   {op}");
     }
@@ -218,7 +210,7 @@ fn colors_buffer(colors: &HashMap<String, u8>) -> Buffer {
 
     // Emit formatted colors.
     let mut buf = Buffer::new();
-    writeln!(buf, "{:<name_width$}   {}", HEADER_NAME, HEADER_VALUE);
+    writeln!(buf, "{HEADER_NAME:<name_width$}   {HEADER_VALUE}");
     for (name, color) in colors {
         writeln!(buf, "{name:<name_width$}   {color}");
     }

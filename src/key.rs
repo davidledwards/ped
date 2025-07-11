@@ -164,6 +164,7 @@ impl fmt::Display for Control {
 
 impl Keyboard {
     /// Creates a new keyboard reader.
+    #[allow(clippy::unbuffered_bytes)]
     pub fn new() -> Keyboard {
         Keyboard {
             stdin: Box::new(io::stdin().bytes()),
@@ -252,7 +253,7 @@ impl Keyboard {
         // delineator is present.
         let (key_code, key_mod) = match self.read_number()? {
             Some(c) => {
-                let m = if let Some(_) = self.read_literal(b";")? {
+                let m = if self.read_literal(b";")?.is_some() {
                     if let Some(n) = self.read_number()? {
                         Some(cmp::max(1, n) as u8)
                     } else {
