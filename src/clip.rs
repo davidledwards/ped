@@ -4,14 +4,10 @@
 //! clipboard is provided by the OS.
 
 use arboard::Clipboard as GlobalClipboard;
-use std::cell::RefCell;
-use std::rc::Rc;
 
 pub struct Clipboard {
     local: Option<Vec<char>>,
 }
-
-pub type ClipboardRef = Rc<RefCell<Clipboard>>;
 
 pub enum Scope {
     Local,
@@ -21,11 +17,6 @@ pub enum Scope {
 impl Clipboard {
     pub fn new() -> Clipboard {
         Clipboard { local: None }
-    }
-
-    /// Turns the clipboard into a [`ClipboardRef`].
-    pub fn into_ref(self) -> ClipboardRef {
-        Rc::new(RefCell::new(self))
     }
 
     /// Adds `text` to the clipboard specified by `scope`.

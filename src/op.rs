@@ -275,7 +275,7 @@ where
             Action::echo_no_window()
         }
     } else {
-        let config = env.workspace().config().clone();
+        let config = env.workspace.borrow().config().clone();
         if let Some((view_id, _)) =
             env.open_editor(editor_fn(config), Placement::Bottom, Align::Auto)
         {
@@ -717,7 +717,7 @@ fn remove_before(env: &mut Environment) -> Option<Action> {
         }
     };
     if let Some(text) = text {
-        env.clipboard_mut().set_text(text, Scope::Local);
+        env.clipboard.set_text(text, Scope::Local);
     }
     None
 }
@@ -804,7 +804,7 @@ fn copy_to(env: &mut Environment, scope: Scope) -> Option<Action> {
         }
     };
     env.get_active_editor().borrow_mut().render();
-    env.clipboard_mut().set_text(text, scope);
+    env.clipboard.set_text(text, scope);
     None
 }
 
@@ -821,7 +821,7 @@ fn paste_global(env: &mut Environment) -> Option<Action> {
 fn paste_from(env: &mut Environment, scope: Scope) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
     if let Some(editor) = editor.modify() {
-        let maybe_text = env.clipboard().get_text(scope);
+        let maybe_text = env.clipboard.get_text(scope);
         if let Some(text) = maybe_text {
             editor.insert(&text);
             editor.render();
@@ -861,7 +861,7 @@ fn cut_to(env: &mut Environment, scope: Scope) -> Option<Action> {
         }
     };
     if let Some(text) = text {
-        env.clipboard_mut().set_text(text, scope);
+        env.clipboard.set_text(text, scope);
         None
     } else {
         Action::echo_readonly()
@@ -1089,7 +1089,7 @@ impl Open {
 
     fn open(&mut self, env: &mut Environment, path: &str) -> Option<Action> {
         let path = sys::canonicalize(self.dir.join(path)).as_string();
-        let config = env.workspace().config().clone();
+        let config = env.workspace.borrow().config().clone();
         match open_editor(config, &path) {
             Ok(editor) => {
                 if let Some(place) = self.place {
@@ -1682,7 +1682,7 @@ fn tab_mode(env: &mut Environment) -> Option<Action> {
 /// Scrolls the display down for the editor associated with `p`, which represents a
 /// point whose origin is the top-left position of the terminal display.
 pub fn track_up(env: &mut Environment, p: Point, select: bool) {
-    let view = env.workspace().locate_view(p);
+    let view = env.workspace.borrow().locate_view(p);
     if let Some((view_id, _)) = view {
         let mut editor = env.get_view_editor(view_id).borrow_mut();
 
@@ -1710,7 +1710,7 @@ pub fn track_up(env: &mut Environment, p: Point, select: bool) {
 /// Scrolls the display up for the editor associated with `p`, which represents a
 /// point whose origin is the top-left position of the terminal display.
 pub fn track_down(env: &mut Environment, p: Point, select: bool) {
-    let view = env.workspace().locate_view(p);
+    let view = env.workspace.borrow().locate_view(p);
     if let Some((view_id, _)) = view {
         let mut editor = env.get_view_editor(view_id).borrow_mut();
 
@@ -1738,8 +1738,9 @@ pub fn track_down(env: &mut Environment, p: Point, select: bool) {
 /// Moves the cursor backward for the editor associated with `p`, which represents a
 /// point whose origin is the top-left position of the terminal display.
 pub fn track_backward(env: &mut Environment, p: Point, select: bool) {
-    if env.workspace().config().settings.track_lateral {
-        let view = env.workspace().locate_view(p);
+    let ws = env.workspace.borrow();
+    if ws.config().settings.track_lateral {
+        let view = ws.locate_view(p);
         if let Some((view_id, _)) = view {
             let mut editor = env.get_view_editor(view_id).borrow_mut();
             if select {
@@ -1756,8 +1757,9 @@ pub fn track_backward(env: &mut Environment, p: Point, select: bool) {
 /// Moves the cursor forward for the editor associated with `p`, which represents a
 /// point whose origin is the top-left position of the terminal display.
 pub fn track_forward(env: &mut Environment, p: Point, select: bool) {
-    if env.workspace().config().settings.track_lateral {
-        let view = env.workspace().locate_view(p);
+    let ws = env.workspace.borrow();
+    if ws.config().settings.track_lateral {
+        let view = ws.locate_view(p);
         if let Some((view_id, _)) = view {
             let mut editor = env.get_view_editor(view_id).borrow_mut();
             if select {
@@ -1774,7 +1776,7 @@ pub fn track_forward(env: &mut Environment, p: Point, select: bool) {
 /// Sets the active editor and cursor position within editor based on `p`, which
 /// represents a point whose origin is the top-left position of the terminal display.
 pub fn set_focus(env: &mut Environment, p: Point) {
-    let view = env.workspace().locate_view(p);
+    let view = env.workspace.borrow().locate_view(p);
     if let Some((view_id, cursor)) = view {
         env.set_active(Focus::To(view_id));
         let mut editor = env.get_active_editor().borrow_mut();

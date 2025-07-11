@@ -4,12 +4,11 @@
 //! to the core [`Editor`]. A restricted set of functions is necessary not only to
 //! simplify operations, but more importantly, to enforce certain invariants.
 
-use crate::clip::{Clipboard, ClipboardRef};
+use crate::clip::Clipboard;
 use crate::editor::{Align, Editor, EditorRef, ImmutableEditor};
 use crate::source::Source;
 use crate::window::{BannerRef, WindowRef};
-use crate::workspace::{Placement, Workspace, WorkspaceRef};
-use std::cell::{Ref, RefMut};
+use crate::workspace::{Placement, WorkspaceRef};
 use std::collections::{BTreeMap, HashMap};
 
 /// Map of view ids to editor ids.
@@ -19,12 +18,12 @@ pub type ViewMap = HashMap<u32, u32>;
 pub type EditorMap = BTreeMap<u32, EditorRef>;
 
 pub struct Environment {
-    workspace: WorkspaceRef,
+    pub workspace: WorkspaceRef,
+    pub clipboard: Clipboard,
     editor_map: EditorMap,
     editor_id_seq: u32,
     view_map: ViewMap,
     active_view_id: u32,
-    clipboard: ClipboardRef,
 }
 
 pub enum Focus {
@@ -73,11 +72,11 @@ impl Environment {
 
         Environment {
             workspace,
+            clipboard: Clipboard::new(),
             editor_map,
             editor_id_seq,
             view_map,
             active_view_id,
-            clipboard: Clipboard::new().into_ref(),
         }
     }
 
@@ -104,11 +103,12 @@ impl Environment {
     /// Sets the _active_ view based on `focus` and returns the view id.
     pub fn set_active(&mut self, focus: Focus) -> u32 {
         self.unfocus(self.active_view_id);
+        let ws = self.workspace.borrow();
         self.active_view_id = match focus {
-            Focus::Top => self.workspace().top_view().id,
-            Focus::Bottom => self.workspace().bottom_view().id,
-            Focus::Above => self.workspace().above_view(self.active_view_id).id,
-            Focus::Below => self.workspace().below_view(self.active_view_id).id,
+            Focus::Top => ws.top_view().id,
+            Focus::Bottom => ws.bottom_view().id,
+            Focus::Above => ws.above_view(self.active_view_id).id,
+            Focus::Below => ws.below_view(self.active_view_id).id,
             Focus::To(view_id) => {
                 if self.view_map.contains_key(&view_id) {
                     view_id
@@ -147,7 +147,7 @@ impl Environment {
         place: Placement,
         align: Align,
     ) -> Option<(u32, u32)> {
-        let view_id = self.workspace_mut().open_view(place);
+        let view_id = self.workspace.borrow_mut().open_view(place);
         view_id.map(|view_id| {
             let editor_id = self.add_editor(editor);
             self.reattach_views();
@@ -164,7 +164,7 @@ impl Environment {
     /// not opened and the view id of the attached window is returned instead.
     pub fn open_window(&mut self, editor_id: u32, place: Placement, align: Align) -> Option<u32> {
         self.find_editor_view_id(editor_id).or_else(|| {
-            let view_id = self.workspace_mut().open_view(place);
+            let view_id = self.workspace.borrow_mut().open_view(place);
             view_id.inspect(|&view_id| {
                 self.reattach_views();
                 self.attach_to_editor(view_id, editor_id, align);
@@ -223,7 +223,7 @@ impl Environment {
     /// This function returns `None` if the workspace is unable to close the window,
     /// which happens when it is the only remaining window.
     pub fn close_window_for(&mut self, view_id: u32) -> Option<u32> {
-        let next_id = self.workspace_mut().close_view(view_id);
+        let next_id = self.workspace.borrow_mut().close_view(view_id);
         next_id.map(|next_id| {
             self.remove_view(view_id);
             self.reattach_views();
@@ -272,8 +272,12 @@ impl Environment {
     /// Resizes the workspace, which might remove a subset of views if resizing
     /// violates the minimum size constraint for windows.
     pub fn resize(&mut self) {
-        let view_ids = self.workspace_mut().resize(self.active_view_id);
-        self.workspace_mut().clear_shared();
+        let view_ids = {
+            let mut ws = self.workspace.borrow_mut();
+            let ids = ws.resize(self.active_view_id);
+            ws.clear_shared();
+            ids
+        };
 
         if let Some(view_ids) = view_ids {
             for view_id in view_ids {
@@ -355,7 +359,7 @@ impl Environment {
     }
 
     fn window_of(&self, view_id: u32) -> WindowRef {
-        self.workspace().get_view(view_id).window.clone()
+        self.workspace.borrow().get_view(view_id).window.clone()
     }
 
     fn banner_of(&self, view_id: u32) -> BannerRef {
@@ -378,21 +382,5 @@ impl Environment {
 
     fn is_builtin(&self, editor_id: u32) -> bool {
         Self::BUILTIN_EDITORS.iter().any(|(id, _)| *id == editor_id)
-    }
-
-    pub fn workspace(&self) -> Ref<'_, Workspace> {
-        self.workspace.borrow()
-    }
-
-    fn workspace_mut(&self) -> RefMut<'_, Workspace> {
-        self.workspace.borrow_mut()
-    }
-
-    pub fn clipboard(&self) -> Ref<'_, Clipboard> {
-        self.clipboard.borrow()
-    }
-
-    pub fn clipboard_mut(&self) -> RefMut<'_, Clipboard> {
-        self.clipboard.borrow_mut()
     }
 }
