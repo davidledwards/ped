@@ -2,11 +2,19 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
+## [0.27.0](https://github.com/davidledwards/ped/tree/v0.27.0) - `2025-07-12`
+
+### Added
+
+- Ability to insert literal characters using Unicode code points in either _decimal_ or _hex_ format:
+  - `insert-unicode-dec` bound to `C-^`
+  - `insert-unicode-hex` bound to `M-^`
+
 ## [0.26.0](https://github.com/davidledwards/ped/tree/v0.26.0) - `2025-07-11`
 
 ### Added
 
-- Editing operations with default key bindings that interact with the clipboard provided by the native operating system:
+- Ability to interact with the clipboard provided by the native operating system:
   - `copy-global` bound to `M-c`
   - `paste-global` bound to `M-v`
   - `cut-global` bound to `M-x`

@@ -82,10 +82,10 @@ pub fn yes_no_all_completer() -> Box<dyn Completer> {
     Box::new(YesNoAllCompleter::new())
 }
 
-/// Returns an implementation of [`Completer`] that accepts numbers in the range
-/// defined by `u32`.
-pub fn number_completer() -> Box<dyn Completer> {
-    Box::new(NumberCompleter::new())
+/// Returns an implementation of [`Completer`] that accepts numbers represented by
+/// the given `radix` and in the range defined by `u32`.
+pub fn number_completer(radix: u32) -> Box<dyn Completer> {
+    Box::new(NumberCompleter::new(radix))
 }
 
 /// Returns an implementation of [`Completer`] that accepts a finite collection of
@@ -208,16 +208,14 @@ impl Completer for YesNoAllCompleter {
 
 /// A completer that accepts numbers in the range defined by `u32`.
 pub struct NumberCompleter {
-    hint: Option<String>,
+    radix: u32,
 }
 
 impl NumberCompleter {
-    const HINT: &str = " (enter number)";
+    const INVALID_HINT: &str = " (invalid)";
 
-    pub fn new() -> NumberCompleter {
-        NumberCompleter {
-            hint: Some(Self::HINT.to_string()),
-        }
+    pub fn new(radix: u32) -> NumberCompleter {
+        NumberCompleter { radix }
     }
 }
 
@@ -227,10 +225,11 @@ impl Completer for NumberCompleter {
     }
 
     fn evaluate(&mut self, value: &str) -> Option<String> {
-        if value.trim().len() == 0 || value.trim().parse::<u32>().is_ok() {
+        let value = value.trim();
+        if value.len() == 0 || u32::from_str_radix(value, self.radix).is_ok() {
             None
         } else {
-            self.hint.clone()
+            Some(Self::INVALID_HINT.to_string())
         }
     }
 
@@ -239,8 +238,9 @@ impl Completer for NumberCompleter {
     }
 
     fn accept(&mut self, value: &str) -> Option<String> {
-        if let Ok(n) = value.trim().parse::<u32>() {
-            Some(n.to_string())
+        let value = value.trim();
+        if u32::from_str_radix(value, self.radix).is_ok() {
+            Some(value.to_string())
         } else {
             None
         }

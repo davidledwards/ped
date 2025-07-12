@@ -319,7 +319,7 @@ impl Configuration {
     }
 
     #[rustfmt::skip]
-    const DEFAULT_BINDINGS: [(&'static str, &'static str); 95] = [
+    const DEFAULT_BINDINGS: [(&'static str, &'static str); 97] = [
         // --- exit and cancellation ---
         ("C-q", "quit"),
 
@@ -380,6 +380,8 @@ impl Configuration {
         // --- insertion and removal ---
         ("ret", "insert-line"),
         ("tab", "insert-tab"),
+        ("C-^", "insert-unicode-dec"),
+        ("M-^", "insert-unicode-hex"),
         ("C-d", "remove-after"),
         ("del", "remove-before"),
         ("C-j", "remove-start"),

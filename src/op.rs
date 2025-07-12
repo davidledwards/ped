@@ -607,6 +607,7 @@ struct GotoLine {
 
 impl GotoLine {
     const PROMPT: &str = "goto line:";
+    const INVALID_HINT: &str = " (invalid)";
 
     fn question(editor: EditorRef) -> Option<Action> {
         let capture = editor.borrow().capture();
@@ -630,20 +631,20 @@ impl Inquirer for GotoLine {
     }
 
     fn completer(&self) -> Box<dyn Completer> {
-        user::number_completer()
+        user::number_completer(10)
     }
 
     fn react(&mut self, _: &mut Environment, value: &str, _: &Key) -> Option<String> {
         let value = value.trim();
         if value.len() > 0 {
-            if let Ok(line) = value.trim().parse::<u32>() {
+            if let Ok(line) = value.parse::<u32>() {
                 let line = if line > 0 { line - 1 } else { 0 };
                 let mut editor = self.editor.borrow_mut();
                 editor.move_line(line, Align::Center);
                 editor.render();
                 None
             } else {
-                Some(" (invalid line number)".to_string())
+                Some(Self::INVALID_HINT.to_string())
             }
         } else {
             self.restore();
@@ -694,6 +695,87 @@ fn insert_tab(env: &mut Environment) -> Option<Action> {
         None
     } else {
         Action::echo_readonly()
+    }
+}
+
+/// Operation: `insert-unicode-dec`
+fn insert_unicode_dec(_: &mut Environment) -> Option<Action> {
+    InsertUnicode::question(10)
+}
+
+/// Operation: `insert-unicode-hex`
+fn insert_unicode_hex(_: &mut Environment) -> Option<Action> {
+    InsertUnicode::question(16)
+}
+
+/// An inquirer that inserts a Unicode character.
+struct InsertUnicode {
+    /// Only values of `10` and `16` are supported.
+    radix: u32,
+}
+
+impl InsertUnicode {
+    const INVALID_HINT: &str = " (invalid)";
+
+    fn question(radix: u32) -> Option<Action> {
+        debug_assert!(radix == 10 || radix == 16);
+        Action::as_question(InsertUnicode { radix }.into_box())
+    }
+
+    fn into_box(self) -> Box<dyn Inquirer> {
+        Box::new(self)
+    }
+
+    fn parse_code(&self, value: &str) -> Option<char> {
+        u32::from_str_radix(value, self.radix)
+            .ok()
+            .and_then(|code| char::from_u32(code))
+    }
+}
+
+impl Inquirer for InsertUnicode {
+    fn prompt(&self) -> String {
+        let radix = if self.radix == 10 { "" } else { " (hex)" };
+        format!("insert code point{radix}:")
+    }
+
+    fn completer(&self) -> Box<dyn Completer> {
+        user::number_completer(self.radix)
+    }
+
+    fn react(&mut self, _: &mut Environment, value: &str, _: &Key) -> Option<String> {
+        let value = value.trim();
+        if value.len() > 0 {
+            if let Some(c) = self.parse_code(value) {
+                if c.is_control() {
+                    None
+                } else {
+                    Some(format!(" '{c}'"))
+                }
+            } else {
+                Some(Self::INVALID_HINT.to_string())
+            }
+        } else {
+            None
+        }
+    }
+
+    fn respond(&mut self, env: &mut Environment, value: Option<&str>) -> Option<Action> {
+        if let Some(value) = value
+            && let Some(c) = self.parse_code(value)
+        {
+            let mut editor = env.get_active_editor().borrow_mut();
+            if let Some(editor) = editor.modify() {
+                editor.clear_mark();
+                editor.insert_char(c);
+                editor.render();
+                None
+            } else {
+                Action::echo_readonly()
+            }
+        } else {
+            None
+        }
     }
 }
 
@@ -1969,7 +2051,7 @@ fn base_dir(editor: &EditorRef) -> PathBuf {
 
 /// Predefined mapping of editing operations to editing functions.
 #[rustfmt::skip]
-pub const OP_MAPPINGS: [(&str, OpFn, &str); 79] = [
+pub const OP_MAPPINGS: [(&str, OpFn, &str); 81] = [
     // --- exit and cancellation ---
     ("quit", quit,
         "ask to save dirty editors and quit"),
@@ -2055,6 +2137,10 @@ pub const OP_MAPPINGS: [(&str, OpFn, &str); 79] = [
         "insert line break"),
     ("insert-tab", insert_tab,
         "insert soft or hard tab"),
+    ("insert-unicode-dec", insert_unicode_dec,
+        "insert unicode character as decimal code point"),
+    ("insert-unicode-hex", insert_unicode_hex,
+        "insert unicode character as hex code point"),
     ("remove-before", remove_before,
         "remove character before cursor"),
     ("remove-after", remove_after,
