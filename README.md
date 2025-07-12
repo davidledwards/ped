@@ -2,10 +2,6 @@
 
 The *ped*estrian text editor.
 
-<p align="center">
-    <img src="content/ped.png" width="25%" height="25%" />
-</p>
-
 ![](content/ped-snapshot.png)
 
 ## Background
