@@ -1213,8 +1213,8 @@ impl ImmutableEditor for EditorKernel {
 
     fn attach(&mut self, window: WindowRef, align: Align) {
         let is_zombie = window.borrow().is_zombie();
-        self.canvas = window.borrow().canvas().clone();
-        self.banner = window.borrow().banner().clone();
+        self.canvas = window.borrow().canvas.clone();
+        self.banner = window.borrow().banner.clone();
 
         // Allocate leftmost columns of window to line numbers, but only if enabled and
         // total width of window is large enough to reasonably accommodate.

@@ -272,8 +272,8 @@ impl Banner {
 
 pub struct Window {
     size: Size,
-    canvas: CanvasRef,
-    banner: BannerRef,
+    pub canvas: CanvasRef,
+    pub banner: BannerRef,
 }
 
 pub type WindowRef = Rc<RefCell<Window>>;
@@ -315,14 +315,6 @@ impl Window {
 
     pub fn into_ref(self) -> WindowRef {
         Rc::new(RefCell::new(self))
-    }
-
-    pub fn canvas(&self) -> &CanvasRef {
-        &self.canvas
-    }
-
-    pub fn banner(&self) -> &BannerRef {
-        &self.banner
     }
 
     pub fn draw(&mut self) {

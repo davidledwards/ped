@@ -363,7 +363,7 @@ impl Environment {
     }
 
     fn banner_of(&self, view_id: u32) -> BannerRef {
-        self.window_of(view_id).borrow().banner().clone()
+        self.window_of(view_id).borrow().banner.clone()
     }
 
     fn focus(&self, view_id: u32) {
