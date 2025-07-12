@@ -5,7 +5,6 @@
 //! is focused on display rendering.
 
 use crate::buffer::{Buffer, BufferRef};
-use crate::canvas::{Canvas, CanvasRef};
 use crate::color::Color;
 use crate::config::ConfigurationRef;
 use crate::grid::Cell;
@@ -14,7 +13,7 @@ use crate::size::{Point, Size};
 use crate::source::Source;
 use crate::syntax::Syntax;
 use crate::token::{Cursor, Tokenizer, TokenizerRef};
-use crate::window::{Banner, BannerRef, Window, WindowRef};
+use crate::window::{Window, WindowRef};
 use std::cell::{Ref, RefCell, RefMut};
 use std::cmp;
 use std::ops::Range;
@@ -386,11 +385,8 @@ struct EditorKernel {
     /// An optional mark used when selecting text.
     mark: Option<Mark>,
 
-    /// Canvas associated with the window.
-    canvas: CanvasRef,
-
-    /// Banner associated with the window.
-    banner: BannerRef,
+    /// The window attached to this editor.
+    window: WindowRef,
 
     /// Number of rows available for text.
     rows: u32,
@@ -1212,13 +1208,10 @@ impl ImmutableEditor for EditorKernel {
     }
 
     fn attach(&mut self, window: WindowRef, align: Align) {
-        let is_zombie = window.borrow().is_zombie();
-        self.canvas = window.borrow().canvas.clone();
-        self.banner = window.borrow().banner.clone();
-
         // Allocate leftmost columns of window to line numbers, but only if enabled and
         // total width of window is large enough to reasonably accommodate.
-        let Size { rows, cols } = self.canvas.borrow().size();
+        self.window = window.clone();
+        let Size { rows, cols } = self.window.borrow().canvas.borrow().size();
         self.margin_cols = if self.config.settings.lines && cols >= Self::MARGIN_COLS * 2 {
             Self::MARGIN_COLS
         } else {
@@ -1227,7 +1220,7 @@ impl ImmutableEditor for EditorKernel {
         self.rows = rows;
         self.cols = cols - self.margin_cols;
 
-        if !is_zombie {
+        if !self.window.borrow().is_zombie() {
             self.align_cursor(align);
             self.draw();
         }
@@ -1259,7 +1252,7 @@ impl ImmutableEditor for EditorKernel {
     }
 
     fn draw(&mut self) {
-        self.canvas.borrow_mut().clear();
+        self.window.borrow().canvas.borrow_mut().clear();
         self.show_banner();
         self.render();
     }
@@ -1270,7 +1263,7 @@ impl ImmutableEditor for EditorKernel {
         } else {
             self.cursor
         };
-        self.canvas.borrow_mut().set_cursor(cursor);
+        self.window.borrow().canvas.borrow_mut().set_cursor(cursor);
     }
 
     fn move_backward(&mut self, len: usize) {
@@ -1609,10 +1602,12 @@ impl ImmutableEditor for EditorKernel {
         if let Some(render) = rest {
             self.render_rest(&draw, render);
         }
-        self.canvas.borrow_mut().draw();
+        let window = self.window.borrow();
+        window.canvas.borrow_mut().draw();
 
         // Renders additional information.
-        self.banner
+        window
+            .banner
             .borrow_mut()
             .set_dirty(self.is_dirty())
             .set_location(self.location())
@@ -1757,8 +1752,7 @@ impl EditorKernel {
             snap_col: None,
             cursor: Point::ORIGIN,
             mark: None,
-            canvas: Canvas::zero().into_ref(),
-            banner: Banner::none().into_ref(),
+            window: Window::zombie().into_ref(),
             rows: 0,
             cols: 0,
             margin_cols: 0,
@@ -1802,7 +1796,9 @@ impl EditorKernel {
 
     /// Sets the values of all banner attributes and draws it.
     fn show_banner(&mut self) {
-        self.banner
+        self.window
+            .borrow()
+            .banner
             .borrow_mut()
             .set_dirty(self.is_dirty())
             .set_source(self.source.clone())
@@ -2298,7 +2294,8 @@ impl EditorKernel {
     /// context or `None` if rendering has finished.
     fn render_cell(&self, draw: &Draw, render: Render, c: char) -> Option<Render> {
         self.render_margin(draw, &render);
-        let mut canvas = self.canvas.borrow_mut();
+        let window = self.window.borrow();
+        let mut canvas = window.canvas.borrow_mut();
         let (row, col) = (render.row, render.col + self.margin_cols);
         let render = if c == '\n' {
             canvas.set_cell(row, col, draw.as_text(c, &render));
@@ -2325,7 +2322,8 @@ impl EditorKernel {
     /// canvas is rendered.
     fn render_rest(&self, draw: &Draw, render: Render) {
         self.render_margin(draw, &render);
-        let mut canvas = self.canvas.borrow_mut();
+        let window = self.window.borrow();
+        let mut canvas = window.canvas.borrow_mut();
 
         // Blank out rest of existing row.
         let (row, col) = (render.row, render.col + self.margin_cols);
@@ -2344,7 +2342,8 @@ impl EditorKernel {
     /// on the first column of any row.
     fn render_margin(&self, draw: &Draw, render: &Render) {
         if render.col == 0 && self.margin_cols > 0 {
-            let mut canvas = self.canvas.borrow_mut();
+            let window = self.window.borrow();
+            let mut canvas = window.canvas.borrow_mut();
             if render.line_wrapped {
                 canvas.fill_cell(render.row, 0..self.margin_cols, draw.as_margin(' '));
             } else if render.line < Self::LINE_LIMIT {

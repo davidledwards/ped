@@ -64,7 +64,7 @@ impl Controller {
     const TERM_CHANGE_DELAY: u128 = 100;
 
     pub fn new(keyboard: Keyboard, workspace: Workspace) -> Controller {
-        let config = workspace.config().clone();
+        let config = workspace.config.clone();
         let workspace = workspace.into_ref();
         let env = Environment::new(workspace.clone());
         let echo = Echo::new(workspace.clone());

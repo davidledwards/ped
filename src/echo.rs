@@ -12,7 +12,7 @@ pub struct Echo {
 
 impl Echo {
     pub fn new(workspace: WorkspaceRef) -> Echo {
-        let config = workspace.borrow().config().clone();
+        let config = workspace.borrow().config.clone();
         let echo_color = Color::new(config.theme.echo_fg, config.theme.text_bg);
 
         Echo {

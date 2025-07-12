@@ -88,7 +88,7 @@ impl InputEditor {
     const MIN_COLS: u32 = 2;
 
     pub fn new(workspace: WorkspaceRef) -> InputEditor {
-        let config = workspace.borrow().config().clone();
+        let config = workspace.borrow().config.clone();
         let prompt_color = Color::new(config.theme.prompt_fg, config.theme.text_bg);
         let input_color = Color::new(config.theme.text_fg, config.theme.text_bg);
         let hint_color = Color::new(config.theme.echo_fg, config.theme.text_bg);

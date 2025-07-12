@@ -275,7 +275,7 @@ where
             Action::echo_no_window()
         }
     } else {
-        let config = env.workspace.borrow().config().clone();
+        let config = env.workspace.borrow().config.clone();
         if let Some((view_id, _)) =
             env.open_editor(editor_fn(config), Placement::Bottom, Align::Auto)
         {
@@ -1089,7 +1089,7 @@ impl Open {
 
     fn open(&mut self, env: &mut Environment, path: &str) -> Option<Action> {
         let path = sys::canonicalize(self.dir.join(path)).as_string();
-        let config = env.workspace.borrow().config().clone();
+        let config = env.workspace.borrow().config.clone();
         match open_editor(config, &path) {
             Ok(editor) => {
                 if let Some(place) = self.place {
@@ -1739,7 +1739,7 @@ pub fn track_down(env: &mut Environment, p: Point, select: bool) {
 /// point whose origin is the top-left position of the terminal display.
 pub fn track_backward(env: &mut Environment, p: Point, select: bool) {
     let ws = env.workspace.borrow();
-    if ws.config().settings.track_lateral {
+    if ws.config.settings.track_lateral {
         let view = ws.locate_view(p);
         if let Some((view_id, _)) = view {
             let mut editor = env.get_view_editor(view_id).borrow_mut();
@@ -1758,7 +1758,7 @@ pub fn track_backward(env: &mut Environment, p: Point, select: bool) {
 /// point whose origin is the top-left position of the terminal display.
 pub fn track_forward(env: &mut Environment, p: Point, select: bool) {
     let ws = env.workspace.borrow();
-    if ws.config().settings.track_lateral {
+    if ws.config.settings.track_lateral {
         let view = ws.locate_view(p);
         if let Some((view_id, _)) = view {
             let mut editor = env.get_view_editor(view_id).borrow_mut();

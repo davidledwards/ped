@@ -48,7 +48,7 @@ impl View {
 /// A workspace always provides at least `1` view, which implies that the last
 /// remaining view can never be removed.
 pub struct Workspace {
-    config: ConfigurationRef,
+    pub config: ConfigurationRef,
     size: Size,
     views_origin: Point,
     views_size: Size,
@@ -98,10 +98,6 @@ impl Workspace {
 
     pub fn shared_region(&self) -> (Point, Size) {
         (self.shared_origin, self.shared_size)
-    }
-
-    pub fn config(&self) -> &ConfigurationRef {
-        &self.config
     }
 
     /// Opens a new view in the workspace whose placement is based on `place`, returning

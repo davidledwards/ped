@@ -49,7 +49,7 @@ impl Environment {
             editor_map.insert(
                 id,
                 Editor::mutable(
-                    workspace.borrow().config().clone(),
+                    workspace.borrow().config.clone(),
                     Source::Ephemeral(name.to_string()),
                     None,
                 )
