@@ -2,6 +2,12 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
+## [0.28.0](https://github.com/davidledwards/ped/tree/v0.28.0) - `2025-07-19`
+
+### Added
+
+- Support for redrawing the entire workspace (via `redraw` bound to `M-l`) if the terminal output becomes mangled
+
 ## [0.27.0](https://github.com/davidledwards/ped/tree/v0.27.0) - `2025-07-12`
 
 ### Added
