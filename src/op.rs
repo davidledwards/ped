@@ -40,6 +40,7 @@ pub type OpMap = HashMap<&'static str, OpFn>;
 /// calls to such functions.
 pub enum Action {
     Quit,
+    Redraw,
     Echo(String),
     Question(Box<dyn Inquirer>),
 }
@@ -47,6 +48,10 @@ pub enum Action {
 impl Action {
     fn as_quit() -> Option<Action> {
         Some(Action::Quit)
+    }
+
+    fn as_redraw() -> Option<Action> {
+        Some(Action::Redraw)
     }
 
     fn as_echo<T: ToString + ?Sized>(text: &T) -> Option<Action> {
@@ -581,6 +586,11 @@ fn scroll_center(env: &mut Environment) -> Option<Action> {
     editor.align_cursor(align);
     editor.render();
     None
+}
+
+/// Operation: `redraw`
+fn redraw(_: &mut Environment) -> Option<Action> {
+    Action::as_redraw()
 }
 
 /// Operation: `set-mark`
@@ -2051,7 +2061,7 @@ fn base_dir(editor: &EditorRef) -> PathBuf {
 
 /// Predefined mapping of editing operations to editing functions.
 #[rustfmt::skip]
-pub const OP_MAPPINGS: [(&str, OpFn, &str); 81] = [
+pub const OP_MAPPINGS: [(&str, OpFn, &str); 82] = [
     // --- exit and cancellation ---
     ("quit", quit,
         "ask to save dirty editors and quit"),
@@ -2127,6 +2137,8 @@ pub const OP_MAPPINGS: [(&str, OpFn, &str); 81] = [
         "scroll contents of window down one line while selecting text"),
     ("scroll-center", scroll_center,
         "redraw window and align cursor to center, then bottom and top when repeated"),
+    ("redraw", redraw,
+        "redraw entire workspace"),
     ("set-mark", set_mark,
         "set or unset mark for selecting text"),
     ("goto-line", goto_line,

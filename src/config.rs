@@ -319,7 +319,7 @@ impl Configuration {
     }
 
     #[rustfmt::skip]
-    const DEFAULT_BINDINGS: [(&'static str, &'static str); 97] = [
+    const DEFAULT_BINDINGS: [(&'static str, &'static str); 98] = [
         // --- exit and cancellation ---
         ("C-q", "quit"),
 
@@ -374,6 +374,7 @@ impl Configuration {
         ("C-down", "scroll-down"),
         ("S-C-down", "scroll-down-select"),
         ("C-l", "scroll-center"),
+        ("M-l", "redraw"),
         ("C-@", "set-mark"),
         ("C-_", "goto-line"),
 

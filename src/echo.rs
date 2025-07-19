@@ -22,8 +22,8 @@ impl Echo {
         }
     }
 
-    pub fn set(&mut self, text: &str) {
-        self.text = Some(text.to_string());
+    pub fn set(&mut self, text: String) {
+        self.text = Some(text);
         self.draw();
     }
 

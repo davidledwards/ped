@@ -106,7 +106,7 @@ impl Controller {
     /// [keys](Key) and calling their corresponding editing functions until instructed to
     /// quit.
     pub fn run(&mut self) {
-        self.set_echo(&self.welcome());
+        self.set_echo(self.welcome());
         self.show_cursor();
         loop {
             let key = self.keyboard.read().unwrap_or(Key::None);
@@ -150,7 +150,7 @@ impl Controller {
             // Inserting text is statistically most prevalent scenario, so this short
             // circuits detection and bypasses normal indirection of key binding.
             match op::insert_char(&mut self.env, c) {
-                Some(Action::Echo(text)) => self.set_echo(text.as_str()),
+                Some(Action::Echo(text)) => self.set_echo(text),
                 _ => self.clear_echo(),
             }
         } else if key == CTRL_G {
@@ -183,16 +183,10 @@ impl Controller {
             if let Some(op_fn) = self.config.bindings.find(&self.key_seq) {
                 match op_fn(&mut self.env) {
                     Some(Action::Quit) => return Step::Quit,
-                    Some(Action::Echo(text)) => {
-                        self.set_echo(text.as_str());
-                    }
-                    Some(Action::Question(inquirer)) => {
-                        self.clear_echo();
-                        self.set_question(inquirer);
-                    }
-                    None => {
-                        self.clear_echo();
-                    }
+                    Some(Action::Redraw) => self.redraw(),
+                    Some(Action::Echo(text)) => self.set_echo(text),
+                    Some(Action::Question(inquirer)) => self.set_question(inquirer),
+                    None => self.clear_echo(),
                 }
                 self.clear_keys();
             } else if self.config.bindings.is_prefix(&self.key_seq) {
@@ -240,38 +234,29 @@ impl Controller {
         };
         match action {
             Some(Action::Quit) => return Step::Quit,
-            Some(Action::Echo(text)) => {
-                self.set_echo(text.as_str());
-            }
-            Some(Action::Question(inquirer)) => {
-                self.clear_echo();
-                self.set_question(inquirer);
-            }
+            Some(Action::Redraw) => self.redraw(),
+            Some(Action::Echo(text)) => self.set_echo(text),
+            Some(Action::Question(inquirer)) => self.set_question(inquirer),
             None => (),
         }
         Step::Continue
     }
 
     fn process_background(&mut self) -> Step {
-        // Detect change in terminal size and resize workspace, but not immediately.
-        // In practice, a rapid series of change events could be detected because
-        // human movement is significantly slower.
         self.term_changed = if term::size_changed() {
-            // Restart clock when change is detected.
+            // Restart clock when terminal size change detected.
             Some(Instant::now())
         } else if let Some(time) = self.term_changed.take() {
+            // Defer resizing workspace for short period of time since human movement,
+            // in practice, could generate rapid series of change events.
             if time.elapsed().as_millis() > Self::TERM_CHANGE_DELAY {
-                // Resize once delay period expires.
-                self.env.resize();
-                self.resize_echo();
-                self.resize_question();
-                self.show_cursor();
+                self.resize();
                 None
             } else {
-                // Keep waiting.
                 Some(time)
             }
         } else {
+            // Tokenize editor contents when nothing else to do.
             let mut editor = self.env.get_active_editor().borrow_mut();
             if editor.tokenize() {
                 editor.render();
@@ -294,6 +279,26 @@ impl Controller {
         }
     }
 
+    fn redraw(&mut self) {
+        self.env.redraw();
+        if self.last_echo.is_some() {
+            self.echo.draw();
+        } else if self.question.is_some() {
+            self.input.draw();
+        }
+        self.show_cursor();
+    }
+
+    fn resize(&mut self) {
+        self.env.resize();
+        if self.last_echo.is_some() {
+            self.echo.resize();
+        } else if self.question.is_some() {
+            self.input.resize();
+        }
+        self.show_cursor();
+    }
+
     fn clear_keys(&mut self) -> bool {
         let cleared = self.key_seq.len() > 0;
         self.key_seq.clear();
@@ -301,25 +306,14 @@ impl Controller {
     }
 
     fn show_keys(&mut self) {
-        let text = key::pretty(&self.key_seq);
-        self.set_echo(text.as_str());
+        self.set_echo(key::pretty(&self.key_seq));
     }
 
     fn show_undefined_keys(&mut self) {
-        let key_seq = &self.key_seq;
-        let text = format!(
-            "{}: undefined {}",
-            key::pretty(key_seq),
-            if key_seq.len() == 1 {
-                "key"
-            } else {
-                "key sequence"
-            }
-        );
-        self.set_echo(text.as_str());
+        self.set_echo(format!("{}: undefined key", key::pretty(&self.key_seq)));
     }
 
-    fn set_echo(&mut self, text: &str) {
+    fn set_echo(&mut self, text: String) {
         self.echo.set(text);
         self.last_echo = Some(Instant::now());
     }
@@ -330,13 +324,8 @@ impl Controller {
         }
     }
 
-    fn resize_echo(&mut self) {
-        if self.last_echo.is_some() {
-            self.echo.resize();
-        }
-    }
-
     fn set_question(&mut self, inquirer: Box<dyn Inquirer>) {
+        self.clear_echo();
         self.input.enable(&inquirer.prompt(), inquirer.completer());
         self.question = Some(inquirer);
     }
@@ -344,12 +333,6 @@ impl Controller {
     fn clear_question(&mut self) {
         if self.question.take().is_some() {
             self.input.disable();
-        }
-    }
-
-    fn resize_question(&mut self) {
-        if self.question.is_some() {
-            self.input.resize();
         }
     }
 }

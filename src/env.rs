@@ -288,6 +288,13 @@ impl Environment {
         }
     }
 
+    /// Redraws the workspace.
+    pub fn redraw(&mut self) {
+        for (_, editor_id) in self.view_map.iter() {
+            self.get_editor_unchecked(*editor_id).borrow_mut().draw();
+        }
+    }
+
     pub fn editor_map(&self) -> &EditorMap {
         &self.editor_map
     }
