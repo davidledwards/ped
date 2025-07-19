@@ -739,7 +739,7 @@ impl InsertUnicode {
     fn parse_code(&self, value: &str) -> Option<char> {
         u32::from_str_radix(value, self.radix)
             .ok()
-            .and_then(|code| char::from_u32(code))
+            .and_then(char::from_u32)
     }
 }
 
