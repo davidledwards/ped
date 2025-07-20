@@ -281,11 +281,7 @@ impl Controller {
 
     fn redraw(&mut self) {
         self.env.redraw();
-        if self.last_echo.is_some() {
-            self.echo.draw();
-        } else if self.question.is_some() {
-            self.input.draw();
-        }
+        self.clear_echo();
         self.show_cursor();
     }
 
