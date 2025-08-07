@@ -2,6 +2,12 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
+## [0.29.0](https://github.com/davidledwards/ped/tree/v0.29.0) - `2025-??-??`
+
+### Changed
+
+- When saving `@scratch` to a file, the contents of `@scratch` are now cleared.
+
 ## [0.28.1](https://github.com/davidledwards/ped/tree/v0.28.1) - `2025-07-19`
 
 ### Fixed

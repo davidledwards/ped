@@ -865,6 +865,11 @@ impl Editor {
         Rc::new(RefCell::new(self))
     }
 
+    /// Returns `true` if editor can be modified.
+    pub fn is_mutable(&self) -> bool {
+        !self.readonly
+    }
+
     /// Returns a mutable editor if not classified as _readonly_, otherwise `None`.
     pub fn modify(&mut self) -> Option<&mut dyn MutableEditor> {
         if self.readonly {
@@ -872,6 +877,13 @@ impl Editor {
         } else {
             Some(&mut self.kernel)
         }
+    }
+
+    /// Clears the contents of the buffer and resets internal state as if the editor was
+    /// just created.
+    pub fn reset(&mut self) {
+        self.kernel =
+            EditorKernel::new(self.kernel.config.clone(), self.kernel.source.clone(), None);
     }
 }
 

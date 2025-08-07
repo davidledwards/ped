@@ -1273,11 +1273,19 @@ impl Save {
         let timestamp = write_editor(editor, path);
         match timestamp {
             Ok(timestamp) => {
-                let cloned_editor = editor
+                // Replace ephemeral editor in current window with cloned version, keeping
+                // position of cursor at same location on terminal.
+                let new_editor = editor
                     .borrow()
                     .clone_as(Source::as_file(path, Some(timestamp)));
-                let row = cloned_editor.cursor().row;
-                env.set_editor(cloned_editor.into_ref(), Align::Row(row));
+                let row = new_editor.cursor().row;
+                env.set_editor(new_editor.into_ref(), Align::Row(row));
+
+                // Reset mutable ephemeral editors, which currently only applies to
+                // `@scratch`.
+                if editor.borrow().is_mutable() {
+                    editor.borrow_mut().reset();
+                }
                 Action::as_echo(&Self::echo_saved(path))
             }
             Err(e) => Action::as_echo(&e),
