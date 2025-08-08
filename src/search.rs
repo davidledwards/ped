@@ -48,6 +48,7 @@ pub fn using_regex(regex: Regex) -> Box<dyn Pattern> {
 /// `&str` to [`Buffer`].
 struct TermPattern {
     /// The term provided during construction.
+    #[allow(dead_code, reason = "possible future use")]
     term: String,
 
     /// A patternized version of [`term`](Self::term).

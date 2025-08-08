@@ -1798,10 +1798,10 @@ pub fn track_up(env: &mut Environment, p: Point, select: bool) {
 
         // If selection is inactive and buffer position moved as a result of scrolling,
         // then soft mark must be cleared.
-        if let Some(prior_pos) = prior_pos {
-            if editor.pos() != prior_pos {
-                editor.clear_soft_mark();
-            }
+        if let Some(prior_pos) = prior_pos
+            && editor.pos() != prior_pos
+        {
+            editor.clear_soft_mark();
         }
         editor.render();
     }
@@ -1826,10 +1826,10 @@ pub fn track_down(env: &mut Environment, p: Point, select: bool) {
 
         // If selection is inactive and buffer position moved as a result of scrolling,
         // then soft mark must be cleared.
-        if let Some(prior_pos) = prior_pos {
-            if editor.pos() != prior_pos {
-                editor.clear_soft_mark();
-            }
+        if let Some(prior_pos) = prior_pos
+            && editor.pos() != prior_pos
+        {
+            editor.clear_soft_mark();
         }
         editor.render();
     }
