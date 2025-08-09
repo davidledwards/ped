@@ -14,8 +14,10 @@ const BUFFER_SIZE: usize = 65_536;
 /// Opens the file at `path` and reads the contents into `buf`, returning the
 /// number of bytes read.
 pub fn read_file<P: AsRef<Path>>(path: P, buf: &mut Buffer) -> Result<usize> {
-    let path = path.as_ref();
-    let file = open_file(path)?;
+    // Use file size as somewhat imprecise hint to minimize buffer reallocations,
+    // particularly when large files are read.
+    buf.make_available(get_size(&path)? as usize);
+    let file = open_file(&path)?;
     let mut reader = BufReader::with_capacity(BUFFER_SIZE, file);
     buf.read(&mut reader).map_err(|e| to_error(e, path))
 }
@@ -23,20 +25,29 @@ pub fn read_file<P: AsRef<Path>>(path: P, buf: &mut Buffer) -> Result<usize> {
 /// Creates a new file at `path` and writes the contents of `buf`, returning the
 /// number of bytes written.
 pub fn write_file<P: AsRef<Path>>(path: P, buf: &Buffer) -> Result<usize> {
-    let path = path.as_ref();
-    let file = create_file(path)?;
+    let file = create_file(&path)?;
     let mut writer = BufWriter::with_capacity(BUFFER_SIZE, file);
     buf.write(&mut writer).map_err(|e| to_error(e, path))
 }
 
 /// Opens the file at `path` for reading.
 pub fn open_file<P: AsRef<Path>>(path: P) -> Result<File> {
-    File::open(path.as_ref()).map_err(|e| to_error(e, path))
+    let path = path.as_ref();
+    File::open(path).map_err(|e| to_error(e, path))
 }
 
 /// Creates a new file at `path` for writing.
 pub fn create_file<P: AsRef<Path>>(path: P) -> Result<File> {
-    File::create(path.as_ref()).map_err(|e| to_error(e, path))
+    let path = path.as_ref();
+    File::create(path).map_err(|e| to_error(e, path))
+}
+
+/// Returns the size of `path` in bytes.
+pub fn get_size<P: AsRef<Path>>(path: P) -> Result<u64> {
+    let path = path.as_ref();
+    fs::metadata(path)
+        .map_err(|e| to_error(e, path))
+        .map(|meta| meta.len())
 }
 
 /// Returns the [modification timestamp](fs::Metadata::modified) of `path`.

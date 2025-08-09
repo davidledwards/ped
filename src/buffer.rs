@@ -145,7 +145,7 @@ impl Buffer {
 
     /// Inserts `c` at the gap position, returning the new gap position after insertion.
     pub fn insert_char(&mut self, c: char) -> usize {
-        self.ensure(1);
+        self.make_available(1);
         self.write_char(self.gap, c);
         self.gap += 1;
         self.gap_len -= 1;
@@ -166,7 +166,7 @@ impl Buffer {
     /// position after insertion.
     pub fn insert(&mut self, cs: &[char]) -> usize {
         let n = cs.len();
-        self.ensure(n);
+        self.make_available(n);
         unsafe {
             let cs_ptr = NonNull::new_unchecked(cs.as_ptr() as *mut char);
             cs_ptr.copy_to_nonoverlapping(self.ptr_at(self.gap), n);
@@ -434,18 +434,20 @@ impl Buffer {
         unsafe { self.ptr_at(n).write(c) }
     }
 
-    /// Ensure that buffer capacity is at least `n` bytes.
-    fn ensure(&mut self, n: usize) {
-        let free = self.capacity - self.size;
-        if n > free {
-            self.grow(n - free)
+    /// Makes certain that the buffer has at least `n` characters available, such that
+    /// subsequently inserting `n` characters would not result in the expansion of the
+    /// buffer capacity.
+    pub fn make_available(&mut self, n: usize) {
+        let available = self.capacity - self.size;
+        if n > available {
+            self.grow_capacity(n - available)
         }
     }
 
-    /// Increase buffer capacity by at least `need` bytes.
-    fn grow(&mut self, need: usize) {
+    /// Increase buffer capacity by at least `need` chars.
+    fn grow_capacity(&mut self, need: usize) {
         let capacity = if need > Self::MAX_CAPACITY {
-            panic!("incremental allocation too large: {need} bytes");
+            panic!("incremental allocation too large: {need} chars");
         } else {
             // This calculation is safe from panic since capacity is always <= MAX_CAPACITY
             // and addition would never overflow because result is sufficiently smaller than
@@ -477,7 +479,7 @@ impl Buffer {
 
     fn alloc(capacity: usize) -> NonNull<char> {
         if capacity > Self::MAX_CAPACITY {
-            panic!("allocation too large: {capacity} bytes");
+            panic!("allocation too large: {capacity} chars");
         }
         let layout = Layout::array::<char>(capacity).unwrap();
         let ptr = unsafe { alloc::alloc(layout) as *mut char };
