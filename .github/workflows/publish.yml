@@ -7,65 +7,91 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     permissions: write-all
-    env:
-      GH_TOKEN: ${{ secrets.PAT }}
 
     steps:
       - uses: actions/checkout@v4
-      # - name: Trigger publish for Homebrew
-      #   run: |
-      #     TAG=$(gh release view --json tagName --jq ".tagName")
+      - name: Trigger publish for Homebrew
+        run: |
+          # Extracts tag of latest release and derives version number.
+          TAG=$(gh release view --json tagName --jq ".tagName")
+          echo "TAG=${TAG}" >> $GITHUB_ENV
+          echo "VERSION=${TAG:1}" >> $GITHUB_ENV
 
-      #     gh api --method POST \
-      #       -H "Accept: application/vnd.github+json" \
-      #       -H "X-GitHub-Api-Version: 2022-11-28" \
-      #       /repos/davidledwards/homebrew-ped/dispatches \
-      #       -f "event_type=publish" \
-      #       -F "client_payload[tag]=${TAG}"
+          # Set tap repository and path in environment.
+          TAP_REPO=homebrew-ped
+          echo "TAP_REPO=${TAP_REPO}" >> $GITHUB_ENV
+          TAP_PATH=davidledwards/${TAP_REPO}
+          echo "TAP_PATH=${TAP_PATH}" >> $GITHUB_ENV
+
+          # Publish release.
+          gh api --method POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            /repos/${TAP_PATH}/dispatches \
+            -f "event_type=publish" \
+            -F "client_payload[tag]=${TAG}"
+        env:
+          GH_TOKEN: ${{ secrets.PAT }}
 
       - name: Checkout Homebrew tap repository
         uses: actions/checkout@v4
         with:
-          repository: davidledwards/homebrew-ped
-          path: homebrew-ped
-          token: ${{ github.token }}
+          repository: ${{ env.TAP_PATH }}
+          path: ${{ env.TAP_REPO }}
+          token: ${{ secrets.PAT }}
 
       - name: Download release artifacts
         run: |
           mkdir artifacts
-          gh release download ${{ github.ref_name }} \
-            --repo ${{ github.repository }} \
-            --dir artifacts
+          gh release download ${{ env.TAG }} --repo ${{ github.repository }} --dir artifacts
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
 
       - name: Update Homebrew formula
         run: |
-          VERSION=${GITHUB_REF_NAME}
-          FORMULA=homebrew-ped/Formula/ped.rb
+          # Formula file that gets updated new version numbers and hashes.
+          FORMULA=${{ env.TAP_REPO }}/Formula/ped.rb
 
-          # sed -i "s/version \".*\"/version \"${VERSION}\"/" $FORMULA
-          sed "s/version \".*\"/version \"${VERSION}\"/" $FORMULA
-
+          # Set of build targets.
           TARGETS=(\
-            "aarch64-apple-darwin",\
-            "x86_64-apple-darwin",\
-            "x86_64-unknown-linux-gnu",\
-            "i686-unknown-linux-gnu"\
-          )
+            "aarch64-apple-darwin" \
+            "x86_64-apple-darwin" \
+            "x86_64-unknown-linux-gnu" \
+            "i686-unknown-linux-gnu")
 
+          # Replaces version number in formula file.
+          sed -i "s/version \".*\"/version \"${{ env.VERSION }}\"/" $FORMULA
+
+          # Replaces SHA hash for each build target.
           for TARGET in "${TARGETS[@]}"
           do
-            SHA=$(cut -d ' ' -f1 artifacts/ped-v${VERSION}-${TARGET}.tar.gz.sha256)
-            # sed -i "s/sha256 \".*\" # ${TARGET}/sha256 \"${SHA}\" # $(TARGET}/" $FORMULA
-            sed "s/sha256 \".*\" # ${TARGET}/sha256 \"${SHA}\" # $(TARGET}/" $FORMULA
+            SHA=$(cut -d ' ' -f1 artifacts/ped-${{ env.VERSION }}-${TARGET}.tar.gz.sha256)
+            sed -i "s/sha256 \".*\" # ${TARGET}/sha256 \"${SHA}\" # ${TARGET}/" $FORMULA
           done
 
-      # - name: Commit and push changes
-      #   run: |
-      #     cd homebrew-ped
-      #     git config user.name "github-actions[bot]"
-      #     git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-      #     git add Formula/ped.rb
-      #     git commit -m "Update ped formula to version ${GITHUB_REF_NAME}"
-      #     git push
+      - name: Commit and push changes
+        run: |
+          cd ${{ env.TAP_REPO }}
+          git config user.name "David Edwards [bot]"
+          git config user.email "david.l.edwards@gmail.com"
+
+          # Commit changes on separate release branch and push to central repository.
+          BRANCH=release/${{ env.VERSION }}
+          echo "BRANCH=${BRANCH}" >> $GITHUB_ENV
+          git checkout -b $BRANCH
+          git add Formula/ped.rb
+          git commit -m "prepare for release ${{ env.VERSION }}"
+          git push origin $BRANCH
+        env:
+          GH_TOKEN: ${{ secrets.PAT }}
+
+      - name: Open pull request
+        run: |
+          gh pr create \
+            --repo ${{ env.TAP_PATH }} \
+            --head ${{ env.BRANCH }} \
+            --base main \
+            --title "Prepare for release ${{ env.VERSION }}" \
+            --body "Ready to publish release ${{ env.VERSION }}."
+        env:
+          GH_TOKEN: ${{ secrets.PAT }}
