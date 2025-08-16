@@ -4,6 +4,10 @@ This file contains relevant information for each release. Please refer to the co
 
 ## [0.29.0](https://github.com/davidledwards/ped/tree/v0.29.0) - `2025-??-??`
 
+### Added
+
+- Search operations will initialize the term using selected text, but only if the text does not contain any control characters.
+
 ### Changed
 
 - When saving `@scratch` to a file, the contents of `@scratch` are now cleared.

@@ -1061,6 +1061,21 @@ impl Inquirer for Search {
         )
     }
 
+    fn value(&self) -> Option<String> {
+        // Use selected text if present to initialize search term, but only if text
+        // does not contain any control characters.
+        self.capture
+            .mark
+            .map(|mark| self.editor.borrow().copy_mark(mark))
+            .and_then(|text| {
+                if text.iter().any(|c| c.is_control()) {
+                    None
+                } else {
+                    Some(text.iter().collect())
+                }
+            })
+    }
+
     fn react(&mut self, _: &mut Environment, value: &str, key: &Key) -> Option<String> {
         if value.len() > 0 {
             let (pos, pattern) = match self.last_match.take() {
