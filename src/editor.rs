@@ -738,7 +738,7 @@ impl Draw {
 
     /// Formats `c` using a color depending on the current rendering context.
     fn as_text(&self, c: char, render: &Render) -> Cell {
-        let fg = if (c == '\n' && self.config.settings.eol) || c.is_ascii_control() {
+        let fg = if (c == '\n' && self.config.settings.eol) || c.is_control() {
             self.config.theme.whitespace_fg
         } else if let Some(fg) = render.syntax_cursor.color() {
             fg
@@ -769,7 +769,7 @@ impl Draw {
                 }
             }
             '\t' => Self::TAB_CHAR,
-            c if c.is_ascii_control() => Self::CTRL_CHAR,
+            c if c.is_control() => Self::CTRL_CHAR,
             c => c,
         }
     }
