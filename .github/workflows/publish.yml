@@ -44,6 +44,7 @@ jobs:
           FORMULA=homebrew-ped/Formula/ped.rb
 
           # sed -i "s/version \".*\"/version \"${VERSION}\"/" $FORMULA
+          echo "*** rewriting version"
           sed "s/version \".*\"/version \"${{ env.VERSION }}\"/" $FORMULA
 
           TARGETS=(\
@@ -56,8 +57,9 @@ jobs:
           for TARGET in "${TARGETS[@]}"
           do
             SHA=$(cut -d ' ' -f1 artifacts/ped-v${{ env.VERSION }}-${TARGET}.tar.gz.sha256)
-            # sed -i "s/sha256 \".*\" # ${TARGET}/sha256 \"${SHA}\" # $(TARGET}/" $FORMULA
-            sed "s/sha256 \".*\" # ${TARGET}/sha256 \"${SHA}\" # $(TARGET}/" $FORMULA
+            echo "*** rewriting ${TARGET}"
+            # sed -i "s/sha256 \".*\" # ${TARGET}/sha256 \"${SHA}\" # ${TARGET}/" $FORMULA
+            sed "s/sha256 \".*\" # ${TARGET}/sha256 \"${SHA}\" # ${TARGET}/" $FORMULA
           done
 
       # - name: Commit and push changes
