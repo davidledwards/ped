@@ -322,7 +322,7 @@ impl Controller {
 
     fn set_question(&mut self, inquirer: Box<dyn Inquirer>) {
         self.clear_echo();
-        self.input.enable(&inquirer.prompt(), inquirer.completer());
+        self.input.enable(&*inquirer);
         self.question = Some(inquirer);
     }
 

@@ -11,7 +11,7 @@ use crate::canvas::Canvas;
 use crate::color::Color;
 use crate::key::*;
 use crate::size::{Point, Size};
-use crate::user::{self, Completer};
+use crate::user::{self, Completer, Inquirer};
 use crate::workspace::WorkspaceRef;
 use crate::writer::Writer;
 use std::cmp;
@@ -111,12 +111,12 @@ impl InputEditor {
         }
     }
 
-    /// Enables the editor by associating a `prompt` and a `completer`.
-    pub fn enable(&mut self, prompt: &str, completer: Box<dyn Completer>) {
-        self.prompt = Some(prompt.to_string());
-        self.completer = completer;
+    /// Enables the editor using `inquirer`.
+    pub fn enable(&mut self, inquirer: &dyn Inquirer) {
+        self.prompt = Some(inquirer.prompt());
+        self.completer = inquirer.completer();
         self.set_sizes();
-        self.set_input(None);
+        self.set_input(inquirer.value());
         let hint = self.completer.prepare();
         self.update_hint(hint);
         self.draw();

@@ -6,10 +6,17 @@ use crate::op::Action;
 use crate::sys::{self, AsString};
 use std::path::{Path, PathBuf};
 
-/// Defines an interface for coordinating the solicitation of input from a user.
+/// Defines an interface for coordinating input from a user.
 pub trait Inquirer {
     /// Returns the prompt displayed to the user.
     fn prompt(&self) -> String;
+
+    /// Returns an optional value for initializing the input.
+    ///
+    /// The default implementation returns `None`.
+    fn value(&self) -> Option<String> {
+        None
+    }
 
     /// Returns the [`Completer`] implementation attached to the inquirer.
     ///
