@@ -12,9 +12,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      # - name: Trigger publish for Homebrew
-      #   run: |
-      #     TAG=$(gh release view --json tagName --jq ".tagName")
+      - name: Trigger publish for Homebrew
+        run: |
+          TAG=$(gh release view --json tagName --jq ".tagName")
+          echo "TAG=${TAG}" >> $GITHUB_ENV
+          echo "VERSION=${TAG:1}" >> $GITHUB_ENV
 
       #     gh api --method POST \
       #       -H "Accept: application/vnd.github+json" \
@@ -33,19 +35,16 @@ jobs:
       - name: Download release artifacts
         run: |
           mkdir artifacts
-          gh release download ${{ github.ref_name }} \
+          gh release download ${{ env.TAG }} \
             --repo ${{ github.repository }} \
             --dir artifacts
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update Homebrew formula
         run: |
-          VERSION=${GITHUB_REF_NAME}
           FORMULA=homebrew-ped/Formula/ped.rb
 
           # sed -i "s/version \".*\"/version \"${VERSION}\"/" $FORMULA
-          sed "s/version \".*\"/version \"${VERSION}\"/" $FORMULA
+          sed "s/version \".*\"/version \"${{ env.VERSION }}\"/" $FORMULA
 
           TARGETS=(\
             "aarch64-apple-darwin",\
@@ -56,7 +55,7 @@ jobs:
 
           for TARGET in "${TARGETS[@]}"
           do
-            SHA=$(cut -d ' ' -f1 artifacts/ped-v${VERSION}-${TARGET}.tar.gz.sha256)
+            SHA=$(cut -d ' ' -f1 artifacts/ped-v${{ env.VERSION }}-${TARGET}.tar.gz.sha256)
             # sed -i "s/sha256 \".*\" # ${TARGET}/sha256 \"${SHA}\" # $(TARGET}/" $FORMULA
             sed "s/sha256 \".*\" # ${TARGET}/sha256 \"${SHA}\" # $(TARGET}/" $FORMULA
           done
