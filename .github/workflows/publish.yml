@@ -30,7 +30,7 @@ jobs:
         with:
           repository: davidledwards/homebrew-ped
           path: homebrew-ped
-          token: ${{ github.token }}
+          token: ${{ secrets.PAT }}
 
       - name: Download release artifacts
         run: |
@@ -60,11 +60,26 @@ jobs:
       - name: Commit and push changes
         run: |
           cd homebrew-ped
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "David Edwards [bot]"
+          git config user.email "david.l.edwards@gmail.com"
 
           BRANCH=release/${{ env.VERSION }}
+          echo "BRANCH=${BRANCH}" >> $GITHUB_ENV
+
           git checkout -b $BRANCH
           git add Formula/ped.rb
           git commit -m "prepare for release ${{ env.VERSION }}"
           git push origin $BRANCH
+        env:
+          GH_TOKEN: ${{ secrets.PAT }}
+
+      - name: Open pull request
+        run: |
+          gh pr create \
+            --repo davidledwards/homebrew-ped \
+            --head ${{ env.BRANCH }} \
+            --base main \
+            --title "Prepare for release ${{ env.VERSION }}" \
+            --body "Ready to publish release ${{ env.VERSION }}."
+        env:
+          GH_TOKEN: ${{ secrets.PAT }}
