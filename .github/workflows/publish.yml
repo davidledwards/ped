@@ -28,7 +28,7 @@ jobs:
         with:
           repository: davidledwards/homebrew-ped
           path: homebrew-ped
-          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          token: ${{ github.token }}
 
       - name: Download release artifacts
         run: |
