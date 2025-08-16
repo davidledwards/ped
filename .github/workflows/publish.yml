@@ -42,10 +42,7 @@ jobs:
       - name: Update Homebrew formula
         run: |
           FORMULA=homebrew-ped/Formula/ped.rb
-
-          # sed -i "s/version \".*\"/version \"${VERSION}\"/" $FORMULA
-          echo "*** rewriting version"
-          sed "s/version \".*\"/version \"${{ env.VERSION }}\"/" $FORMULA
+          sed -i "s/version \".*\"/version \"${{ env.VERSION }}\"/" $FORMULA
 
           TARGETS=(\
             "aarch64-apple-darwin" \
@@ -56,16 +53,17 @@ jobs:
           for TARGET in "${TARGETS[@]}"
           do
             SHA=$(cut -d ' ' -f1 artifacts/ped-${{ env.VERSION }}-${TARGET}.tar.gz.sha256)
-            echo "*** rewriting ${TARGET}"
-            # sed -i "s/sha256 \".*\" # ${TARGET}/sha256 \"${SHA}\" # ${TARGET}/" $FORMULA
-            sed "s/sha256 \".*\" # ${TARGET}/sha256 \"${SHA}\" # ${TARGET}/" $FORMULA
+            sed -i "s/sha256 \".*\" # ${TARGET}/sha256 \"${SHA}\" # ${TARGET}/" $FORMULA
           done
 
-      # - name: Commit and push changes
-      #   run: |
-      #     cd homebrew-ped
-      #     git config user.name "github-actions[bot]"
-      #     git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-      #     git add Formula/ped.rb
-      #     git commit -m "Update ped formula to version ${GITHUB_REF_NAME}"
-      #     git push
+      - name: Commit and push changes
+        run: |
+          cd homebrew-ped
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          BRANCH=release/${{ env.VERSION }}
+          git checkout -b $BRANCH
+          git add Formula/ped.rb
+          git commit -m "prepare for release ${{ env.VERSION }}"
+          git push origin $BRANCH
