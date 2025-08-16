@@ -48,11 +48,10 @@ jobs:
           sed "s/version \".*\"/version \"${{ env.VERSION }}\"/" $FORMULA
 
           TARGETS=(\
-            "aarch64-apple-darwin",\
-            "x86_64-apple-darwin",\
-            "x86_64-unknown-linux-gnu",\
-            "i686-unknown-linux-gnu"\
-          )
+            "aarch64-apple-darwin" \
+            "x86_64-apple-darwin" \
+            "x86_64-unknown-linux-gnu" \
+            "i686-unknown-linux-gnu")
 
           for TARGET in "${TARGETS[@]}"
           do
