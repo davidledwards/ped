@@ -9,9 +9,6 @@ env:
 jobs:
   create-release:
     runs-on: macos-latest
-    env:
-      GH_TOKEN: ${{ github.token }}
-
     steps:
       - uses: actions/checkout@v4
       - name: Install Rust
@@ -22,7 +19,7 @@ jobs:
           override: true
           target: aarch64-apple-darwin
 
-      - name: Create Release
+      - name: Create release
         run: |
           VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r ".packages[0].version")
           gh release create v${VERSION} --title ${VERSION} --generate-notes
@@ -42,9 +39,6 @@ jobs:
             target: i686-unknown-linux-gnu
 
     runs-on: ${{ matrix.os }}
-    env:
-      GH_TOKEN: ${{ github.token }}
-
     steps:
       - uses: actions/checkout@v4
       - name: Install gcc-multilib
@@ -61,25 +55,27 @@ jobs:
           override: true
           target: ${{ matrix.target }}
 
-      - name: Set Variables
+      - name: Set environment variables
         run: |
-          VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r ".packages[0].version")
-          echo "VERSION=${VERSION}" >> $GITHUB_ENV
-          TAG=v${VERSION}
+          # Extracts tag of just created release and derives version number.
+          TAG=$(gh release view --json tagName --jq ".tagName")
           echo "TAG=${TAG}" >> $GITHUB_ENV
+          echo "VERSION=${TAG:1}" >> $GITHUB_ENV
 
-      - name: Build
+      - name: Build ${{ matrix.target }}
         run: |
           cargo build --release --target ${{ matrix.target }}
           cargo test --release --target ${{ matrix.target }} --no-fail-fast
 
-      - name: Upload Artifacts
+      - name: Upload artifacts for ${{ matrix.target }}
         run: |
           BIN_DIR=target/${{ matrix.target }}/release
           TAR_FILE=${BIN_DIR}/ped-${{ env.VERSION }}-${{ matrix.target }}.tar.gz
           SHA_FILE=${TAR_FILE}.sha256
 
+          # Creates tar file and SHA hash.
           tar -czf ${TAR_FILE} -C ${BIN_DIR} ped
           shasum -a 256 ${TAR_FILE} > ${SHA_FILE}
 
+          # Uploads artifacts to release.
           gh release upload --clobber ${{ env.TAG }} ${TAR_FILE} ${SHA_FILE}
