@@ -7,8 +7,6 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     permissions: write-all
-    env:
-      GH_TOKEN: ${{ secrets.PAT }}
 
     steps:
       - uses: actions/checkout@v4
@@ -18,12 +16,14 @@ jobs:
           echo "TAG=${TAG}" >> $GITHUB_ENV
           echo "VERSION=${TAG:1}" >> $GITHUB_ENV
 
-      #     gh api --method POST \
-      #       -H "Accept: application/vnd.github+json" \
-      #       -H "X-GitHub-Api-Version: 2022-11-28" \
-      #       /repos/davidledwards/homebrew-ped/dispatches \
-      #       -f "event_type=publish" \
-      #       -F "client_payload[tag]=${TAG}"
+          # gh api --method POST \
+          #   -H "Accept: application/vnd.github+json" \
+          #   -H "X-GitHub-Api-Version: 2022-11-28" \
+          #   /repos/davidledwards/homebrew-ped/dispatches \
+          #   -f "event_type=publish" \
+          #   -F "client_payload[tag]=${TAG}"
+        env:
+          GH_TOKEN: ${{ secrets.PAT }}
 
       - name: Checkout Homebrew tap repository
         uses: actions/checkout@v4
@@ -38,12 +38,14 @@ jobs:
           gh release download ${{ env.TAG }} \
             --repo ${{ github.repository }} \
             --dir artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - name: Update Homebrew formula
         run: |
           FORMULA=homebrew-ped/Formula/ped.rb
           # sed -i "s/version \".*\"/version \"${{ env.VERSION }}\"/" $FORMULA
-          sed -i "s/version \".*\"/version \"1.2.3\"/" $FORMULA
+          sed -i "s/version \".*\"/version \"4.5.6\"/" $FORMULA
 
           TARGETS=(\
             "aarch64-apple-darwin" \
