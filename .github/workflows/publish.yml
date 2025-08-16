@@ -33,19 +33,17 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.PAT }}
 
-      - name: Checkout Homebrew tap repository
+      - name: Download release artifacts
+        run: |
+          mkdir artifacts
+          gh release download ${{ env.TAG }} --repo ${{ github.repository }} --dir artifacts
+
+      - name: Checkout Homebrew repository
         uses: actions/checkout@v4
         with:
           repository: ${{ env.TAP_PATH }}
           path: ${{ env.TAP_REPO }}
           token: ${{ secrets.PAT }}
-
-      - name: Download release artifacts
-        run: |
-          mkdir artifacts
-          gh release download ${{ env.TAG }} --repo ${{ github.repository }} --dir artifacts
-        env:
-          GH_TOKEN: ${{ github.token }}
 
       - name: Update Homebrew formula
         run: |
