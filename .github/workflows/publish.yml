@@ -55,7 +55,7 @@ jobs:
 
           for TARGET in "${TARGETS[@]}"
           do
-            SHA=$(cut -d ' ' -f1 artifacts/ped-v${{ env.VERSION }}-${TARGET}.tar.gz.sha256)
+            SHA=$(cut -d ' ' -f1 artifacts/ped-${{ env.VERSION }}-${TARGET}.tar.gz.sha256)
             echo "*** rewriting ${TARGET}"
             # sed -i "s/sha256 \".*\" # ${TARGET}/sha256 \"${SHA}\" # ${TARGET}/" $FORMULA
             sed "s/sha256 \".*\" # ${TARGET}/sha256 \"${SHA}\" # ${TARGET}/" $FORMULA
