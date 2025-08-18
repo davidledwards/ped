@@ -70,8 +70,8 @@ jobs:
       - name: Commit and push changes
         run: |
           cd ${{ env.TAP_REPO }}
-          git config user.name "David Edwards [bot]"
-          git config user.email "david.l.edwards@gmail.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
           # Commit changes on separate release branch and push to central repository.
           BRANCH=release/${{ env.VERSION }}
