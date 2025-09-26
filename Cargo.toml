@@ -17,6 +17,10 @@ serde = { version = "1.0", features = ["derive"] }
 indexmap = { version = "2.7", features = ["serde"] }
 arboard = "3.6"
 
+[profile.release]
+strip = true
+lto = true
+
 [lints.clippy]
 len_zero = "allow"
 manual_range_contains = "allow"
