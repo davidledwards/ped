@@ -394,8 +394,8 @@ struct EditorKernel {
     /// Number of columns available for text.
     cols: u32,
 
-    /// Number of columns allocated to the margin for displaying line numbers.
-    margin_cols: u32,
+    /// Indicates when left margin is enabled.
+    margin_enabled: bool,
 
     /// Indicates whether _hard_ or _soft_ tabs are inserted.
     tab_hard: bool,
@@ -1203,10 +1203,10 @@ impl ImmutableEditor for EditorKernel {
         // Ensure target cursor is bounded by effective area of canvas, which takes
         // into account left margin if enabled.
         let try_row = cmp::min(cursor.row, self.rows);
-        let try_col = if cursor.col < self.margin_cols {
+        let try_col = if cursor.col < self.margin_cols() {
             0
         } else {
-            cmp::min(cursor.col - self.margin_cols, self.cols)
+            cmp::min(cursor.col - self.margin_cols(), self.cols)
         };
 
         // Find effective cursor location and buffer position by moving down from
@@ -1224,13 +1224,9 @@ impl ImmutableEditor for EditorKernel {
         // total width of window is large enough to reasonably accommodate.
         self.window = window.clone();
         let Size { rows, cols } = self.window.borrow().canvas.borrow().size();
-        self.margin_cols = if self.config.settings.lines && cols >= Self::MARGIN_COLS * 2 {
-            Self::MARGIN_COLS
-        } else {
-            0
-        };
+        self.margin_enabled = self.config.settings.lines && cols >= Self::MARGIN_COLS * 2;
         self.rows = rows;
-        self.cols = cols - self.margin_cols;
+        self.cols = cols - self.margin_cols();
 
         if !self.window.borrow().is_zombie() {
             self.align_cursor(align);
@@ -1270,8 +1266,8 @@ impl ImmutableEditor for EditorKernel {
     }
 
     fn show_cursor(&mut self) {
-        let cursor = if self.margin_cols > 0 {
-            self.cursor + Size::cols(self.margin_cols)
+        let cursor = if self.margin_enabled {
+            self.cursor + Size::cols(Self::MARGIN_COLS)
         } else {
             self.cursor
         };
@@ -1705,15 +1701,15 @@ impl EditorKernel {
     /// Number of columns allocated to the margin.
     const MARGIN_COLS: u32 = 6;
 
-    /// Exclusive upper bound on line numbers that can be displayed in the margin.
+    /// Upper bound (exclusive) on line numbers that can be displayed in the margin.
     const LINE_LIMIT: u32 = 10_u32.pow(Self::MARGIN_COLS - 1);
 
     /// Number of columns used to display lower-order digits of line numbers that
-    /// nust be clipped.
+    /// must be clipped when larger than `LINE_LIMIT`.
     const CLIP_LOWER_COLS: u32 = Self::MARGIN_COLS / 2;
 
-    /// Number of columns used to blur higher-order digits of line number that
-    /// must be clipped.
+    /// Number of columns used to hide higher-order digits of line numbers that
+    /// must be clipped when larger than `LINE_LIMIT`.
     const CLIP_UPPER_COLS: u32 = Self::MARGIN_COLS - Self::CLIP_LOWER_COLS - 1;
 
     /// An upper bound on the tolerable number of milliseconds to tokenize the
@@ -1775,7 +1771,7 @@ impl EditorKernel {
             window: Window::zombie().into_ref(),
             rows: 0,
             cols: 0,
-            margin_cols: 0,
+            margin_enabled: false,
             tab_hard,
             tab_cols,
             last_match: None,
@@ -2316,7 +2312,7 @@ impl EditorKernel {
         self.render_margin(draw, &render);
         let window = self.window.borrow();
         let mut canvas = window.canvas.borrow_mut();
-        let (row, col) = (render.row, render.col + self.margin_cols);
+        let (row, col) = (render.row, render.col + self.margin_cols());
         let render = if c == '\n' {
             canvas.set_cell(row, col, draw.as_text(c, &render));
             canvas.fill_cell_from(row, col + 1, draw.as_text(' ', &render));
@@ -2346,22 +2342,22 @@ impl EditorKernel {
         let mut canvas = window.canvas.borrow_mut();
 
         // Blank out rest of existing row.
-        let (row, col) = (render.row, render.col + self.margin_cols);
+        let (row, col) = (render.row, render.col + self.margin_cols());
         canvas.fill_cell_from(row, col, draw.as_text(' ', &render));
 
         // Blank out remaining rows.
         for row in (render.row + 1)..self.rows {
-            if self.margin_cols > 0 {
-                canvas.fill_cell(row, 0..self.margin_cols, draw.as_margin(' '));
+            if self.margin_enabled {
+                canvas.fill_cell(row, 0..Self::MARGIN_COLS, draw.as_margin(' '));
             }
-            canvas.fill_cell_from(row, self.margin_cols, draw.as_blank());
+            canvas.fill_cell_from(row, Self::MARGIN_COLS, draw.as_blank());
         }
     }
 
     /// Renders the margin if line numbering is enabled and the rendering context is
     /// on the first column of any row.
     fn render_margin(&self, draw: &Draw, render: &Render) {
-        if render.col == 0 && self.margin_cols > 0 {
+        if render.col == 0 && self.margin_enabled {
             let window = self.window.borrow();
             let mut canvas = window.canvas.borrow_mut();
             if render.line_wrapped {
@@ -2391,6 +2387,15 @@ impl EditorKernel {
                 }
                 canvas.set_cell(render.row, Self::MARGIN_COLS, draw.as_margin(' '));
             }
+        }
+    }
+
+    #[inline]
+    fn margin_cols(&self) -> u32 {
+        if self.margin_enabled {
+            Self::MARGIN_COLS
+        } else {
+            0
         }
     }
 }
