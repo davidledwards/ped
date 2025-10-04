@@ -1708,6 +1708,14 @@ impl EditorKernel {
     /// Exclusive upper bound on line numbers that can be displayed in the margin.
     const LINE_LIMIT: u32 = 10_u32.pow(Self::MARGIN_COLS - 1);
 
+    /// Number of columns used to display lower-order digits of line numbers that
+    /// nust be clipped.
+    const CLIP_LOWER_COLS: u32 = Self::MARGIN_COLS / 2;
+
+    /// Number of columns used to blur higher-order digits of line number that
+    /// must be clipped.
+    const CLIP_UPPER_COLS: u32 = Self::MARGIN_COLS - Self::CLIP_LOWER_COLS - 1;
+
     /// An upper bound on the tolerable number of milliseconds to tokenize the
     /// buffer in real-time, otherwise the operation is deferred.
     const TOKENIZE_COST_LIMIT: u128 = 50;
@@ -2357,19 +2365,31 @@ impl EditorKernel {
             let window = self.window.borrow();
             let mut canvas = window.canvas.borrow_mut();
             if render.line_wrapped {
-                canvas.fill_cell(render.row, 0..self.margin_cols, draw.as_margin(' '));
+                canvas.fill_cell(render.row, 0..Self::MARGIN_COLS, draw.as_margin(' '));
             } else if render.line < Self::LINE_LIMIT {
                 let s = format!(
                     "{:>cols$} ",
                     render.line,
-                    cols = self.margin_cols as usize - 1
+                    cols = Self::MARGIN_COLS as usize - 1
                 );
                 for (col, c) in s.char_indices() {
                     canvas.set_cell(render.row, col as u32, draw.as_margin(c));
                 }
             } else {
-                canvas.fill_cell(render.row, 0..self.margin_cols - 1, draw.as_margin('-'));
-                canvas.set_cell(render.row, self.margin_cols, draw.as_margin(' '));
+                canvas.fill_cell(render.row, 0..Self::CLIP_UPPER_COLS, draw.as_margin('-'));
+                let s = format!(
+                    "{:0>cols$}",
+                    render.line % 10_u32.pow(Self::CLIP_LOWER_COLS),
+                    cols = Self::CLIP_LOWER_COLS as usize,
+                );
+                for (col, c) in s.char_indices() {
+                    canvas.set_cell(
+                        render.row,
+                        col as u32 + Self::CLIP_UPPER_COLS,
+                        draw.as_margin(c),
+                    );
+                }
+                canvas.set_cell(render.row, Self::MARGIN_COLS, draw.as_margin(' '));
             }
         }
     }
