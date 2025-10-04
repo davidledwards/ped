@@ -56,7 +56,7 @@ impl Banner {
     const GAP_COLS: u32 = 2;
 
     /// Number of columns allocated to line numbers.
-    const LINE_COLS: u32 = 5;
+    const LINE_COLS: u32 = 6;
 
     /// Maximum line number that can be shown based on allocated columns.
     const LINE_LIMIT: u32 = u32::pow(10, Self::LINE_COLS);
