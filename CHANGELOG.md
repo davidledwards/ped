@@ -2,6 +2,13 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
+### [0.30.0](https://github.com/davidledwards/ped/tree/v0.30.0) | `2025-08-16`
+
+### Changed
+
+- Display of line numbers in left margin when exceeding space limit (> `99999`) previously showed `-----` but now displays lower-order digits (ex: `--375` if line number was `218375`)
+- Reduced size of release binary approximately 30% by stripping debug symbols
+
 ### [0.29.0](https://github.com/davidledwards/ped/tree/v0.29.0) | `2025-08-16`
 
 #### Added
