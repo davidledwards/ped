@@ -2362,7 +2362,7 @@ impl EditorKernel {
                 let s = format!(
                     "{:>cols$} ",
                     render.line,
-                    cols = Self::MARGIN_COLS as usize - 1
+                    cols = self.margin_cols as usize - 1
                 );
                 for (col, c) in s.char_indices() {
                     canvas.set_cell(render.row, col as u32, draw.as_margin(c));
