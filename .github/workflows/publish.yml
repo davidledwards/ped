@@ -31,12 +31,14 @@ jobs:
             -f "event_type=publish" \
             -F "client_payload[tag]=${TAG}"
         env:
-          GH_TOKEN: ${{ secrets.PAT }}
+          GH_TOKEN: ${{ github.token }}
 
       - name: Download release artifacts
         run: |
           mkdir artifacts
           gh release download ${{ env.TAG }} --repo ${{ github.repository }} --dir artifacts
+        env:
+          GH_TOKEN: ${{ secrets.PAT }}
 
       - name: Checkout Homebrew repository
         uses: actions/checkout@v4
