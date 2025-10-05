@@ -31,7 +31,7 @@ jobs:
             -f "event_type=publish" \
             -F "client_payload[tag]=${TAG}"
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.PAT }}
 
       - name: Download release artifacts
         run: |
