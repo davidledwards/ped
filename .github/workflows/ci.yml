@@ -4,9 +4,21 @@ on:
   push:
     branches:
       - main
+    paths-ignore:
+      - ".github/workflows/**"
+      - ".git*"
+      - ".ped*"
+      - "*.md"
+      - "LICENSE"
   pull_request:
     branches:
       - main
+    paths-ignore:
+      - ".github/workflows/**"
+      - ".git*"
+      - ".ped*"
+      - "*.md"
+      - "LICENSE"
 
 env:
   CARGO_TERM_COLOR: always
