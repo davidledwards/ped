@@ -82,6 +82,7 @@ medium-gray = 237
 #   inactive-bg
 #   margin-fg
 #   margin-bg
+#   line-fg
 #
 [theme]
 echo-fg = "funky-red"

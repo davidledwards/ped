@@ -75,6 +75,7 @@ pub struct Theme {
     pub inactive_bg: u8,
     pub margin_fg: u8,
     pub margin_bg: u8,
+    pub line_fg: u8,
 }
 
 #[derive(Deserialize)]
@@ -144,6 +145,9 @@ struct ExternalTheme {
 
     #[serde(rename = "margin-bg")]
     margin_bg: Option<ColorValue>,
+
+    #[serde(rename = "line-fg")]
+    line_fg: Option<ColorValue>,
 }
 
 impl Settings {
@@ -197,6 +201,7 @@ impl Theme {
     const INACTIVE_BG: u8 = 237;
     const MARGIN_FG: u8 = 61;
     const MARGIN_BG: u8 = 234;
+    const LINE_FG: u8 = 81;
 
     /// Applies the external theme `ext` on top of `self`.
     fn apply(&mut self, ext: Option<ExternalTheme>, colors: &Colors) -> Result<()> {
@@ -226,6 +231,7 @@ impl Theme {
             self.inactive_bg = resolve(self.inactive_bg, &ext.inactive_bg, colors)?;
             self.margin_fg = resolve(self.margin_fg, &ext.margin_fg, colors)?;
             self.margin_bg = resolve(self.margin_bg, &ext.margin_bg, colors)?;
+            self.line_fg = resolve(self.line_fg, &ext.line_fg, colors)?;
         }
         Ok(())
     }
@@ -247,6 +253,7 @@ impl Default for Theme {
             inactive_bg: Self::INACTIVE_BG,
             margin_fg: Self::MARGIN_FG,
             margin_bg: Self::MARGIN_BG,
+            line_fg: Self::LINE_FG,
         }
     }
 }

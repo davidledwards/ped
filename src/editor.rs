@@ -520,11 +520,17 @@ struct Draw {
     /// Color of margin.
     margin_color: Color,
 
+    /// Color of current line in margin.
+    line_color: Color,
+
     /// Color of text with no special treatment.
     text_color: Color,
 
     /// Current cursor position.
     cursor: Point,
+
+    /// Current line number.
+    line: u32,
 
     /// Range in the buffer containing selected text, if applicable, otherwise this
     /// span is assumed to be `0`..`0`.
@@ -702,6 +708,7 @@ impl Draw {
     fn new(editor: &EditorKernel) -> Draw {
         let config = editor.config.clone();
         let margin_color = Color::new(config.theme.margin_fg, config.theme.margin_bg);
+        let line_color = Color::new(config.theme.line_fg, config.theme.margin_bg);
         let text_color = Color::new(config.theme.text_fg, config.theme.text_bg);
 
         let select_span = editor
@@ -718,8 +725,10 @@ impl Draw {
         Draw {
             config,
             margin_color,
+            line_color,
             text_color,
             cursor: editor.cursor(),
+            line: editor.cur_line.line + 1,
             select_span,
         }
     }
@@ -728,6 +737,20 @@ impl Draw {
     #[inline]
     fn as_margin(&self, c: char) -> Cell {
         Cell::new(c, self.margin_color)
+    }
+
+    /// Formats `c` using the line color if `line` is the current line, otherwise the
+    /// margin color is applied.
+    #[inline]
+    fn as_line(&self, c: char, line: u32) -> Cell {
+        Cell::new(
+            c,
+            if line == self.line {
+                self.line_color
+            } else {
+                self.margin_color
+            },
+        )
     }
 
     /// Formats ` ` (space) using the text color.
@@ -2369,10 +2392,14 @@ impl EditorKernel {
                     cols = Self::MARGIN_COLS as usize - 1
                 );
                 for (col, c) in s.char_indices() {
-                    canvas.set_cell(render.row, col as u32, draw.as_margin(c));
+                    canvas.set_cell(render.row, col as u32, draw.as_line(c, render.line));
                 }
             } else {
-                canvas.fill_cell(render.row, 0..Self::CLIP_UPPER_COLS, draw.as_margin('-'));
+                canvas.fill_cell(
+                    render.row,
+                    0..Self::CLIP_UPPER_COLS,
+                    draw.as_line('-', render.line),
+                );
                 let s = format!(
                     "{:0>cols$}",
                     render.line % 10_u32.pow(Self::CLIP_LOWER_COLS),
@@ -2382,7 +2409,7 @@ impl EditorKernel {
                     canvas.set_cell(
                         render.row,
                         col as u32 + Self::CLIP_UPPER_COLS,
-                        draw.as_margin(c),
+                        draw.as_line(c, render.line),
                     );
                 }
                 canvas.set_cell(render.row, Self::MARGIN_COLS, draw.as_margin(' '));
