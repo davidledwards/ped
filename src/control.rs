@@ -58,6 +58,8 @@ enum Step {
     Quit,
 }
 
+type SyntheticFn<'a> = Box<dyn FnMut(&mut Environment) + 'a>;
+
 impl Controller {
     /// Number of milliseconds controller waits before resizing workspace after it notices a
     /// change.
@@ -161,23 +163,12 @@ impl Controller {
                     editor.render();
                 }
             }
-        } else if let Key::ScrollUp(shift, row, col) = key {
+        } else if let Some(mut scroll_fn) = Self::possible_scroll(&key) {
             self.clear_echo();
-            op::track_up(&mut self.env, Point::new(row, col), shift == Shift::On);
-        } else if let Key::ScrollDown(shift, row, col) = key {
+            scroll_fn(&mut self.env);
+        } else if let Some(mut button_fn) = Self::possible_button(&key) {
             self.clear_echo();
-            op::track_down(&mut self.env, Point::new(row, col), shift == Shift::On);
-        } else if let Key::ScrollLeft(shift, row, col) = key {
-            self.clear_echo();
-            op::track_backward(&mut self.env, Point::new(row, col), shift == Shift::On);
-        } else if let Key::ScrollRight(shift, row, col) = key {
-            self.clear_echo();
-            op::track_forward(&mut self.env, Point::new(row, col), shift == Shift::On);
-        } else if let Key::ButtonPress(row, col) = key {
-            self.clear_echo();
-            op::set_focus(&mut self.env, Point::new(row, col));
-        } else if let Key::ButtonRelease(_, _) = key {
-            // Absorb since this event serve no purpose at this time.
+            button_fn(&mut self.env);
         } else {
             self.key_seq.push(key.clone());
             if let Some(op_fn) = self.config.bindings.find(&self.key_seq) {
@@ -209,6 +200,10 @@ impl Controller {
             let action = inquirer.respond(&mut self.env, None);
             self.clear_question();
             action
+        } else if let Some(mut scroll_fn) = Self::possible_scroll(&key) {
+            scroll_fn(&mut self.env);
+            self.input.show_cursor();
+            None
         } else {
             match self.input.process_key(&key) {
                 Directive::Continue => {
@@ -276,6 +271,38 @@ impl Controller {
             Some(*c)
         } else {
             None
+        }
+    }
+
+    /// Returns an optional function to call if `key` represents a scrolling event.
+    fn possible_scroll(key: &Key) -> Option<SyntheticFn<'_>> {
+        match key {
+            Key::ScrollUp(shift, row, col) => Some(Box::new(|env: &mut Environment| {
+                op::track_up(env, Point::new(*row, *col), *shift == Shift::On);
+            })),
+            Key::ScrollDown(shift, row, col) => Some(Box::new(|env: &mut Environment| {
+                op::track_down(env, Point::new(*row, *col), *shift == Shift::On);
+            })),
+            Key::ScrollLeft(shift, row, col) => Some(Box::new(|env: &mut Environment| {
+                op::track_backward(env, Point::new(*row, *col), *shift == Shift::On);
+            })),
+            Key::ScrollRight(shift, row, col) => Some(Box::new(|env: &mut Environment| {
+                op::track_forward(env, Point::new(*row, *col), *shift == Shift::On);
+            })),
+            _ => None,
+        }
+    }
+
+    /// Returns an optional function to call if `key` represents a button event.
+    fn possible_button(key: &Key) -> Option<SyntheticFn<'_>> {
+        match key {
+            Key::ButtonPress(row, col) => Some(Box::new(|env: &mut Environment| {
+                op::set_focus(env, Point::new(*row, *col));
+            })),
+            Key::ButtonRelease(_, _) => Some(Box::new(|_: &mut Environment| {
+                // Absorb since this event serves no purpose at this time.
+            })),
+            _ => None,
         }
     }
 
