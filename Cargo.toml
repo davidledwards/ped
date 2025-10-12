@@ -1,6 +1,6 @@
 [package]
 name = "ped"
-version = "0.30.0"
+version = "0.31.0"
 edition = "2024"
 authors = ["David Edwards <david.l.edwards@gmail.com>"]
 description = "The pedestrian text editor"

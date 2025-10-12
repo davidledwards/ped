@@ -2,9 +2,16 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
+### [0.31.0](https://github.com/davidledwards/ped/tree/v0.31.0) | `2025-10-11`
+
+#### Added
+
+- Allow scrolling of editor windows via mouse when user input is active
+- Configuration color `line-fg` which applies to highlighting current line number
+
 ### [0.30.0](https://github.com/davidledwards/ped/tree/v0.30.0) | `2025-10-04`
 
-### Changed
+#### Changed
 
 - Line numbers in left margin when exceeding space limit previously displayed `-----` but now print lower-order digits (ex: `--375` if line number was `218375`)
 - Line and column numbers in banner bar now display up to `7` digits
