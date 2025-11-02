@@ -1016,6 +1016,7 @@ struct Search {
     using_regex: bool,
     case_strict: bool,
     buf_cache: Option<String>,
+    last_value: String,
     last_match: Option<(usize, Box<dyn Pattern>)>,
 }
 
@@ -1028,6 +1029,34 @@ impl Search {
         } else {
             None
         };
+
+        // Use selected text if present to initialize search term, though ignore if
+        // regular expression being used.
+        let (last_value, last_match) = if using_regex {
+            (String::new(), None)
+        } else {
+            // Ignore selected text if any of its content contains control characters.
+            let last_value = capture
+                .mark
+                .map(|mark| editor.borrow().copy_mark(mark))
+                .and_then(|text| {
+                    if text.iter().any(|c| c.is_control()) {
+                        None
+                    } else {
+                        Some(text.iter().collect())
+                    }
+                })
+                .unwrap_or_else(String::new);
+
+            // Prime search such that pressing TAB will find next match.
+            let last_match = if last_value.len() > 0 {
+                Some((capture.pos, search::using_term(&last_value, case_strict)))
+            } else {
+                None
+            };
+            (last_value, last_match)
+        };
+
         Action::as_question(
             Search {
                 editor,
@@ -1035,7 +1064,8 @@ impl Search {
                 using_regex,
                 case_strict,
                 buf_cache,
-                last_match: None,
+                last_value,
+                last_match,
             }
             .into_box(),
         )
@@ -1043,6 +1073,47 @@ impl Search {
 
     fn into_box(self) -> Box<dyn Inquirer> {
         Box::new(self)
+    }
+
+    fn find_first(&mut self, value: &str) -> Option<String> {
+        let pattern = if self.using_regex {
+            // Compile regular expression, which might fail if malformed
+            // or too large, the latter of which is unlikely in practice.
+            let regex = RegexBuilder::new(value)
+                .case_insensitive(!self.case_strict)
+                .multi_line(true)
+                .build();
+            if let Ok(regex) = regex {
+                search::using_regex(regex)
+            } else {
+                return Some(" (no match)".to_string());
+            }
+        } else {
+            search::using_term(value, self.case_strict)
+        };
+
+        self.find_next(self.capture.pos, pattern)
+    }
+
+    fn find_next(&mut self, pos: usize, pattern: Box<dyn Pattern>) -> Option<String> {
+        // Find next match and highlight if found.
+        let found = if let Some(buf) = &self.buf_cache {
+            pattern.find_str(buf, pos)
+        } else {
+            pattern.find(&self.editor.borrow().buffer(), pos)
+        };
+
+        if let Some((start_pos, end_pos)) = found {
+            let mut editor = self.editor.borrow_mut();
+            editor.move_to(start_pos, Align::Center);
+            editor.clear_mark();
+            editor.set_soft_mark_at(end_pos);
+            editor.render();
+            self.last_match = Some((start_pos, pattern));
+            None
+        } else {
+            Some(" (no match)".to_string())
+        }
     }
 
     fn restore(&mut self) {
@@ -1062,71 +1133,37 @@ impl Inquirer for Search {
     }
 
     fn value(&self) -> Option<String> {
-        // Use selected text if present to initialize search term, but only if text
-        // does not contain any control characters.
-        self.capture
-            .mark
-            .map(|mark| self.editor.borrow().copy_mark(mark))
-            .and_then(|text| {
-                if text.iter().any(|c| c.is_control()) {
-                    None
-                } else {
-                    Some(text.iter().collect())
-                }
-            })
+        if self.last_value.len() == 0 {
+            None
+        } else {
+            Some(self.last_value.clone())
+        }
     }
 
     fn react(&mut self, _: &mut Environment, value: &str, key: &Key) -> Option<String> {
-        if value.len() > 0 {
-            let (pos, pattern) = match self.last_match.take() {
-                Some((pos, pattern)) if *key == TAB => {
-                    // Find next match using existing pattern when TAB is pressed,
-                    // noting that starting position must be incremented so as not to
-                    // match on same term.
-                    (pos + 1, pattern)
-                }
-                _ => {
-                    let pattern = if self.using_regex {
-                        // Compile regular expression, which might fail if malformed
-                        // or too large, the latter of which is unlikely in practice.
-                        let regex = RegexBuilder::new(value)
-                            .case_insensitive(!self.case_strict)
-                            .multi_line(true)
-                            .build();
-                        if let Ok(regex) = regex {
-                            search::using_regex(regex)
-                        } else {
-                            return Some(" (no match)".to_string());
-                        }
+        if *key == TAB {
+            match self.last_match.take() {
+                Some((pos, pattern)) => self.find_next(pos + 1, pattern),
+                None => {
+                    if value.len() > 0 {
+                        Some(" (no match)".to_string())
                     } else {
-                        search::using_term(value.to_string(), self.case_strict)
-                    };
-                    (self.capture.pos, pattern)
+                        None
+                    }
                 }
-            };
-
-            // Find next match and highlight if found.
-            let found = if let Some(buf) = &self.buf_cache {
-                pattern.find_str(buf, pos)
-            } else {
-                pattern.find(&self.editor.borrow().buffer(), pos)
-            };
-
-            if let Some((start_pos, end_pos)) = found {
-                let mut editor = self.editor.borrow_mut();
-                editor.move_to(start_pos, Align::Center);
-                editor.clear_mark();
-                editor.set_soft_mark_at(end_pos);
-                editor.render();
-                self.last_match = Some((start_pos, pattern));
-                None
-            } else {
-                Some(" (no match)".to_string())
             }
-        } else {
-            self.restore();
-            self.last_match = None;
+        } else if value == self.last_value {
             None
+        } else {
+            self.last_match = None;
+            let hint = if value.len() > 0 {
+                self.find_first(value)
+            } else {
+                self.restore();
+                None
+            };
+            self.last_value = value.to_string();
+            hint
         }
     }
 

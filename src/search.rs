@@ -30,7 +30,7 @@ pub trait Pattern {
 
 /// Returns a pattern-matching algorithm using `term` as the search string, and
 /// `case_strict` to indicate the sensitivity of case when searching.
-pub fn using_term(term: String, case_strict: bool) -> Box<dyn Pattern> {
+pub fn using_term(term: &str, case_strict: bool) -> Box<dyn Pattern> {
     Box::new(TermPattern::new(term, case_strict))
 }
 
@@ -62,7 +62,7 @@ struct TermPattern {
 }
 
 impl TermPattern {
-    pub fn new(term: String, case_strict: bool) -> TermPattern {
+    pub fn new(term: &str, case_strict: bool) -> TermPattern {
         // Pattern is downcased when case-sensitivity is relaxed, otherwise
         // it is faithful represention of term.
         let pattern = term
@@ -88,7 +88,7 @@ impl TermPattern {
         }
 
         TermPattern {
-            term,
+            term: term.to_string(),
             pattern,
             shift,
             case_strict,
