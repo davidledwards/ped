@@ -2,6 +2,12 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
+### [0.32.0](https://github.com/davidledwards/ped/tree/v0.32.0) | `2025-11-02`
+
+#### Fixed
+
+- Subtle inconsistencies with interactive search
+
 ### [0.31.0](https://github.com/davidledwards/ped/tree/v0.31.0) | `2025-10-11`
 
 #### Added
