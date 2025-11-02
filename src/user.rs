@@ -2,7 +2,7 @@
 
 use crate::env::Environment;
 use crate::key::Key;
-use crate::op::Action;
+use crate::operation::Action;
 use crate::sys::{self, AsString};
 use std::path::{Path, PathBuf};
 

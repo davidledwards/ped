@@ -9,13 +9,15 @@
 
 use crate::config::ConfigurationRef;
 use crate::echo::Echo;
+use crate::ed;
 use crate::editor::{Align, ImmutableEditor};
 use crate::env::{Environment, Focus};
 use crate::error::Result;
 use crate::etc::{PACKAGE_NAME, PACKAGE_VERSION};
 use crate::input::{Directive, InputEditor};
 use crate::key::{self, CTRL_G, Key, Keyboard, Shift};
-use crate::op::{self, Action};
+use crate::op;
+use crate::operation::Action;
 use crate::size::Point;
 use crate::sys::{self, AsString};
 use crate::term;
@@ -91,7 +93,7 @@ impl Controller {
         let view_id = self.env.get_active_view_id();
         for (i, path) in files.iter().enumerate() {
             let path = sys::canonicalize(sys::working_dir().join(path)).as_string();
-            let editor = op::open_editor(self.config.clone(), &path)?;
+            let editor = ed::open_editor(self.config.clone(), &path)?;
             if i == 0 {
                 self.env.set_editor(editor, Align::Auto);
             } else {

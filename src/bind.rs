@@ -7,13 +7,14 @@
 
 use crate::error::{Error, Result};
 use crate::key::{self, Key, KeyMap};
-use crate::op::{self, OpFn, OpMap};
+use crate::op;
+use crate::operation::Operation;
 use std::collections::{HashMap, HashSet};
 
 /// A mapping of [`Key`] sequences to editing functions.
 pub struct Bindings {
     key_map: KeyMap,
-    op_map: OpMap,
+    op_map: HashMap<&'static str, Operation>,
     bind_map: HashMap<Vec<Key>, String>,
     bind_prefixes: HashSet<Vec<Key>>,
     restricted_keys: HashSet<Vec<Key>>,
@@ -122,7 +123,7 @@ impl Bindings {
     }
 
     /// Returns the function pointer bound to `keys`, otherwise `None`.
-    pub fn find(&self, keys: &Vec<Key>) -> Option<&OpFn> {
+    pub fn find(&self, keys: &Vec<Key>) -> Option<&Operation> {
         self.bind_map
             .get(keys)
             .and_then(|op| self.op_map.get(op as &str))
