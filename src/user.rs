@@ -7,7 +7,7 @@ use crate::sys::{self, AsString};
 use std::path::{Path, PathBuf};
 
 /// Defines an interface for coordinating input from a user.
-pub trait Inquirer {
+pub trait Question {
     /// Returns the prompt displayed to the user.
     fn prompt(&self) -> String;
 
@@ -18,14 +18,14 @@ pub trait Inquirer {
         None
     }
 
-    /// Returns the [`Completer`] implementation attached to the inquirer.
+    /// Returns the [`Completer`] implementation attached to the question.
     ///
     /// The default implementation returns a [`null_completer()`].
     fn completer(&self) -> Box<dyn Completer> {
         null_completer()
     }
 
-    /// Allows the inquirer to react to a partial input `value` following the
+    /// Allows the question to react to a partial input `value` following the
     /// processing of `key` that is not yet committed or cancelled, returning an
     /// optional _hint_.
     ///

@@ -22,7 +22,7 @@ use crate::search::{self, Pattern};
 use crate::size::{Point, Size};
 use crate::source::Source;
 use crate::sys::{self, AsString};
-use crate::user::{self, Completer, Inquirer};
+use crate::user::{self, Completer, Question};
 use crate::workspace::Placement;
 use regex_lite::RegexBuilder;
 use std::collections::HashMap;
@@ -42,7 +42,7 @@ pub enum Action {
     Quit,
     Redraw,
     Echo(String),
-    Question(Box<dyn Inquirer>),
+    Question(Box<dyn Question>),
 }
 
 impl Action {
@@ -59,8 +59,8 @@ impl Action {
         Some(action)
     }
 
-    fn as_question(inquirer: Box<dyn Inquirer>) -> Option<Action> {
-        let action = Action::Question(inquirer);
+    fn as_question(question: Box<dyn Question>) -> Option<Action> {
+        let action = Action::Question(question);
         Some(action)
     }
 
@@ -86,7 +86,7 @@ fn quit(env: &mut Environment) -> Option<Action> {
     Quit::start(env)
 }
 
-/// An inquirer that orchestrates the _quit_ process, which may involve saving dirty
+/// A question that orchestrates the _quit_ process, which may involve saving dirty
 /// editors.
 struct Quit {
     /// List of dirty editors.
@@ -114,7 +114,7 @@ impl Quit {
         }
     }
 
-    fn into_box(self) -> Box<dyn Inquirer> {
+    fn into_box(self) -> Box<dyn Question> {
         Box::new(self)
     }
 
@@ -158,7 +158,7 @@ impl Quit {
     }
 }
 
-impl Inquirer for Quit {
+impl Question for Quit {
     fn prompt(&self) -> String {
         let source = source_of(&self.dirty[0]);
         format!("{source}: save?")
@@ -179,7 +179,7 @@ impl Inquirer for Quit {
     }
 }
 
-/// An inquirer spawned from [`Quit`] that orchestrates the saving of an editor whose
+/// A question spawned from [`Quit`] that orchestrates the saving of an editor whose
 /// corresponding file in storage is newer than its timestamp.
 #[derive(Clone)]
 struct QuitOverride {
@@ -196,7 +196,7 @@ impl QuitOverride {
         Action::as_question(self.clone().into_box())
     }
 
-    fn into_box(self) -> Box<dyn Inquirer> {
+    fn into_box(self) -> Box<dyn Question> {
         Box::new(self)
     }
 
@@ -209,7 +209,7 @@ impl QuitOverride {
     }
 }
 
-impl Inquirer for QuitOverride {
+impl Question for QuitOverride {
     fn prompt(&self) -> String {
         let source = source_of(&self.dirty[0]);
         format!("{source}: file in storage is newer, save anyway?")
@@ -609,7 +609,7 @@ fn goto_line(env: &mut Environment) -> Option<Action> {
     GotoLine::question(env.get_active_editor().clone())
 }
 
-/// An inquirer that orchestrates going to a specific line in an editor.
+/// A question that orchestrates going to a specific line in an editor.
 struct GotoLine {
     editor: EditorRef,
     capture: Capture,
@@ -624,7 +624,7 @@ impl GotoLine {
         Action::as_question(GotoLine { editor, capture }.into_box())
     }
 
-    fn into_box(self) -> Box<dyn Inquirer> {
+    fn into_box(self) -> Box<dyn Question> {
         Box::new(self)
     }
 
@@ -635,7 +635,7 @@ impl GotoLine {
     }
 }
 
-impl Inquirer for GotoLine {
+impl Question for GotoLine {
     fn prompt(&self) -> String {
         Self::PROMPT.to_string()
     }
@@ -718,7 +718,7 @@ fn insert_unicode_hex(_: &mut Environment) -> Option<Action> {
     InsertUnicode::question(16)
 }
 
-/// An inquirer that inserts a Unicode character.
+/// A question that inserts a Unicode character.
 struct InsertUnicode {
     /// Only values of `10` and `16` are supported.
     radix: u32,
@@ -732,7 +732,7 @@ impl InsertUnicode {
         Action::as_question(InsertUnicode { radix }.into_box())
     }
 
-    fn into_box(self) -> Box<dyn Inquirer> {
+    fn into_box(self) -> Box<dyn Question> {
         Box::new(self)
     }
 
@@ -743,7 +743,7 @@ impl InsertUnicode {
     }
 }
 
-impl Inquirer for InsertUnicode {
+impl Question for InsertUnicode {
     fn prompt(&self) -> String {
         let radix = if self.radix == 10 { "" } else { " (hex)" };
         format!("insert code point{radix}:")
@@ -1071,7 +1071,7 @@ impl Search {
         )
     }
 
-    fn into_box(self) -> Box<dyn Inquirer> {
+    fn into_box(self) -> Box<dyn Question> {
         Box::new(self)
     }
 
@@ -1123,7 +1123,7 @@ impl Search {
     }
 }
 
-impl Inquirer for Search {
+impl Question for Search {
     fn prompt(&self) -> String {
         format!(
             "{}search (case-{}sensitive):",
@@ -1211,7 +1211,7 @@ fn open_file_below(env: &mut Environment) -> Option<Action> {
     )
 }
 
-/// An inquirer that orchestrates the process of opening a file.
+/// A question that orchestrates the process of opening a file.
 struct Open {
     /// Base directory used for joining paths entered by the user, which is typically
     /// derived from the path of the active editor.
@@ -1227,7 +1227,7 @@ impl Open {
         Action::as_question(Open { dir, place }.into_box())
     }
 
-    fn into_box(self) -> Box<dyn Inquirer> {
+    fn into_box(self) -> Box<dyn Question> {
         Box::new(self)
     }
 
@@ -1253,7 +1253,7 @@ impl Open {
     }
 }
 
-impl Inquirer for Open {
+impl Question for Open {
     fn prompt(&self) -> String {
         let path = sys::pretty_path(&self.dir);
         format!("open file [{path}]:")
@@ -1291,7 +1291,7 @@ fn save_file_as(env: &mut Environment) -> Option<Action> {
     Save::question(env.get_active_editor().clone())
 }
 
-/// An inquirer that orchestrates the process of saving a file.
+/// A question that orchestrates the process of saving a file.
 struct Save {
     editor: EditorRef,
 }
@@ -1301,7 +1301,7 @@ impl Save {
         Action::as_question(Save { editor }.into_box())
     }
 
-    fn into_box(self) -> Box<dyn Inquirer> {
+    fn into_box(self) -> Box<dyn Question> {
         Box::new(self)
     }
 
@@ -1358,7 +1358,7 @@ impl Save {
     }
 }
 
-impl Inquirer for Save {
+impl Question for Save {
     fn prompt(&self) -> String {
         let source = source_of(&self.editor);
         format!("save {source} as:")
@@ -1381,7 +1381,7 @@ impl Inquirer for Save {
     }
 }
 
-/// An inquirer spawned from [`Save`] that orchestrates the saving of an editor whose
+/// A question spawned from [`Save`] that orchestrates the saving of an editor whose
 /// path provided by the user conflicts with an existing file in storage.
 #[derive(Clone)]
 struct SaveExists {
@@ -1398,12 +1398,12 @@ impl SaveExists {
         Action::as_question(self.clone().into_box())
     }
 
-    fn into_box(self) -> Box<dyn Inquirer> {
+    fn into_box(self) -> Box<dyn Question> {
         Box::new(self)
     }
 }
 
-impl Inquirer for SaveExists {
+impl Question for SaveExists {
     fn prompt(&self) -> String {
         let path = sys::pretty_path(&self.path);
         format!("{path}: file already exists, overwrite?")
@@ -1423,7 +1423,7 @@ impl Inquirer for SaveExists {
     }
 }
 
-/// An inquirer spawned from [`Save`] that orchestrates the saving of an editor whose
+/// A question spawned from [`Save`] that orchestrates the saving of an editor whose
 /// corresponding file in storage is newer than its timestamp.
 #[derive(Clone)]
 struct SaveOverride {
@@ -1439,12 +1439,12 @@ impl SaveOverride {
         Action::as_question(self.clone().into_box())
     }
 
-    fn into_box(self) -> Box<dyn Inquirer> {
+    fn into_box(self) -> Box<dyn Question> {
         Box::new(self)
     }
 }
 
-impl Inquirer for SaveOverride {
+impl Question for SaveOverride {
     fn prompt(&self) -> String {
         let source = source_of(&self.editor);
         format!("{source}: file in storage is newer, save anyway?")
@@ -1489,7 +1489,7 @@ fn kill_window(env: &mut Environment) -> Option<Action> {
     }
 }
 
-/// An inquirer that orchestrates the process of killing a window with a dirty editor
+/// A question that orchestrates the process of killing a window with a dirty editor
 /// attached.
 #[derive(Clone)]
 struct Kill {
@@ -1512,7 +1512,7 @@ impl Kill {
         Action::as_question(self.clone().into_box())
     }
 
-    fn into_box(self) -> Box<dyn Inquirer> {
+    fn into_box(self) -> Box<dyn Question> {
         Box::new(self)
     }
 
@@ -1535,7 +1535,7 @@ impl Kill {
     }
 }
 
-impl Inquirer for Kill {
+impl Question for Kill {
     fn prompt(&self) -> String {
         let source = source_of(&self.editor);
         format!("{source}: save?")
@@ -1559,7 +1559,7 @@ impl Inquirer for Kill {
     }
 }
 
-/// An inquirer spawned from [`Kill`] that orchestrates the saving of an editor whose
+/// A question spawned from [`Kill`] that orchestrates the saving of an editor whose
 /// corresponding file in storage is newer than its timestamp.
 #[derive(Clone)]
 struct KillOverride {
@@ -1582,7 +1582,7 @@ impl KillOverride {
         Action::as_question(self.clone().into_box())
     }
 
-    fn into_box(self) -> Box<dyn Inquirer> {
+    fn into_box(self) -> Box<dyn Question> {
         Box::new(self)
     }
 
@@ -1600,7 +1600,7 @@ impl KillOverride {
     }
 }
 
-impl Inquirer for KillOverride {
+impl Question for KillOverride {
     fn prompt(&self) -> String {
         let source = source_of(&self.editor);
         format!("{source}: file in storage is newer, save anyway?")
@@ -1734,7 +1734,7 @@ fn next_editor(env: &mut Environment) -> Option<Action> {
     None
 }
 
-/// An iquirer that orchetrates the selection of an editor by name, replacing the editor
+/// A question that orchetrates the selection of an editor by name, replacing the editor
 /// in the active window.
 struct SelectEditor {
     /// Unattached editors available for selection.
@@ -1752,12 +1752,12 @@ impl SelectEditor {
         Action::as_question(SelectEditor { editors, place }.into_box())
     }
 
-    fn into_box(self) -> Box<dyn Inquirer> {
+    fn into_box(self) -> Box<dyn Question> {
         Box::new(self)
     }
 }
 
-impl Inquirer for SelectEditor {
+impl Question for SelectEditor {
     fn prompt(&self) -> String {
         Self::PROMPT.to_string()
     }
