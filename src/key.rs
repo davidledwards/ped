@@ -55,6 +55,7 @@ pub const CTRL_E: Key = Key::Control(5);
 pub const CTRL_F: Key = Key::Control(6);
 pub const CTRL_G: Key = Key::Control(7);
 pub const TAB: Key = Key::Control(9);
+pub const SHIFT_TAB: Key = Key::ReverseTab;
 pub const CTRL_J: Key = Key::Control(10);
 pub const CTRL_K: Key = Key::Control(11);
 pub const CTRL_M: Key = Key::Control(13);

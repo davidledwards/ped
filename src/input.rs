@@ -11,7 +11,7 @@ use crate::canvas::Canvas;
 use crate::color::Color;
 use crate::key::*;
 use crate::size::{Point, Size};
-use crate::user::{self, Completer, Question};
+use crate::user::{self, Completer, Question, Suggest};
 use crate::workspace::WorkspaceRef;
 use crate::writer::Writer;
 use std::cmp;
@@ -254,7 +254,11 @@ impl InputEditor {
                 }
             }
             TAB => {
-                self.suggest();
+                self.suggest(Suggest::Forward);
+                self.draw_input();
+            }
+            SHIFT_TAB => {
+                self.suggest(Suggest::Backward);
                 self.draw_input();
             }
             CTRL_M => {
@@ -280,8 +284,8 @@ impl InputEditor {
 
     /// Calls the attached completer to make a suggestion based on the input value in
     /// its current form.
-    fn suggest(&mut self) {
-        match (self.completer).suggest(&self.value()) {
+    fn suggest(&mut self, suggest: Suggest) {
+        match (self.completer).suggest(&self.value(), suggest) {
             (replace @ Some(_), hint) => {
                 self.set_input(replace);
                 self.update_hint(hint);

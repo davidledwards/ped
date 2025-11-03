@@ -56,12 +56,13 @@ pub trait Completer {
     fn evaluate(&mut self, value: &str) -> Option<String>;
 
     /// Allows the completer to make a suggestion based on the input `value` in its
-    /// current form by returning a tuple containing an optional replacement value and
-    /// an optional hint.
+    /// current form and the directional nature of `suggest` by returning a tuple
+    /// containing an optional replacement value and an optional hint.
     ///
     /// Under normal circumstances, this method is called only when a request is made
-    /// by the user, such as pressing the TAB key.
-    fn suggest(&mut self, value: &str) -> (Option<String>, Option<String>);
+    /// by the user, such as pressing the TAB key (forward suggestion) or S-TAB key
+    /// (backward suggestion).
+    fn suggest(&mut self, value: &str, suggest: Suggest) -> (Option<String>, Option<String>);
 
     /// Allows the completer to accept, or not, the input `value` in its current form,
     /// returning `Some` with a possibly altered final form, or `None` if the value is
@@ -70,6 +71,12 @@ pub trait Completer {
     /// Under normal circumstances, this method is called only when the user requests
     /// that the input be accepted, such as pressing the RETURN key.
     fn accept(&mut self, value: &str) -> Option<String>;
+}
+
+/// Captures the directional notion of suggestions.
+pub enum Suggest {
+    Forward,
+    Backward,
 }
 
 /// Returns an implementation of [`Completer`] that essentially provides no assistance
@@ -118,7 +125,7 @@ impl Completer for NullCompleter {
         None
     }
 
-    fn suggest(&mut self, _: &str) -> (Option<String>, Option<String>) {
+    fn suggest(&mut self, _: &str, _: Suggest) -> (Option<String>, Option<String>) {
         (None, None)
     }
 
@@ -157,7 +164,7 @@ impl Completer for YesNoCompleter {
         }
     }
 
-    fn suggest(&mut self, _: &str) -> (Option<String>, Option<String>) {
+    fn suggest(&mut self, _: &str, _: Suggest) -> (Option<String>, Option<String>) {
         (None, self.hint.clone())
     }
 
@@ -200,7 +207,7 @@ impl Completer for YesNoAllCompleter {
         }
     }
 
-    fn suggest(&mut self, _: &str) -> (Option<String>, Option<String>) {
+    fn suggest(&mut self, _: &str, _: Suggest) -> (Option<String>, Option<String>) {
         (None, self.hint.clone())
     }
 
@@ -240,7 +247,7 @@ impl Completer for NumberCompleter {
         }
     }
 
-    fn suggest(&mut self, _: &str) -> (Option<String>, Option<String>) {
+    fn suggest(&mut self, _: &str, _: Suggest) -> (Option<String>, Option<String>) {
         (None, None)
     }
 
@@ -311,7 +318,7 @@ impl Completer for ListCompleter {
         Some(hint)
     }
 
-    fn suggest(&mut self, _: &str) -> (Option<String>, Option<String>) {
+    fn suggest(&mut self, _: &str, _: Suggest) -> (Option<String>, Option<String>) {
         let count = self.matches.len();
         if count == 0 {
             (None, Some(" (no matches)".to_string()))
@@ -434,7 +441,7 @@ impl Completer for FileCompleter {
         }
     }
 
-    fn suggest(&mut self, value: &str) -> (Option<String>, Option<String>) {
+    fn suggest(&mut self, value: &str, _: Suggest) -> (Option<String>, Option<String>) {
         if value == "~/" {
             // A special case where input value references home directory, which is
             // not recognized by file system operations. In this case, the value is
