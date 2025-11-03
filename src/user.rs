@@ -318,7 +318,7 @@ impl Completer for ListCompleter {
         Some(hint)
     }
 
-    fn suggest(&mut self, _: &str, _: Suggest) -> (Option<String>, Option<String>) {
+    fn suggest(&mut self, _: &str, suggest: Suggest) -> (Option<String>, Option<String>) {
         let count = self.matches.len();
         if count == 0 {
             (None, Some(" (no matches)".to_string()))
@@ -327,7 +327,10 @@ impl Completer for ListCompleter {
             (Some(replace), None)
         } else {
             let index = if let Some(index) = self.last_match {
-                (index + 1) % count
+                match suggest {
+                    Suggest::Forward => (index + 1) % count,
+                    Suggest::Backward => (index + count - 1) % count,
+                }
             } else {
                 0
             };
