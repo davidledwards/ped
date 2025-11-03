@@ -25,7 +25,7 @@ pub fn quit(env: &Environment) -> Option<Action> {
     }
 }
 
-fn quit_continue(dirty: &Vec<EditorRef>) -> Option<Action> {
+fn quit_continue(dirty: &[EditorRef]) -> Option<Action> {
     if dirty.len() > 1 {
         let dirty = dirty[1..].to_vec();
         Action::question(Quit::new(dirty).into())

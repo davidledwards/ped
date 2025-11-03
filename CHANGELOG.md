@@ -2,6 +2,12 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
+### [0.33.0](https://github.com/davidledwards/ped/tree/v0.33.0) | `2025-11-03`
+
+#### Added
+
+- Support for `S-tab` in user input to traverse backwards through suggestions
+
 ### [0.32.0](https://github.com/davidledwards/ped/tree/v0.32.0) | `2025-11-02`
 
 #### Fixed
