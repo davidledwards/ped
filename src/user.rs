@@ -444,7 +444,7 @@ impl Completer for FileCompleter {
         }
     }
 
-    fn suggest(&mut self, value: &str, _: Suggest) -> (Option<String>, Option<String>) {
+    fn suggest(&mut self, value: &str, suggest: Suggest) -> (Option<String>, Option<String>) {
         if value == "~/" {
             // A special case where input value references home directory, which is
             // not recognized by file system operations. In this case, the value is
@@ -473,7 +473,10 @@ impl Completer for FileCompleter {
                 // Keep track of index when scrolling through matches, though note this
                 // is only necessary when number of matches more than one.
                 let index = if let Some(index) = self.last_match {
-                    (index + 1) % count
+                    match suggest {
+                        Suggest::Forward => (index + 1) % count,
+                        Suggest::Backward => (index + count - 1) % count,
+                    }
                 } else {
                     0
                 };
