@@ -25,6 +25,15 @@ pub fn quit(env: &Environment) -> Option<Action> {
     }
 }
 
+fn quit_continue(dirty: &Vec<EditorRef>) -> Option<Action> {
+    if dirty.len() > 1 {
+        let dirty = dirty[1..].to_vec();
+        Action::question(Quit::new(dirty).into())
+    } else {
+        Action::quit()
+    }
+}
+
 fn quit_override(dirty: Vec<EditorRef>) -> Option<Action> {
     Action::question(QuitOverride::new(dirty).into())
 }
@@ -115,16 +124,6 @@ impl Quit {
         Quit { dirty }
     }
 
-    /// Continues the process of saving editors if `dirty` is not empty.
-    fn next(dirty: &[EditorRef]) -> Option<Action> {
-        if dirty.len() > 1 {
-            let dirty = dirty[1..].to_vec();
-            Action::question(Quit::new(dirty).into())
-        } else {
-            Action::quit()
-        }
-    }
-
     /// Saves the first dirty editor and then continues to the next editor.
     fn save_first(&mut self) -> Option<Action> {
         let editor = &self.dirty[0];
@@ -134,7 +133,7 @@ impl Quit {
                 if let Err(e) = ed::save_editor(editor) {
                     Action::echo(&e)
                 } else {
-                    Self::next(&self.dirty)
+                    quit_continue(&self.dirty)
                 }
             }
             Err(e) => Action::echo(&e),
@@ -179,7 +178,7 @@ impl Question for Quit {
         match value {
             Some("y") => self.save_first(),
             Some("a") => self.save_all(),
-            Some("n") => Self::next(&self.dirty),
+            Some("n") => quit_continue(&self.dirty),
             Some(_) => quit(env),
             None => None,
         }
@@ -201,7 +200,7 @@ impl QuitOverride {
         if let Err(e) = ed::save_editor(&self.dirty[0]) {
             Action::echo(&e)
         } else {
-            Quit::next(&self.dirty)
+            quit_continue(&self.dirty)
         }
     }
 }
@@ -219,7 +218,7 @@ impl Question for QuitOverride {
     fn respond(&mut self, _: &mut Environment, value: Option<&str>) -> Option<Action> {
         match value {
             Some("y") => self.save(),
-            Some("n") => Quit::next(&self.dirty),
+            Some("n") => quit_continue(&self.dirty),
             Some(_) => repeat_question(self),
             None => None,
         }
@@ -894,7 +893,7 @@ impl Question for Select {
                     None
                 }
             } else {
-                Action::echo("{value}: editor not found")
+                Action::echo(&format!("{value}: editor not found"))
             }
         } else {
             None

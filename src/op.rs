@@ -75,7 +75,7 @@ where
             env.set_active(Focus::To(view_id));
             None
         } else {
-            echo_no_window()
+            Action::echo("unable to create new window")
         }
     } else {
         let config = env.workspace.borrow().config.clone();
@@ -85,7 +85,7 @@ where
             env.set_active(Focus::To(view_id));
             None
         } else {
-            echo_no_window()
+            Action::echo("unable to create new window")
         }
     }
 }
@@ -415,7 +415,7 @@ pub fn insert_char(env: &mut Environment, c: char) -> Option<Action> {
         editor.render();
         None
     } else {
-        echo_readonly()
+        Action::echo("editor is readonly")
     }
 }
 
@@ -428,7 +428,7 @@ fn insert_line(env: &mut Environment) -> Option<Action> {
         editor.render();
         None
     } else {
-        echo_readonly()
+        Action::echo("editor is readonly")
     }
 }
 
@@ -441,7 +441,7 @@ fn insert_tab(env: &mut Environment) -> Option<Action> {
         editor.render();
         None
     } else {
-        echo_readonly()
+        Action::echo("editor is readonly")
     }
 }
 
@@ -489,7 +489,7 @@ fn remove_after(env: &mut Environment) -> Option<Action> {
         editor.render();
         None
     } else {
-        echo_readonly()
+        Action::echo("editor is readonly")
     }
 }
 
@@ -502,7 +502,7 @@ fn remove_start(env: &mut Environment) -> Option<Action> {
         editor.render();
         None
     } else {
-        echo_readonly()
+        Action::echo("editor is readonly")
     }
 }
 
@@ -515,7 +515,7 @@ fn remove_end(env: &mut Environment) -> Option<Action> {
         editor.render();
         None
     } else {
-        echo_readonly()
+        Action::echo("editor is readonly")
     }
 }
 
@@ -586,7 +586,7 @@ fn paste_from(env: &mut Environment, scope: Scope) -> Option<Action> {
         }
         None
     } else {
-        echo_readonly()
+        Action::echo("editor is readonly")
     }
 }
 
@@ -622,7 +622,7 @@ fn cut_to(env: &mut Environment, scope: Scope) -> Option<Action> {
         env.clipboard.set_text(text, scope);
         None
     } else {
-        echo_readonly()
+        Action::echo("editor is readonly")
     }
 }
 
@@ -747,7 +747,7 @@ fn kill_window(env: &mut Environment) -> Option<Action> {
             None
         }
     } else {
-        echo_cannot_close()
+        Action::echo("cannot close only window")
     }
 }
 
@@ -756,7 +756,7 @@ fn close_window(env: &mut Environment) -> Option<Action> {
     if env.close_window().is_some() {
         None
     } else {
-        echo_cannot_close()
+        Action::echo("cannot close only window")
     }
 }
 
@@ -805,7 +805,7 @@ fn select_editor(env: &mut Environment) -> Option<Action> {
     if editors.len() > 0 {
         question::select(editors, None)
     } else {
-        echo_no_editors()
+        Action::echo("no more editors")
     }
 }
 
@@ -815,7 +815,7 @@ fn select_editor_top(env: &mut Environment) -> Option<Action> {
     if editors.len() > 0 {
         question::select(editors, Some(Placement::Top))
     } else {
-        echo_no_editors()
+        Action::echo("no more editors")
     }
 }
 
@@ -825,7 +825,7 @@ fn select_editor_bottom(env: &mut Environment) -> Option<Action> {
     if editors.len() > 0 {
         question::select(editors, Some(Placement::Bottom))
     } else {
-        echo_no_editors()
+        Action::echo("no more editors")
     }
 }
 
@@ -835,7 +835,7 @@ fn select_editor_above(env: &mut Environment) -> Option<Action> {
     if editors.len() > 0 {
         question::select(editors, Some(Placement::Above(env.get_active_view_id())))
     } else {
-        echo_no_editors()
+        Action::echo("no more editors")
     }
 }
 
@@ -845,7 +845,7 @@ fn select_editor_below(env: &mut Environment) -> Option<Action> {
     if editors.len() > 0 {
         question::select(editors, Some(Placement::Below(env.get_active_view_id())))
     } else {
-        echo_no_editors()
+        Action::echo("no more editors")
     }
 }
 
@@ -1006,22 +1006,6 @@ pub fn set_focus(env: &mut Environment, p: Point) {
         editor.set_focus(cursor);
         editor.render();
     }
-}
-
-fn echo_readonly() -> Option<Action> {
-    Action::echo("editor is readonly")
-}
-
-fn echo_no_window() -> Option<Action> {
-    Action::echo("unable to create new window")
-}
-
-fn echo_cannot_close() -> Option<Action> {
-    Action::echo("cannot close only window")
-}
-
-fn echo_no_editors() -> Option<Action> {
-    Action::echo("no more editors")
 }
 
 /// Predefined mapping of editing operations to editing functions.
