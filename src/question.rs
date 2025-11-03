@@ -17,47 +17,60 @@ use std::path::{Path, PathBuf};
 /// Returns a question that orchestrates the _quit_ process, which may involve saving dirty
 /// editors derived from `env`.
 pub fn quit(env: &Environment) -> Option<Action> {
-    Quit::new(env)
+    let dirty = ed::dirty_editors(env);
+    if dirty.len() > 0 {
+        Action::question(Quit::new(dirty).into())
+    } else {
+        Action::quit()
+    }
+}
+
+fn quit_override(dirty: Vec<EditorRef>) -> Option<Action> {
+    Action::question(QuitOverride::new(dirty).into())
 }
 
 /// Returns a question that orchestrates moving the cursor in `editor` to a specific line.
 pub fn goto_line(editor: EditorRef) -> Option<Action> {
-    GotoLine::new(editor)
+    Action::question(GotoLine::new(editor).into())
 }
 
 /// Returns a question that inserts a Unicode character into `editor`, where `radix`
 /// defines the base of the user-provided code point.
 pub fn insert_unicode(editor: EditorRef, radix: u32) -> Option<Action> {
-    InsertUnicode::new(editor, radix)
+    Action::question(InsertUnicode::new(editor, radix).into())
 }
 
 /// Returns a question that incrementally searches `editor` for matches of the user-provided
 /// term, and where `case_strict` determines case-sensitivity.
 pub fn search_term(editor: EditorRef, case_strict: bool) -> Option<Action> {
-    Search::new(editor, false, case_strict)
+    Action::question(Search::new(editor, false, case_strict).into())
 }
 
 /// Returns a question that incrementally searches `editor` for matches of the user-provided
 /// regular expression, and where `case_strict` determines case-sensitivity.
 pub fn search_regex(editor: EditorRef, case_strict: bool) -> Option<Action> {
-    Search::new(editor, true, case_strict)
+    Action::question(Search::new(editor, true, case_strict).into())
 }
 
 /// Returns a question that orchestrates the process of opening a file relative to `dir`
 /// and whose optional `place` determines the relative placement of a new window.
 pub fn open(dir: PathBuf, place: Option<Placement>) -> Option<Action> {
-    Open::new(dir, place)
+    Action::question(Open::new(dir, place).into())
 }
 
 /// Returns a question that orchestrates the process of saving `editor`.
 pub fn save(editor: EditorRef) -> Option<Action> {
-    Save::new(editor)
+    Action::question(Save::new(editor).into())
+}
+
+fn save_exists(editor: EditorRef, path: String) -> Option<Action> {
+    Action::question(SaveExists::new(editor, path).into())
 }
 
 /// Returns a question that orchestrates the saving of `editor` whose corresponding file in
 /// storage is newer than its timestamp.
 pub fn save_override(editor: EditorRef) -> Option<Action> {
-    SaveOverride::new(editor)
+    Action::question(SaveOverride::new(editor).into())
 }
 
 /// Saves `editor` and returns a corresponding _echo_ action.
@@ -68,19 +81,27 @@ pub fn save_now(editor: &EditorRef) -> Option<Action> {
 /// Returns a question that orchestrates the killing of `editor` and closing its window
 /// or optionally switching to another editor.
 pub fn kill(editor: EditorRef, close_and_switch: Option<(u32, u32)>) -> Option<Action> {
-    Kill::new(editor, close_and_switch)
+    Action::question(Kill::new(editor, close_and_switch).into())
+}
+
+fn kill_override(editor: EditorRef, close_and_switch: Option<(u32, u32)>) -> Option<Action> {
+    Action::question(KillOverride::new(editor, close_and_switch).into())
 }
 
 /// Returns a question that orchetrates the selection of an editor in `editors` by name,
 /// optionally opening a new window whose placement is defined by `place`.
 pub fn select(editors: Vec<(u32, EditorRef)>, place: Option<Placement>) -> Option<Action> {
-    Select::new(editors, place)
+    Action::question(Select::new(editors, place).into())
 }
 
 impl<T: Question + 'static> From<T> for Box<dyn Question> {
     fn from(value: T) -> Self {
         Box::new(value)
     }
+}
+
+fn repeat_question<T: Question + Clone + 'static>(question: &mut T) -> Option<Action> {
+    Action::question(question.clone().into())
 }
 
 struct Quit {
@@ -90,20 +111,15 @@ struct Quit {
 
 impl Quit {
     /// Starts the process of saving dirty editors before quitting.
-    fn new(env: &Environment) -> Option<Action> {
-        let dirty = ed::dirty_editors(env);
-        if dirty.len() > 0 {
-            Action::question(Quit { dirty }.into())
-        } else {
-            Action::quit()
-        }
+    fn new(dirty: Vec<EditorRef>) -> Quit {
+        Quit { dirty }
     }
 
     /// Continues the process of saving editors if `dirty` is not empty.
     fn next(dirty: &[EditorRef]) -> Option<Action> {
         if dirty.len() > 1 {
             let dirty = dirty[1..].to_vec();
-            Action::question(Quit { dirty }.into())
+            Action::question(Quit::new(dirty).into())
         } else {
             Action::quit()
         }
@@ -113,7 +129,7 @@ impl Quit {
     fn save_first(&mut self) -> Option<Action> {
         let editor = &self.dirty[0];
         match ed::stale_editor(editor) {
-            Ok(true) => QuitOverride::new(self.dirty.clone()),
+            Ok(true) => quit_override(self.dirty.clone()),
             Ok(false) => {
                 if let Err(e) = ed::save_editor(editor) {
                     Action::echo(&e)
@@ -133,7 +149,7 @@ impl Quit {
                 Ok(true) => {
                     let mut dirty = vec![editor.clone()];
                     dirty.extend(dirty_iter.cloned());
-                    return QuitOverride::new(dirty);
+                    return quit_override(dirty);
                 }
                 Ok(false) => {
                     if let Err(e) = ed::save_editor(editor) {
@@ -164,7 +180,7 @@ impl Question for Quit {
             Some("y") => self.save_first(),
             Some("a") => self.save_all(),
             Some("n") => Self::next(&self.dirty),
-            Some(_) => Self::new(env),
+            Some(_) => quit(env),
             None => None,
         }
     }
@@ -177,12 +193,8 @@ struct QuitOverride {
 }
 
 impl QuitOverride {
-    fn new(dirty: Vec<EditorRef>) -> Option<Action> {
-        Action::question(QuitOverride { dirty }.into())
-    }
-
-    fn again(&self) -> Option<Action> {
-        Action::question(self.clone().into())
+    fn new(dirty: Vec<EditorRef>) -> QuitOverride {
+        QuitOverride { dirty }
     }
 
     fn save(&mut self) -> Option<Action> {
@@ -208,7 +220,7 @@ impl Question for QuitOverride {
         match value {
             Some("y") => self.save(),
             Some("n") => Quit::next(&self.dirty),
-            Some(_) => self.again(),
+            Some(_) => repeat_question(self),
             None => None,
         }
     }
@@ -226,9 +238,9 @@ impl GotoLine {
     const PROMPT: &str = "goto line:";
     const INVALID_HINT: &str = " (invalid)";
 
-    fn new(editor: EditorRef) -> Option<Action> {
+    fn new(editor: EditorRef) -> GotoLine {
         let capture = editor.borrow().capture();
-        Action::question(GotoLine { editor, capture }.into())
+        GotoLine { editor, capture }
     }
 
     fn restore(&mut self) {
@@ -284,9 +296,9 @@ struct InsertUnicode {
 impl InsertUnicode {
     const INVALID_HINT: &str = " (invalid)";
 
-    fn new(editor: EditorRef, radix: u32) -> Option<Action> {
+    fn new(editor: EditorRef, radix: u32) -> InsertUnicode {
         debug_assert!(radix == 10 || radix == 16);
-        Action::question(InsertUnicode { editor, radix }.into())
+        InsertUnicode { editor, radix }
     }
 
     fn parse_code(&self, value: &str) -> Option<char> {
@@ -367,7 +379,7 @@ struct Search {
 }
 
 impl Search {
-    fn new(editor: EditorRef, using_regex: bool, case_strict: bool) -> Option<Action> {
+    fn new(editor: EditorRef, using_regex: bool, case_strict: bool) -> Search {
         let capture = editor.borrow().capture();
         let buf_cache = if using_regex {
             let buf = editor.borrow().buffer().iter().collect::<String>();
@@ -382,7 +394,7 @@ impl Search {
             (String::new(), None)
         } else {
             // Ignore selected text if any of its content contains control characters.
-            let last_value = capture
+            let last_value: String = capture
                 .mark
                 .map(|mark| editor.borrow().copy_mark(mark))
                 .and_then(|text| {
@@ -392,7 +404,7 @@ impl Search {
                         Some(text.iter().collect())
                     }
                 })
-                .unwrap_or_else(String::new);
+                .unwrap_or_default();
 
             // Prime search such that pressing TAB will find next match.
             let last_match = if last_value.len() > 0 {
@@ -403,18 +415,15 @@ impl Search {
             (last_value, last_match)
         };
 
-        Action::question(
-            Search {
-                editor,
-                capture,
-                using_regex,
-                case_strict,
-                buf_cache,
-                last_value,
-                last_match,
-            }
-            .into(),
-        )
+        Search {
+            editor,
+            capture,
+            using_regex,
+            case_strict,
+            buf_cache,
+            last_value,
+            last_match,
+        }
     }
 
     fn find_first(&mut self, value: &str) -> Option<String> {
@@ -533,8 +542,8 @@ struct Open {
 }
 
 impl Open {
-    fn new(dir: PathBuf, place: Option<Placement>) -> Option<Action> {
-        Action::question(Open { dir, place }.into())
+    fn new(dir: PathBuf, place: Option<Placement>) -> Open {
+        Open { dir, place }
     }
 
     fn open(&mut self, env: &mut Environment, path: &str) -> Option<Action> {
@@ -584,8 +593,8 @@ struct Save {
 }
 
 impl Save {
-    fn new(editor: EditorRef) -> Option<Action> {
-        Action::question(Save { editor }.into())
+    fn new(editor: EditorRef) -> Save {
+        Save { editor }
     }
 
     fn save_as(editor: &EditorRef, env: &mut Environment, path: &str) -> Option<Action> {
@@ -654,7 +663,7 @@ impl Question for Save {
     fn respond(&mut self, env: &mut Environment, value: Option<&str>) -> Option<Action> {
         if let Some(path) = value {
             if Path::new(path).exists() {
-                SaveExists::new(self.editor.clone(), path.to_string())
+                save_exists(self.editor.clone(), path.to_string())
             } else {
                 Self::save_as(&self.editor, env, path)
             }
@@ -674,12 +683,8 @@ struct SaveExists {
 }
 
 impl SaveExists {
-    fn new(editor: EditorRef, path: String) -> Option<Action> {
-        Action::question(SaveExists { editor, path }.into())
-    }
-
-    fn again(&self) -> Option<Action> {
-        Action::question(self.clone().into())
+    fn new(editor: EditorRef, path: String) -> SaveExists {
+        SaveExists { editor, path }
     }
 }
 
@@ -697,7 +702,7 @@ impl Question for SaveExists {
         match value {
             Some("y") => Save::save_as(&self.editor, env, &self.path),
             Some("n") => None,
-            Some(_) => self.again(),
+            Some(_) => repeat_question(self),
             None => None,
         }
     }
@@ -710,12 +715,8 @@ struct SaveOverride {
 }
 
 impl SaveOverride {
-    fn new(editor: EditorRef) -> Option<Action> {
-        Action::question(SaveOverride { editor }.into())
-    }
-
-    fn again(&self) -> Option<Action> {
-        Action::question(self.clone().into())
+    fn new(editor: EditorRef) -> SaveOverride {
+        SaveOverride { editor }
     }
 }
 
@@ -733,7 +734,7 @@ impl Question for SaveOverride {
         match value {
             Some("y") => Save::save(&self.editor),
             Some("n") => None,
-            Some(_) => self.again(),
+            Some(_) => repeat_question(self),
             None => None,
         }
     }
@@ -747,18 +748,11 @@ struct Kill {
 }
 
 impl Kill {
-    fn new(editor: EditorRef, close_and_switch: Option<(u32, u32)>) -> Option<Action> {
-        Action::question(
-            Kill {
-                editor,
-                close_and_switch,
-            }
-            .into(),
-        )
-    }
-
-    fn again(&self) -> Option<Action> {
-        Action::question(self.clone().into())
+    fn new(editor: EditorRef, close_and_switch: Option<(u32, u32)>) -> Kill {
+        Kill {
+            editor,
+            close_and_switch,
+        }
     }
 
     fn kill(&mut self, env: &mut Environment) -> Option<Action> {
@@ -793,12 +787,12 @@ impl Question for Kill {
     fn respond(&mut self, env: &mut Environment, value: Option<&str>) -> Option<Action> {
         match value {
             Some("y") => match ed::stale_editor(&self.editor) {
-                Ok(true) => KillOverride::new(self.editor.clone(), self.close_and_switch),
+                Ok(true) => kill_override(self.editor.clone(), self.close_and_switch),
                 Ok(false) => self.kill(env),
                 Err(e) => Action::echo(&e),
             },
             Some("n") => self.kill_only(env),
-            Some(_) => self.again(),
+            Some(_) => repeat_question(self),
             None => None,
         }
     }
@@ -812,18 +806,11 @@ struct KillOverride {
 }
 
 impl KillOverride {
-    fn new(editor: EditorRef, close_and_switch: Option<(u32, u32)>) -> Option<Action> {
-        Action::question(
-            KillOverride {
-                editor,
-                close_and_switch,
-            }
-            .into(),
-        )
-    }
-
-    fn again(&self) -> Option<Action> {
-        Action::question(self.clone().into())
+    fn new(editor: EditorRef, close_and_switch: Option<(u32, u32)>) -> KillOverride {
+        KillOverride {
+            editor,
+            close_and_switch,
+        }
     }
 
     fn kill(&mut self, env: &mut Environment) -> Option<Action> {
@@ -854,7 +841,7 @@ impl Question for KillOverride {
         match value {
             Some("y") => self.kill(env),
             Some("n") => None,
-            Some(_) => self.again(),
+            Some(_) => repeat_question(self),
             None => None,
         }
     }
@@ -872,8 +859,8 @@ struct Select {
 impl Select {
     const PROMPT: &str = "select editor:";
 
-    fn new(editors: Vec<(u32, EditorRef)>, place: Option<Placement>) -> Option<Action> {
-        Action::question(Select { editors, place }.into())
+    fn new(editors: Vec<(u32, EditorRef)>, place: Option<Placement>) -> Select {
+        Select { editors, place }
     }
 }
 

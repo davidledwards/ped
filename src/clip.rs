@@ -52,3 +52,9 @@ impl Clipboard {
         }
     }
 }
+
+impl Default for Clipboard {
+    fn default() -> Self {
+        Clipboard::new()
+    }
+}
