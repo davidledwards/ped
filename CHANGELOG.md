@@ -2,6 +2,12 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
+### [0.34.0](https://github.com/davidledwards/ped/tree/v0.34.0) | `2025-11-06`
+
+#### Added
+
+- Support for `S-tab` to step backwards through search matches that accumulate when using `tab` to find forward matches
+
 ### [0.33.0](https://github.com/davidledwards/ped/tree/v0.33.0) | `2025-11-03`
 
 #### Added

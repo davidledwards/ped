@@ -3,7 +3,7 @@
 use crate::ed;
 use crate::editor::{Align, Capture, EditorRef, ImmutableEditor};
 use crate::env::{Environment, Focus};
-use crate::key::{Key, TAB};
+use crate::key::{Key, SHIFT_TAB, TAB};
 use crate::operation::Action;
 use crate::search::{self, Pattern};
 use crate::source::Source;
@@ -370,11 +370,23 @@ struct Search {
     /// limitation of current regex library.
     buf_cache: Option<String>,
 
+    /// List of pairs containing starting and ending buffer positions of matches
+    /// pertaining to `last_value`.
+    ///
+    /// Note that matches build incrementally, so list is not necessarily exhaustive of
+    /// all possible matches.
+    ///
+    /// It must hold true that all start positions in this vector are strictly
+    /// monotonically increasing. This property is intuitive because subsequent matches
+    /// are always further along in buffer.
+    match_cache: Vec<(usize, usize)>,
+
+    /// A pair containing an index into `match_cache` representing the current match
+    /// position and the applicable pattern, or `None` if nothing matches `pattern`.
+    match_index: Option<(usize, Box<dyn Pattern>)>,
+
     /// Most recently seen value of input.
     last_value: String,
-
-    /// Position and pattern of most recent match.
-    last_match: Option<(usize, Box<dyn Pattern>)>,
 }
 
 impl Search {
@@ -389,11 +401,11 @@ impl Search {
 
         // Use selected text if present to initialize search term, though ignore if
         // regular expression being used.
-        let (last_value, last_match) = if using_regex {
-            (String::new(), None)
+        let last_value = if using_regex {
+            String::new()
         } else {
             // Ignore selected text if any of its content contains control characters.
-            let last_value: String = capture
+            capture
                 .mark
                 .map(|mark| editor.borrow().copy_mark(mark))
                 .and_then(|text| {
@@ -403,15 +415,17 @@ impl Search {
                         Some(text.iter().collect())
                     }
                 })
-                .unwrap_or_default();
+                .unwrap_or_default()
+        };
 
-            // Prime search such that pressing TAB will find next match.
-            let last_match = if last_value.len() > 0 {
-                Some((capture.pos, search::using_term(&last_value, case_strict)))
-            } else {
-                None
-            };
-            (last_value, last_match)
+        // Prime search such that pressing TAB will find next match.
+        let (match_cache, match_index) = if last_value.len() > 0 {
+            let start_pos = capture.pos;
+            let end_pos = start_pos + last_value.len();
+            let pattern = search::using_term(&last_value, case_strict);
+            (vec![(start_pos, end_pos)], Some((0, pattern)))
+        } else {
+            (vec![], None)
         };
 
         Search {
@@ -420,49 +434,101 @@ impl Search {
             using_regex,
             case_strict,
             buf_cache,
+            match_cache,
+            match_index,
             last_value,
-            last_match,
         }
     }
 
     fn find_first(&mut self, value: &str) -> Option<String> {
+        self.match_cache.clear();
         let pattern = if self.using_regex {
             // Compile regular expression, which might fail if malformed
             // or too large, the latter of which is unlikely in practice.
-            let regex = RegexBuilder::new(value)
+            RegexBuilder::new(value)
                 .case_insensitive(!self.case_strict)
                 .multi_line(true)
-                .build();
-            if let Ok(regex) = regex {
-                search::using_regex(regex)
-            } else {
-                return Some(" (no match)".to_string());
-            }
+                .build()
+                .map(|regex| search::using_regex(regex))
+                .ok()
         } else {
-            search::using_term(value, self.case_strict)
+            Some(search::using_term(value, self.case_strict))
         };
-
-        self.find_next(self.capture.pos, pattern)
+        self.match_index = if let Some(pattern) = pattern
+            && let Some((start_pos, end_pos)) = self.find_match(&pattern, self.capture.pos)
+        {
+            self.highlight_match(start_pos, end_pos);
+            self.match_cache.push((start_pos, end_pos));
+            Some((0, pattern))
+        } else {
+            None
+        };
+        self.match_hint()
     }
 
-    fn find_next(&mut self, pos: usize, pattern: Box<dyn Pattern>) -> Option<String> {
-        // Find next match and highlight if found.
-        let found = if let Some(buf) = &self.buf_cache {
+    fn find_next(&mut self) -> Option<String> {
+        self.match_index = match self.match_index.take() {
+            Some((index, pattern)) if index == self.match_cache.len() - 1 => {
+                // Find next match position since current index at end of cache.
+                let pos = self.match_cache[index].0 + 1;
+                if let Some((start_pos, end_pos)) = self.find_match(&pattern, pos) {
+                    self.highlight_match(start_pos, end_pos);
+                    if start_pos == self.match_cache[0].0 {
+                        // Next match essentially wrapped.
+                        Some((0, pattern))
+                    } else {
+                        // Add next match to cache.
+                        self.match_cache.push((start_pos, end_pos));
+                        Some((index + 1, pattern))
+                    }
+                } else {
+                    None
+                }
+            }
+            Some((index, pattern)) => {
+                // Next match position already cached.
+                let (start_pos, end_pos) = self.match_cache[index + 1];
+                self.highlight_match(start_pos, end_pos);
+                Some((index + 1, pattern))
+            }
+            None => None,
+        };
+        self.match_hint()
+    }
+
+    fn find_prev(&mut self) -> Option<String> {
+        self.match_index = match self.match_index.take() {
+            Some((index, pattern)) => {
+                let index = index.saturating_sub(1);
+                let (start_pos, end_pos) = self.match_cache[index];
+                self.highlight_match(start_pos, end_pos);
+                Some((index, pattern))
+            }
+            None => None,
+        };
+        self.match_hint()
+    }
+
+    fn find_match(&self, pattern: &Box<dyn Pattern>, pos: usize) -> Option<(usize, usize)> {
+        if let Some(buf) = &self.buf_cache {
             pattern.find_str(buf, pos)
         } else {
             pattern.find(&self.editor.borrow().buffer(), pos)
-        };
+        }
+    }
 
-        if let Some((start_pos, end_pos)) = found {
-            let mut editor = self.editor.borrow_mut();
-            editor.move_to(start_pos, Align::Center);
-            editor.clear_mark();
-            editor.set_soft_mark_at(end_pos);
-            editor.render();
-            self.last_match = Some((start_pos, pattern));
-            None
-        } else {
-            Some(" (no match)".to_string())
+    fn highlight_match(&mut self, start_pos: usize, end_pos: usize) {
+        let mut editor = self.editor.borrow_mut();
+        editor.move_to(start_pos, Align::Center);
+        editor.clear_mark();
+        editor.set_soft_mark_at(end_pos);
+        editor.render();
+    }
+
+    fn match_hint(&self) -> Option<String> {
+        match self.match_index {
+            Some(_) => None,
+            None => Some(" (no match)".to_string()),
         }
     }
 
@@ -492,20 +558,12 @@ impl Question for Search {
 
     fn react(&mut self, _: &mut Environment, value: &str, key: &Key) -> Option<String> {
         if *key == TAB {
-            match self.last_match.take() {
-                Some((pos, pattern)) => self.find_next(pos + 1, pattern),
-                None => {
-                    if value.len() > 0 {
-                        Some(" (no match)".to_string())
-                    } else {
-                        None
-                    }
-                }
-            }
+            self.find_next()
+        } else if *key == SHIFT_TAB {
+            self.find_prev()
         } else if value == self.last_value {
             None
         } else {
-            self.last_match = None;
             let hint = if value.len() > 0 {
                 self.find_first(value)
             } else {
@@ -518,13 +576,13 @@ impl Question for Search {
     }
 
     fn respond(&mut self, _: &mut Environment, value: Option<&str>) -> Option<Action> {
-        match value {
-            Some(value) if value.len() > 0 => {
-                if let Some((pos, pattern)) = self.last_match.take() {
-                    self.editor.borrow_mut().set_last_match(pos, pattern);
-                }
-            }
-            _ => self.restore(),
+        if let Some(value) = value
+            && value.len() > 0
+            && let Some((pos, pattern)) = self.match_index.take()
+        {
+            self.editor.borrow_mut().set_last_match(pos, pattern);
+        } else {
+            self.restore();
         }
         None
     }
