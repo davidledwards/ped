@@ -2,6 +2,7 @@
 name = "ped"
 version = "0.34.0"
 edition = "2024"
+rust-version = "1.91"
 authors = ["David Edwards <david.l.edwards@gmail.com>"]
 description = "The pedestrian text editor"
 readme = "README.md"
@@ -14,7 +15,7 @@ libc = "0.2"
 toml = "0.9"
 regex-lite = "0.1"
 serde = { version = "1.0", features = ["derive"] }
-indexmap = { version = "2.7", features = ["serde"] }
+indexmap = { version = "2.12", features = ["serde"] }
 arboard = "3.6"
 
 [profile.release]

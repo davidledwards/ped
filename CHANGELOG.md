@@ -6,7 +6,7 @@ This file contains relevant information for each release. Please refer to the co
 
 #### Added
 
-- Support for `S-tab` to step backwards through search matches that accumulate when using `tab` to find forward matches
+- Support for `S-tab` to step backwards through matches that accumulate during incremental searching when using `tab` to find next matches
 
 ### [0.33.0](https://github.com/davidledwards/ped/tree/v0.33.0) | `2025-11-03`
 
