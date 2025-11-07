@@ -578,9 +578,11 @@ impl Question for Search {
     fn respond(&mut self, _: &mut Environment, value: Option<&str>) -> Option<Action> {
         if let Some(value) = value
             && value.len() > 0
-            && let Some((pos, pattern)) = self.match_index.take()
+            && let Some((index, pattern)) = self.match_index.take()
         {
-            self.editor.borrow_mut().set_last_match(pos, pattern);
+            self.editor
+                .borrow_mut()
+                .set_last_match(self.match_cache[index].0, pattern);
         } else {
             self.restore();
         }
