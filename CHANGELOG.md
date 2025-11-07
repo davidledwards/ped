@@ -2,6 +2,12 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
+### [0.34.1](https://github.com/davidledwards/ped/tree/v0.34.1) | `2025-11-07`
+
+#### Fixed
+
+- When finding the next match via `search-next`, particularly when following a prior `search-*` operation, the search was not starting from the prior match position but rather the beginning of the buffer
+
 ### [0.34.0](https://github.com/davidledwards/ped/tree/v0.34.0) | `2025-11-06`
 
 #### Added
