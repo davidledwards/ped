@@ -449,13 +449,13 @@ impl Search {
                 .case_insensitive(!self.case_strict)
                 .multi_line(true)
                 .build()
-                .map(|regex| search::using_regex(regex))
+                .map(search::using_regex)
                 .ok()
         } else {
             Some(search::using_term(value, self.case_strict))
         };
         self.match_index = if let Some(pattern) = pattern
-            && let Some((start_pos, end_pos)) = self.find_match(&pattern, self.capture.pos)
+            && let Some((start_pos, end_pos)) = self.find_match(&*pattern, self.capture.pos)
         {
             self.highlight_match(start_pos, end_pos);
             self.match_cache.push((start_pos, end_pos));
@@ -471,7 +471,7 @@ impl Search {
             Some((index, pattern)) if index == self.match_cache.len() - 1 => {
                 // Find next match position since current index at end of cache.
                 let pos = self.match_cache[index].0 + 1;
-                if let Some((start_pos, end_pos)) = self.find_match(&pattern, pos) {
+                if let Some((start_pos, end_pos)) = self.find_match(&*pattern, pos) {
                     self.highlight_match(start_pos, end_pos);
                     if start_pos == self.match_cache[0].0 {
                         // Next match essentially wrapped.
@@ -509,7 +509,7 @@ impl Search {
         self.match_hint()
     }
 
-    fn find_match(&self, pattern: &Box<dyn Pattern>, pos: usize) -> Option<(usize, usize)> {
+    fn find_match(&self, pattern: &dyn Pattern, pos: usize) -> Option<(usize, usize)> {
         if let Some(buf) = &self.buf_cache {
             pattern.find_str(buf, pos)
         } else {
