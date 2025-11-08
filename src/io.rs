@@ -24,10 +24,12 @@ pub fn read_file<P: AsRef<Path>>(path: P, buf: &mut Buffer) -> Result<usize> {
 
 /// Creates a new file at `path` and writes the contents of `buf`, returning the
 /// number of bytes written.
-pub fn write_file<P: AsRef<Path>>(path: P, buf: &Buffer) -> Result<usize> {
+///
+/// All `\n` characters are converted to `\r\n` if `crlf` is `true`.
+pub fn write_file<P: AsRef<Path>>(path: P, buf: &Buffer, crlf: bool) -> Result<usize> {
     let file = create_file(&path)?;
     let mut writer = BufWriter::with_capacity(BUFFER_SIZE, file);
-    buf.write(&mut writer).map_err(|e| to_error(e, path))
+    buf.write(&mut writer, crlf).map_err(|e| to_error(e, path))
 }
 
 /// Opens the file at `path` for reading.

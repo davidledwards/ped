@@ -324,17 +324,22 @@ impl Buffer {
     {
         // Approximate number of characters to decode from reader before inserting
         // into buffer.
-        const READ_CHUNK_SIZE: usize = 16_384;
+        const READ_CHUNK_SIZE: usize = 65_536;
 
         let mut chunk = String::with_capacity(READ_CHUNK_SIZE);
         let mut count = 0;
 
         loop {
             let n = reader.read_line(&mut chunk)?;
+            // Automatically convert CRLF end-of-line sequences to LF.
+            if chunk.ends_with("\r\n") {
+                chunk.truncate(chunk.len() - 2);
+                chunk.push('\n');
+            }
+            // Inserts chunk into buffer when either condition occurs:
+            // - enough characters have been read to reach trigger, or
+            // - reader has reached EOF
             if (n > 0 && chunk.len() >= READ_CHUNK_SIZE) || n == 0 {
-                // Inserts chunk into buffer when either condition occurs:
-                // - enough characters have been read to reach trigger, or
-                // - reader has reached EOF
                 let cs = chunk.chars().collect::<Vec<_>>();
                 let _ = self.insert(&cs);
                 count += cs.len();
@@ -349,7 +354,9 @@ impl Buffer {
 
     /// Writes all characters in the buffer to `writer` and returns the total number of
     /// UTF-8 encoded bytes written.
-    pub fn write<W>(&self, writer: &mut W) -> Result<usize>
+    ///
+    /// All `\n` characters are converted to `\r\n` if `crlf` is `true`.
+    pub fn write<W>(&self, writer: &mut W, crlf: bool) -> Result<usize>
     where
         W: Write,
     {
@@ -362,13 +369,17 @@ impl Buffer {
 
         for pos in 0..self.size {
             let c = self.get_char_unchecked(pos);
+            if *c == '\n' && crlf {
+                let encoding = '\r'.encode_utf8(&mut bytes);
+                chunk.extend_from_slice(encoding.as_bytes());
+            }
             let encoding = c.encode_utf8(&mut bytes);
             chunk.extend_from_slice(encoding.as_bytes());
+            // Sends chunk of encoded characters to writer when either condition
+            // occurs:
+            // - enough bytes have been encoded to reach trigger, or
+            // - end of buffer
             if chunk.len() >= WRITE_CHUNK_SIZE || pos == self.size - 1 {
-                // Sends chunk of encoded characters to writer when either condition
-                // occurs:
-                // - enough bytes have been encoded to reach trigger, or
-                // - end of buffer
                 writer.write_all(chunk.as_slice())?;
                 count += chunk.len();
                 chunk.clear();
@@ -886,10 +897,26 @@ mod tests {
         let _ = buf.insert_str(TEXT);
         let mut writer = Cursor::new(Vec::new());
 
-        let n = buf.write(&mut writer).unwrap();
+        let n = buf.write(&mut writer, false).unwrap();
         assert_eq!(n, TEXT.len());
 
         for (a, b) in zip(writer.into_inner(), TEXT.bytes()) {
+            assert_eq!(a, b);
+        }
+    }
+
+    #[test]
+    fn read_convert_crlf() {
+        const TEXT: &str = "hello\r\nmy\ngood\rworld\r\n";
+        const TEXT_CONVERTED: &str = "hello\nmy\ngood\rworld\n";
+
+        let mut reader = Cursor::new(TEXT.to_string());
+        let mut buf = Buffer::new();
+
+        let n = buf.read(&mut reader).unwrap();
+        assert_eq!(n, TEXT_CONVERTED.chars().count());
+
+        for (a, b) in zip(buf.forward(0), TEXT_CONVERTED.chars()) {
             assert_eq!(a, b);
         }
     }

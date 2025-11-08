@@ -2,6 +2,17 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
+### [0.35.0](https://github.com/davidledwards/ped/tree/v0.35.0) | `2025-11-08`
+
+#### Added
+
+- EOL sequences `\r\n` are automatically converted to `\n` when reading files
+- CLI options `--crlf` and `--lf` that specify how EOL characters should be written when saving files
+- Configuration option `crlf` to complement CLI options
+- Ability to change EOL behavior by toggling between CRLF (`\r\n`) and LF (`\n`)
+  - `eol-mode` bound to `M-t l`
+- `describe-editor` (`C-t`) now shows settings for both TAB and EOL modes
+
 ### [0.34.1](https://github.com/davidledwards/ped/tree/v0.34.1) | `2025-11-07`
 
 #### Fixed

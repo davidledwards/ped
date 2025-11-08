@@ -24,6 +24,10 @@ tab-hard = true
 # Default = 4
 tab-size = 8
 
+# When saving files, writes EOL as `\r\n` sequence instead of `\n`.
+# Default = false
+crlf = true
+
 # Tracks lateral mouse movement as left and right scrolling events.
 # Default = false
 track-lateral = true

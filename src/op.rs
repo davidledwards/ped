@@ -879,12 +879,12 @@ fn describe_editor(env: &mut Environment) -> Option<Action> {
     } else {
         ("EOF".to_string(), "".to_string())
     };
+    let tab_mode = if editor.get_tab() { "hard" } else { "soft" };
+    let eol_mode = if editor.get_crlf() { "CRLF" } else { "LF" };
     let text = format!(
-        "lines: {} | chars: {} | cursor: {}{}",
+        "lines: {} | chars: {} | cursor: {c_char}{c_code} | tabs: {tab_mode} | eol: {eol_mode}",
         buffer.line_of(usize::MAX) + 1,
         buffer.size(),
-        c_char,
-        c_code,
     );
     Action::echo(&text)
 }
@@ -898,6 +898,18 @@ fn tab_mode(env: &mut Environment) -> Option<Action> {
         Action::echo("soft tabs enabled")
     } else {
         Action::echo("hard tabs enabled")
+    }
+}
+
+/// Operation: `eol-mode`
+fn eol_mode(env: &mut Environment) -> Option<Action> {
+    let mut editor = env.get_active_editor().borrow_mut();
+    let crlf = editor.get_crlf();
+    editor.set_crlf(!crlf);
+    if crlf {
+        Action::echo("EOL mode set to LF")
+    } else {
+        Action::echo("EOL mode set to CRLF")
     }
 }
 
@@ -1010,7 +1022,7 @@ pub fn set_focus(env: &mut Environment, p: Point) {
 
 /// Predefined mapping of editing operations to editing functions.
 #[rustfmt::skip]
-pub const OP_MAPPINGS: [(&str, Operation, &str); 82] = [
+pub const OP_MAPPINGS: [(&str, Operation, &str); 83] = [
     // --- exit and cancellation ---
     ("quit", quit,
         "ask to save dirty editors and quit"),
@@ -1194,6 +1206,8 @@ pub const OP_MAPPINGS: [(&str, Operation, &str); 82] = [
         "show editor information"),
     ("tab-mode", tab_mode,
         "toggle between soft and hard tab insertion mode"),
+    ("eol-mode", eol_mode,
+        "toggle between CRLF and LF when saving files"),
 ];
 
 /// Returns a mapping of editing operations to editing functions.

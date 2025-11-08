@@ -91,6 +91,12 @@ pub trait ImmutableEditor {
     /// Sets the tab mode based on the value of `hard`.
     fn set_tab(&mut self, hard: bool);
 
+    /// Returns `true` if EOL characters should be written as `\r\n`.
+    fn get_crlf(&self) -> bool;
+
+    /// Sets the CRLF behavior based on the value of `crlf`.
+    fn set_crlf(&mut self, crlf: bool);
+
     /// Sets the cursor location and corresponding buffer position to `cursor`, though
     /// the final cursor location is constrained by end-of-line and end-of-buffer
     /// boundaries.
@@ -402,6 +408,10 @@ struct EditorKernel {
 
     /// The width of tab stops in number of columns.
     tab_cols: u32,
+
+    /// Indicates that EOL characters should be written as `\r\n` if `true`, otherwise
+    /// EOL is written as `\n`.
+    crlf: bool,
 
     /// An optional last match from a prior search.
     last_match: Option<(usize, Box<dyn Pattern>)>,
@@ -977,6 +987,16 @@ impl ImmutableEditor for Editor {
     }
 
     #[inline]
+    fn get_crlf(&self) -> bool {
+        self.kernel.get_crlf()
+    }
+
+    #[inline]
+    fn set_crlf(&mut self, crlf: bool) {
+        self.kernel.set_crlf(crlf);
+    }
+
+    #[inline]
     fn set_focus(&mut self, cursor: Point) {
         self.kernel.set_focus(cursor);
     }
@@ -1220,6 +1240,14 @@ impl ImmutableEditor for EditorKernel {
 
     fn set_tab(&mut self, hard: bool) {
         self.tab_hard = hard;
+    }
+
+    fn get_crlf(&self) -> bool {
+        self.crlf
+    }
+
+    fn set_crlf(&mut self, crlf: bool) {
+        self.crlf = crlf;
     }
 
     fn set_focus(&mut self, cursor: Point) {
@@ -1772,6 +1800,7 @@ impl EditorKernel {
         // Additional settings.
         let tab_hard = config.settings.tab_hard;
         let tab_cols = config.settings.tab_size;
+        let crlf = config.settings.crlf;
 
         EditorKernel {
             config,
@@ -1797,6 +1826,7 @@ impl EditorKernel {
             margin_enabled: false,
             tab_hard,
             tab_cols,
+            crlf,
             last_match: None,
         }
     }

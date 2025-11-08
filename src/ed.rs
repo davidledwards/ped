@@ -134,7 +134,7 @@ pub fn save_editor_as(editor: &EditorRef, path: Option<&str>) -> Result<()> {
 /// Writes the buffer of `editor` to `path` and returns the resulting file modification
 /// time.
 pub fn write_editor(editor: &EditorRef, path: &str) -> Result<SystemTime> {
-    let _ = io::write_file(path, &editor.borrow().buffer())?;
+    let _ = io::write_file(path, &editor.borrow().buffer(), editor.borrow().get_crlf())?;
     io::get_time(path)
 }
 

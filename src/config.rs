@@ -58,6 +58,7 @@ pub struct Settings {
     pub eol: bool,
     pub tab_hard: bool,
     pub tab_size: u32,
+    pub crlf: bool,
     pub track_lateral: bool,
 }
 
@@ -93,6 +94,7 @@ struct ExternalSettings {
     spotlight: Option<bool>,
     lines: Option<bool>,
     eol: Option<bool>,
+    crlf: Option<bool>,
 
     #[serde(rename = "tab-hard")]
     tab_hard: Option<bool>,
@@ -159,6 +161,7 @@ impl Settings {
             self.eol = ext.eol.unwrap_or(self.eol);
             self.tab_hard = ext.tab_hard.unwrap_or(self.tab_hard);
             self.tab_size = ext.tab_size.unwrap_or(self.tab_size);
+            self.crlf = ext.crlf.unwrap_or(self.crlf);
             self.track_lateral = ext.track_lateral.unwrap_or(self.track_lateral);
         }
     }
@@ -170,6 +173,7 @@ impl Settings {
         self.eol = opts.eol.unwrap_or(self.eol);
         self.tab_hard = opts.tab_hard.unwrap_or(self.tab_hard);
         self.tab_size = opts.tab_size.unwrap_or(self.tab_size);
+        self.crlf = opts.crlf.unwrap_or(self.crlf);
         self.track_lateral = opts.track_lateral.unwrap_or(self.track_lateral);
     }
 }
@@ -182,6 +186,7 @@ impl Default for Settings {
             eol: false,
             tab_hard: false,
             tab_size: 4,
+            crlf: false,
             track_lateral: false,
         }
     }
@@ -326,7 +331,7 @@ impl Configuration {
     }
 
     #[rustfmt::skip]
-    const DEFAULT_BINDINGS: [(&'static str, &'static str); 98] = [
+    const DEFAULT_BINDINGS: [(&'static str, &'static str); 99] = [
         // --- exit and cancellation ---
         ("C-q", "quit"),
 
@@ -444,6 +449,7 @@ impl Configuration {
         // --- behaviors ---
         ("C-t", "describe-editor"),
         ("M-t:t", "tab-mode"),
+        ("M-t:l", "eol-mode"),
     ];
 }
 

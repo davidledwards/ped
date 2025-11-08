@@ -10,6 +10,7 @@ pub struct Options {
     pub eol: Option<bool>,
     pub tab_hard: Option<bool>,
     pub tab_size: Option<u32>,
+    pub crlf: Option<bool>,
     pub keys: bool,
     pub ops: bool,
     pub bindings: bool,
@@ -36,6 +37,7 @@ impl Default for Options {
             eol: None,
             tab_hard: None,
             tab_size: None,
+            crlf: None,
             keys: false,
             ops: false,
             bindings: false,
@@ -73,6 +75,8 @@ impl Options {
                 "--tab-hard" => opts.tab_hard = Some(true),
                 "--tab-soft" => opts.tab_hard = Some(false),
                 "--tab-size" | "-t" => opts.tab_size = Some(parse_arg(&arg, it.next())?),
+                "--crlf" => opts.crlf = Some(true),
+                "--lf" => opts.crlf = Some(false),
                 "--keys" => opts.keys = true,
                 "--ops" => opts.ops = true,
                 "--bindings" => opts.bindings = true,
@@ -94,7 +98,7 @@ impl Options {
                     break;
                 }
                 arg if arg.starts_with("--") || arg.starts_with("-") => {
-                    return Err(Error::unexpected_arg(arg))
+                    return Err(Error::unexpected_arg(arg));
                 }
                 _ => {
                     // Any other match is presumed to be a file.

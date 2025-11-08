@@ -12,6 +12,8 @@ Behavior
   --tab-hard           : insert tabs as \t
   --tab-soft           : insert tabs as spaces (default)
   --tab-size, -t N     : tab stop size when --tab-soft (default: 4)
+  --crlf               : write EOL as \r\n
+  --lf                 : write EOL as \n (default)
 
 Interrogation
   --keys               : print available keys
