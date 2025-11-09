@@ -13,6 +13,11 @@ This file contains relevant information for each release. Please refer to the co
   - `eol-mode` bound to `M-t l`
 - `describe-editor` (`C-t`) now shows settings for both TAB and EOL modes
 - Configuration color `dirty-fg` for visually distinguishing between _clean_ and _dirty_ editors
+- Banner shows EOL and TAB modes adjacent to source with format `-??-`, where:
+  - first `?` is EOL mode: `/` indicates LF and `\` indicates CRLF
+  - second `?` is TAB mode: `t` indicates _soft_ and `T` indicates _hard_
+- Banner shows Unicode code point of character under cursor with format `-????-`, where:
+  - `????` is 4-digit hex value
 
 ### [0.34.1](https://github.com/davidledwards/ped/tree/v0.34.1) | `2025-11-07`
 

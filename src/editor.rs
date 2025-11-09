@@ -1240,6 +1240,12 @@ impl ImmutableEditor for EditorKernel {
 
     fn set_tab(&mut self, hard: bool) {
         self.tab_hard = hard;
+        self.window
+            .borrow()
+            .banner
+            .borrow_mut()
+            .set_tab(hard)
+            .draw();
     }
 
     fn get_crlf(&self) -> bool {
@@ -1248,6 +1254,12 @@ impl ImmutableEditor for EditorKernel {
 
     fn set_crlf(&mut self, crlf: bool) {
         self.crlf = crlf;
+        self.window
+            .borrow()
+            .banner
+            .borrow_mut()
+            .set_eol(crlf)
+            .draw();
     }
 
     fn set_focus(&mut self, cursor: Point) {
@@ -1669,6 +1681,7 @@ impl ImmutableEditor for EditorKernel {
             .banner
             .borrow_mut()
             .set_dirty(self.is_dirty())
+            .set_char(self.buffer().get_char(self.pos()))
             .set_location(self.location())
             .draw();
     }
@@ -1872,6 +1885,9 @@ impl EditorKernel {
             .set_dirty(self.is_dirty())
             .set_source(self.source.clone())
             .set_syntax(self.tokenizer().syntax().name.clone())
+            .set_eol(self.crlf)
+            .set_tab(self.tab_hard)
+            .set_char(self.buffer().get_char(self.pos()))
             .set_location(self.location())
             .draw();
     }

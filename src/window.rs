@@ -13,10 +13,18 @@ use std::cell::RefCell;
 use std::ops::Range;
 use std::rc::Rc;
 
+pub struct Window {
+    size: Size,
+    pub canvas: CanvasRef,
+    pub banner: BannerRef,
+}
+
+pub type WindowRef = Rc<RefCell<Window>>;
+
 pub struct Banner {
     canvas: Canvas,
-    source_area: Option<Range<u32>>,
-    loc_area: Option<Range<u32>>,
+    left_area: Option<Range<u32>>,
+    right_area: Option<Range<u32>>,
     active_bg: u8,
     inactive_bg: u8,
     banner_color: Color,
@@ -25,35 +33,42 @@ pub struct Banner {
     dirty: bool,
     source: Source,
     syntax: String,
+    eol: char,
+    tab: char,
+    ch: char,
     loc: Point,
 }
 
 pub type BannerRef = Rc<RefCell<Banner>>;
 
 impl Banner {
-    /// Minimum number of window columns required to show any banner information,
-    /// otherwise everything is clipped.
-    const MIN_COLS: u32 = 16;
+    /// Minimum number of columns required to show _left_ area of banner.
+    const MIN_COLS_FOR_LEFT: u32 = 16;
 
-    /// Minimum number of window columns required to show location information,
-    /// otherwise it is clipped.
-    const MIN_COLS_FOR_LOCATION: u32 = 32;
+    /// Minimum number of columns required to show _left_ and _right_ areas of banner.
+    const MIN_COLS_FOR_RIGHT: u32 = 40;
 
-    /// Number of columns allocated to left margin.
-    const LEFT_MARGIN_COLS: u32 = 1;
-
-    /// Number of columns allocated to right margin.
-    const RIGHT_MARGIN_COLS: u32 = 1;
+    /// Number of columns used as gap between distinct areas of banner.
+    const GAP_COLS: u32 = 1;
 
     /// Prefix to use when truncating the source.
-    const SOURCE_ELLIPSIS: &str = "...";
+    const ELLIPSIS: &str = "...";
 
-    /// Number of additional columns required in the source and syntax area for
-    /// whitespace and other adornments.
-    const SOURCE_ADORN_COLS: usize = 3;
+    /// Number of additional columns used to adorn syntax information.
+    ///
+    /// Layout is `(???)` where `???` is the variable-length syntax name.
+    const SYNTAX_COLS: u32 = 2;
 
-    /// Number of columns allocated to whitespace between source and location areas.
-    const GAP_COLS: u32 = 2;
+    /// Number of columns for mode settings.
+    ///
+    /// Layout is `-??-` where each `?` is a separate single-character indicator.
+    const MODE_COLS: u32 = 4;
+
+    /// Number of columns allocated to showing Unicode code point of character
+    /// under cursor.
+    ///
+    /// Layout is `-????-` where '????` is the hex value of code point.
+    const CHAR_COLS: u32 = 6;
 
     /// Number of columns allocated to line numbers.
     const LINE_COLS: u32 = 7;
@@ -73,7 +88,7 @@ impl Banner {
     fn new(origin: Point, cols: u32, config: ConfigurationRef) -> Banner {
         // Determine which areas of banner will be shown based on available number of
         // columns.
-        let (source_area, loc_area) = Self::calc_areas(cols);
+        let (left_area, right_area) = Self::calc_areas(cols);
         let active_bg = config.theme.active_bg;
         let inactive_bg = config.theme.inactive_bg;
         let banner_color = Color::new(config.theme.banner_fg, inactive_bg);
@@ -82,8 +97,8 @@ impl Banner {
 
         let mut this = Banner {
             canvas: Canvas::new(origin, Size::new(1, cols)),
-            source_area,
-            loc_area,
+            left_area,
+            right_area,
             active_bg,
             inactive_bg,
             banner_color,
@@ -92,6 +107,9 @@ impl Banner {
             dirty: false,
             source: Source::Null,
             syntax: String::new(),
+            eol: '?',
+            tab: '?',
+            ch: '\0',
             loc: Point::ORIGIN,
         };
         this.clear();
@@ -101,8 +119,8 @@ impl Banner {
     pub fn none() -> Banner {
         Banner {
             canvas: Canvas::zero(),
-            source_area: None,
-            loc_area: None,
+            left_area: None,
+            right_area: None,
             active_bg: 0,
             inactive_bg: 0,
             banner_color: Color::ZERO,
@@ -111,6 +129,9 @@ impl Banner {
             dirty: false,
             source: Source::Null,
             syntax: String::new(),
+            eol: '?',
+            tab: '?',
+            ch: '\0',
             loc: Point::ORIGIN,
         }
     }
@@ -128,8 +149,8 @@ impl Banner {
     /// Redraws the entire banner regardless of pending changes.
     pub fn redraw(&mut self) {
         self.clear();
-        self.draw_source();
-        self.draw_location();
+        self.draw_left();
+        self.draw_right();
         self.canvas.draw();
     }
 
@@ -149,26 +170,44 @@ impl Banner {
     pub fn set_dirty(&mut self, dirty: bool) -> &mut Banner {
         if dirty != self.dirty {
             self.dirty = dirty;
-            self.draw_source();
+            self.draw_left();
         }
         self
     }
 
     pub fn set_source(&mut self, source: Source) -> &mut Banner {
         self.source = source;
-        self.draw_source();
+        self.draw_left();
         self
     }
 
     pub fn set_syntax(&mut self, syntax: String) -> &mut Banner {
         self.syntax = syntax;
-        self.draw_source();
+        self.draw_left();
+        self
+    }
+
+    pub fn set_eol(&mut self, crlf: bool) -> &mut Banner {
+        self.eol = if crlf { '\\' } else { '/' };
+        self.draw_left();
+        self
+    }
+
+    pub fn set_tab(&mut self, tab_hard: bool) -> &mut Banner {
+        self.tab = if tab_hard { 'T' } else { 't' };
+        self.draw_left();
+        self
+    }
+
+    pub fn set_char(&mut self, c: Option<char>) -> &mut Banner {
+        self.ch = c.unwrap_or('\0');
+        self.draw_right();
         self
     }
 
     pub fn set_location(&mut self, loc: Point) -> &mut Banner {
         self.loc = loc;
-        self.draw_location();
+        self.draw_right();
         self
     }
 
@@ -176,29 +215,49 @@ impl Banner {
         self.canvas.fill_row(0, ' ', self.banner_color);
     }
 
-    fn draw_source(&mut self) {
-        if let Some(Range { start, end }) = self.source_area {
-            let avail_cols = (end - start) as usize;
+    #[rustfmt::skip]
+    fn draw_left(&mut self) {
+        if let Some(Range { start, end }) = self.left_area {
+            // Mode information requires fixed amount of space, so deduct this amount
+            // and standard gap from available space.
+            let avail_cols =
+                end - start        // full range
+                - Self::GAP_COLS   // gap between source and mode
+                - Self::MODE_COLS; // mode area
+
             let mut source = self.source.to_string().chars().collect::<Vec<_>>();
             let mut syntax = self.syntax.chars().collect::<Vec<_>>();
 
-            if source.len() + syntax.len() + Self::SOURCE_ADORN_COLS > avail_cols {
+            // Calculate needed number of columns for both source and syntax.
+            let need_cols =
+                source.len() as u32   // source
+                + Self::GAP_COLS      // gap between source and syntax
+                + syntax.len() as u32 // syntax
+                + Self::SYNTAX_COLS;  // `(` and `)` around syntax
+
+            if need_cols > avail_cols {
                 // Try shortening source by using file name portion only, though note
                 // that shortening may not actually happen.
                 if let Source::File(path, _) = &self.source {
                     source = sys::file_name(path).chars().collect::<Vec<_>>();
                 }
 
-                if source.len() + syntax.len() + Self::SOURCE_ADORN_COLS > avail_cols {
+                let need_cols =
+                    source.len() as u32   // source
+                    + Self::GAP_COLS      // gap between source and syntax
+                    + syntax.len() as u32 // syntax
+                    + Self::SYNTAX_COLS;  // `(` and `)` around syntax
+
+                if need_cols > avail_cols {
                     // Try clipping syntax information as next attempt to fit within
                     // available area.
                     syntax.clear();
 
-                    if source.len() > avail_cols {
+                    if source.len() as u32 > avail_cols {
                         // Final attempt truncates prefix of source, but adds ellipsis as
                         // visual cue that truncation occurred.
-                        source.drain(0..source.len() - avail_cols + Self::SOURCE_ELLIPSIS.len());
-                        source.splice(0..0, Self::SOURCE_ELLIPSIS.chars());
+                        source.drain(0..source.len() - avail_cols as usize + Self::ELLIPSIS.len());
+                        source.splice(0..0, Self::ELLIPSIS.chars());
                     }
                 }
             }
@@ -220,17 +279,37 @@ impl Banner {
                 col += self.canvas.write(0, col, &syntax, self.accent_color);
                 col += self.canvas.write_char(0, col, ')', self.banner_color);
             }
+
+            // Draw mode information.
+            col += self.canvas.write_str(0, col, " -", self.banner_color);
+            col += self.canvas.write_char(0, col, self.eol, self.accent_color);
+            col += self.canvas.write_char(0, col, self.tab, self.accent_color);
+            col += self.canvas.write_char(0, col, '-', self.banner_color);
+
+            // Clear any remaining space.
             self.canvas.fill(0, col..end, ' ', self.banner_color);
         }
     }
 
-    fn draw_location(&mut self) {
-        if let Some(Range { start, end }) = self.loc_area {
-            // Locations always displayed as 1-based, hence adjustment.
-            let loc = self.loc + (1, 1);
+    #[rustfmt::skip]
+    fn draw_right(&mut self) {
+        if let Some(Range { start, end }) = self.right_area {
+            // Draw character under cursor as hex code point, which is anchored at
+            // leftmost position in right area.
+            let mut col = start;
+            col += self.canvas.write_char(0, col, '-', self.banner_color);
+            col += self.canvas.write_str(
+                0,
+                col,
+                &format!("{:04x}", self.ch as u32),
+                self.accent_color,
+            );
+            col += self.canvas.write_char(0, col, '-', self.banner_color);
 
             // Format line and column numbers, both of which might be shown as dashes
-            // if values are too large to fit within bounds of available area.
+            // if values are too large to fit within bounds of available area. Locations
+            // always displayed as 1-based, hence adjustment.
+            let loc = self.loc + (1, 1);
             let line_str = if loc.row < Self::LINE_LIMIT {
                 format!("{}", loc.row)
             } else {
@@ -242,42 +321,55 @@ impl Banner {
                 "-".repeat(Self::COL_COLS as usize)
             };
 
-            // Since line and column is displayed right-justified, draw any necessary
-            // whitespace first.
-            let n = line_str.len() + col_str.len() + 1;
-            let mut col = end - n as u32;
-            self.canvas.fill(0, start..col, ' ', self.banner_color);
+            // Since location is right-justified, draw any necessary whitespace first.
+            let next_col = end
+                - Self::GAP_COLS        // gap between code point and location
+                - line_str.len() as u32 // line number
+                - 1                     // `:`
+                - col_str.len() as u32; // column number
+            self.canvas.fill(0, col..next_col, ' ', self.banner_color);
+
+            // Draw line and column.
+            col = next_col;
             col += self.canvas.write_str(0, col, &line_str, self.banner_color);
             col += self.canvas.write_char(0, col, ':', self.accent_color);
             self.canvas.write_str(0, col, &col_str, self.banner_color);
         }
     }
 
+    /// Returns column ranges allocated to _left_ and _right_ areas of banner bar,
+    /// respectively.
+    #[rustfmt::skip]
     fn calc_areas(cols: u32) -> (Option<Range<u32>>, Option<Range<u32>>) {
-        if cols < Self::MIN_COLS {
+        if cols < Self::MIN_COLS_FOR_LEFT {
             (None, None)
-        } else if cols < Self::MIN_COLS_FOR_LOCATION {
-            // Clip location area entirely, which increases area for source and syntax.
-            let source_area = Self::LEFT_MARGIN_COLS..cols - Self::RIGHT_MARGIN_COLS;
-            (Some(source_area), None)
+        } else if cols < Self::MIN_COLS_FOR_RIGHT {
+            let left_area =
+                Self::GAP_COLS        // left margin
+                ..cols
+                - Self::GAP_COLS;     // right margin
+            (Some(left_area), None)
         } else {
-            // Limit area available for source and syntax.
-            let source_area = Self::LEFT_MARGIN_COLS
-                ..cols - Self::RIGHT_MARGIN_COLS - Self::LOCATION_COLS - Self::GAP_COLS;
-            let loc_area = cols - Self::RIGHT_MARGIN_COLS - Self::LOCATION_COLS
-                ..cols - Self::RIGHT_MARGIN_COLS;
-            (Some(source_area), Some(loc_area))
+            let left_area =
+                Self::GAP_COLS        // left margin
+                ..cols
+                - Self::GAP_COLS      // right margin
+                - Self::LOCATION_COLS // location area
+                - Self::GAP_COLS      // gap between code point and location
+                - Self::CHAR_COLS     // code point area
+                - Self::GAP_COLS;     // gap betewen left and right areas
+            let right_area =
+                cols
+                - Self::GAP_COLS      // right margin
+                - Self::LOCATION_COLS // location area
+                - Self::GAP_COLS      // gap between code point and location
+                - Self::CHAR_COLS     // code point area
+                ..cols
+                    - Self::GAP_COLS; // right margin
+            (Some(left_area), Some(right_area))
         }
     }
 }
-
-pub struct Window {
-    size: Size,
-    pub canvas: CanvasRef,
-    pub banner: BannerRef,
-}
-
-pub type WindowRef = Rc<RefCell<Window>>;
 
 impl Window {
     const CANVAS_ORIGIN_OFFSET: Size = Size::ZERO;
