@@ -82,6 +82,7 @@ medium-gray = 237
 #   echo-fg
 #   prompt-fg
 #   banner-fg
+#   dirty-fg
 #   active-bg
 #   inactive-bg
 #   margin-fg

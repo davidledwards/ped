@@ -234,7 +234,7 @@ fn prepare_colors(colors: &HashMap<String, u8>) -> IndexMap<String, u8> {
 /// Returns a TOML-formatted list of theme color names and values.
 pub fn theme_content(theme: &Theme) -> String {
     type ColorFn = fn(&Theme) -> u8;
-    const COLORS: [(&str, ColorFn); 14] = [
+    const COLORS: [(&str, ColorFn); 15] = [
         ("text-fg", |t| t.text_fg),
         ("text-bg", |t| t.text_bg),
         ("select-bg", |t| t.select_bg),
@@ -244,6 +244,7 @@ pub fn theme_content(theme: &Theme) -> String {
         ("echo-fg", |t| t.echo_fg),
         ("prompt-fg", |t| t.prompt_fg),
         ("banner-fg", |t| t.banner_fg),
+        ("dirty-fg", |t| t.dirty_fg),
         ("active-bg", |t| t.active_bg),
         ("inactive-bg", |t| t.inactive_bg),
         ("margin-fg", |t| t.margin_fg),

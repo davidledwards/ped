@@ -72,6 +72,7 @@ pub struct Theme {
     pub echo_fg: u8,
     pub prompt_fg: u8,
     pub banner_fg: u8,
+    pub dirty_fg: u8,
     pub active_bg: u8,
     pub inactive_bg: u8,
     pub margin_fg: u8,
@@ -135,6 +136,9 @@ struct ExternalTheme {
 
     #[serde(rename = "banner-fg")]
     banner_fg: Option<ColorValue>,
+
+    #[serde(rename = "dirty-fg")]
+    dirty_fg: Option<ColorValue>,
 
     #[serde(rename = "active-bg")]
     active_bg: Option<ColorValue>,
@@ -202,6 +206,7 @@ impl Theme {
     const ECHO_FG: u8 = 208;
     const PROMPT_FG: u8 = 102;
     const BANNER_FG: u8 = 254;
+    const DIRTY_FG: u8 = 82;
     const ACTIVE_BG: u8 = 60;
     const INACTIVE_BG: u8 = 237;
     const MARGIN_FG: u8 = 61;
@@ -232,6 +237,7 @@ impl Theme {
             self.echo_fg = resolve(self.echo_fg, &ext.echo_fg, colors)?;
             self.prompt_fg = resolve(self.prompt_fg, &ext.prompt_fg, colors)?;
             self.banner_fg = resolve(self.banner_fg, &ext.banner_fg, colors)?;
+            self.dirty_fg = resolve(self.dirty_fg, &ext.dirty_fg, colors)?;
             self.active_bg = resolve(self.active_bg, &ext.active_bg, colors)?;
             self.inactive_bg = resolve(self.inactive_bg, &ext.inactive_bg, colors)?;
             self.margin_fg = resolve(self.margin_fg, &ext.margin_fg, colors)?;
@@ -254,6 +260,7 @@ impl Default for Theme {
             echo_fg: Self::ECHO_FG,
             prompt_fg: Self::PROMPT_FG,
             banner_fg: Self::BANNER_FG,
+            dirty_fg: Self::DIRTY_FG,
             active_bg: Self::ACTIVE_BG,
             inactive_bg: Self::INACTIVE_BG,
             margin_fg: Self::MARGIN_FG,

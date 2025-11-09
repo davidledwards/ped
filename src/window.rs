@@ -15,13 +15,13 @@ use std::rc::Rc;
 
 pub struct Banner {
     canvas: Canvas,
-    dirty_area: Option<u32>,
     source_area: Option<Range<u32>>,
     loc_area: Option<Range<u32>>,
     active_bg: u8,
     inactive_bg: u8,
     banner_color: Color,
     accent_color: Color,
+    dirty_color: Color,
     dirty: bool,
     source: Source,
     syntax: String,
@@ -73,21 +73,22 @@ impl Banner {
     fn new(origin: Point, cols: u32, config: ConfigurationRef) -> Banner {
         // Determine which areas of banner will be shown based on available number of
         // columns.
-        let (dirty_area, source_area, loc_area) = Self::calc_areas(cols);
+        let (source_area, loc_area) = Self::calc_areas(cols);
         let active_bg = config.theme.active_bg;
         let inactive_bg = config.theme.inactive_bg;
         let banner_color = Color::new(config.theme.banner_fg, inactive_bg);
         let accent_color = Color::new(config.theme.accent_fg, inactive_bg);
+        let dirty_color = Color::new(config.theme.dirty_fg, inactive_bg);
 
         let mut this = Banner {
             canvas: Canvas::new(origin, Size::new(1, cols)),
-            dirty_area,
             source_area,
             loc_area,
             active_bg,
             inactive_bg,
             banner_color,
             accent_color,
+            dirty_color,
             dirty: false,
             source: Source::Null,
             syntax: String::new(),
@@ -100,13 +101,13 @@ impl Banner {
     pub fn none() -> Banner {
         Banner {
             canvas: Canvas::zero(),
-            dirty_area: None,
             source_area: None,
             loc_area: None,
             active_bg: 0,
             inactive_bg: 0,
             banner_color: Color::ZERO,
             accent_color: Color::ZERO,
+            dirty_color: Color::ZERO,
             dirty: false,
             source: Source::Null,
             syntax: String::new(),
@@ -127,7 +128,6 @@ impl Banner {
     /// Redraws the entire banner regardless of pending changes.
     pub fn redraw(&mut self) {
         self.clear();
-        self.draw_dirty();
         self.draw_source();
         self.draw_location();
         self.canvas.draw();
@@ -142,13 +142,14 @@ impl Banner {
         };
         self.banner_color.bg = bg;
         self.accent_color.bg = bg;
+        self.dirty_color.bg = bg;
         self.redraw();
     }
 
     pub fn set_dirty(&mut self, dirty: bool) -> &mut Banner {
         if dirty != self.dirty {
             self.dirty = dirty;
-            self.draw_dirty();
+            self.draw_source();
         }
         self
     }
@@ -173,13 +174,6 @@ impl Banner {
 
     fn clear(&mut self) {
         self.canvas.fill_row(0, ' ', self.banner_color);
-    }
-
-    fn draw_dirty(&mut self) {
-        if let Some(col) = self.dirty_area {
-            let c = if self.dirty { '*' } else { ' ' };
-            self.canvas.set(0, col, c, self.accent_color);
-        }
     }
 
     fn draw_source(&mut self) {
@@ -211,7 +205,16 @@ impl Banner {
 
             // Draw possibly clipped forms of source and syntax on canvas.
             let mut col = start;
-            col += self.canvas.write(0, col, &source, self.banner_color);
+            col += self.canvas.write(
+                0,
+                col,
+                &source,
+                if self.dirty {
+                    self.dirty_color
+                } else {
+                    self.banner_color
+                },
+            );
             if syntax.len() > 0 {
                 col += self.canvas.write_str(0, col, " (", self.banner_color);
                 col += self.canvas.write(0, col, &syntax, self.accent_color);
@@ -250,22 +253,20 @@ impl Banner {
         }
     }
 
-    fn calc_areas(cols: u32) -> (Option<u32>, Option<Range<u32>>, Option<Range<u32>>) {
+    fn calc_areas(cols: u32) -> (Option<Range<u32>>, Option<Range<u32>>) {
         if cols < Self::MIN_COLS {
-            (None, None, None)
+            (None, None)
         } else if cols < Self::MIN_COLS_FOR_LOCATION {
             // Clip location area entirely, which increases area for source and syntax.
-            let dirty_area = Self::LEFT_MARGIN_COLS;
-            let source_area = dirty_area + 1..cols - Self::RIGHT_MARGIN_COLS;
-            (Some(dirty_area), Some(source_area), None)
+            let source_area = Self::LEFT_MARGIN_COLS..cols - Self::RIGHT_MARGIN_COLS;
+            (Some(source_area), None)
         } else {
             // Limit area available for source and syntax.
-            let dirty_area = Self::LEFT_MARGIN_COLS;
-            let source_area = dirty_area + 1
+            let source_area = Self::LEFT_MARGIN_COLS
                 ..cols - Self::RIGHT_MARGIN_COLS - Self::LOCATION_COLS - Self::GAP_COLS;
             let loc_area = cols - Self::RIGHT_MARGIN_COLS - Self::LOCATION_COLS
                 ..cols - Self::RIGHT_MARGIN_COLS;
-            (Some(dirty_area), Some(source_area), Some(loc_area))
+            (Some(source_area), Some(loc_area))
         }
     }
 }

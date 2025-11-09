@@ -12,6 +12,7 @@ This file contains relevant information for each release. Please refer to the co
 - Ability to change EOL behavior by toggling between CRLF (`\r\n`) and LF (`\n`)
   - `eol-mode` bound to `M-t l`
 - `describe-editor` (`C-t`) now shows settings for both TAB and EOL modes
+- Configuration color `dirty-fg` for visually distinguishing between _clean_ and _dirty_ editors
 
 ### [0.34.1](https://github.com/davidledwards/ped/tree/v0.34.1) | `2025-11-07`
 
