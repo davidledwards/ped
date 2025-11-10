@@ -2,7 +2,7 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
-### [0.35.0](https://github.com/davidledwards/ped/tree/v0.35.0) | `2025-11-08`
+### [0.35.0](https://github.com/davidledwards/ped/tree/v0.35.0) | `2025-11-09`
 
 #### Added
 
@@ -11,13 +11,14 @@ This file contains relevant information for each release. Please refer to the co
 - Configuration option `crlf` to complement CLI options
 - Ability to change EOL behavior by toggling between CRLF (`\r\n`) and LF (`\n`)
   - `eol-mode` bound to `M-t l`
-- `describe-editor` (`C-t`) now shows settings for both TAB and EOL modes
-- Configuration color `dirty-fg` for visually distinguishing between _clean_ and _dirty_ editors
 - Banner shows EOL and TAB modes adjacent to source with format `-??-`, where:
   - first `?` is EOL mode: `/` indicates LF and `\` indicates CRLF
   - second `?` is TAB mode: `t` indicates _soft_ and `T` indicates _hard_
 - Banner shows Unicode code point of character under cursor with format `-????-`, where:
   - `????` is 4-digit hex value
+- `describe-editor` (`C-t`) now shows settings for both TAB and EOL modes
+- Configuration color `dirty-fg` for visually distinguishing between _clean_ and _dirty_ editors
+- Color of source changes to `dirty-fg` to denote editors with unsaved modifications, eliminating need for `*`
 
 ### [0.34.1](https://github.com/davidledwards/ped/tree/v0.34.1) | `2025-11-07`
 
