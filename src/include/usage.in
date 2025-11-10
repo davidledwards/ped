@@ -6,36 +6,40 @@ USAGE
 
 OPTIONS
 Behavior
-  --[no-]spotlight     : [do not] highlight cursor row
-  --[no-]lines         : [do not] show line numbers in left margin
-  --[no-]eol           : [do not] make \n visible with special character
-  --tab-hard           : insert tabs as \t
-  --tab-soft           : insert tabs as spaces (default)
-  --tab-size, -t N     : tab stop size when --tab-soft (default: 4)
-  --crlf               : write EOL as \r\n
-  --lf                 : write EOL as \n (default)
+  --spotlight        : highlight cursor row (default: on)
+  --no-spotlight
+  --lines            : show line numbers in left margin (default: on)
+  --no-lines
+  --eol              : show \n as special character (default: off)
+  --no-eol
+  --tab-hard         : insert tabs as \t
+  --tab-soft         : insert tabs as spaces (default)
+  --tab-size, -t N   : tab stop size when --tab-soft (default: 4)
+  --crlf             : write EOL as \r\n
+  --lf               : write EOL as \n (default)
 
 Interrogation
-  --keys               : print available keys
-  --ops                : print available operations
-  --bindings           : print key bindings in TOML format
-  --colors             : print color names in TOML format
-  --theme              : print color theme in TOML format
-  --describe OP        : print descripion of operation (--ops shows list)
+  --keys             : print available keys
+  --ops              : print available operations
+  --bindings         : print key bindings in TOML format
+  --colors           : print color names in TOML format
+  --theme            : print color theme in TOML format
+  --describe OP      : print descripion of operation (--ops shows list)
 
 Mouse
-  --[no-]track-lateral : [do not] track lateral mouse movement
+  --track-lateral    : track lateral mouse movement (default: off)
+  --no-track-lateral
 
 Configuration
-  --config, -C FILE    : load configuration from FILE
-  --syntax, -S DIR     : load syntax configurations from DIR
-  --bare, -b           : ignore all forms of configuration
-  --bare-syntax, -B    : ignore syntax configurations
+  --config, -C FILE  : load configuration from FILE
+  --syntax, -S DIR   : load syntax configurations from DIR
+  --bare, -b         : ignore all forms of configuration
+  --bare-syntax, -B  : ignore syntax configurations
 
 Help
-  --help, -h           : print this help
-  --version, -v        : print version information
-  --source             : print repository URL for this version
+  --help, -h         : print this help
+  --version, -v      : print version information
+  --source           : print repository URL for this version
 
 CONFIGURATION
   An optional configuration file is loaded if present in one of the following
