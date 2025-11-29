@@ -363,6 +363,9 @@ impl Buffer {
         // Approximate number of bytes to encode from buffer before sending to writer.
         const WRITE_CHUNK_SIZE: usize = 65_536;
 
+        // UTF-8 encoding of `\r`.
+        const CR_ENCODING: [u8; 1] = ['\r' as u8; 1];
+
         let mut bytes = [0; 4];
         let mut chunk = Vec::with_capacity(WRITE_CHUNK_SIZE);
         let mut count = 0;
@@ -370,8 +373,7 @@ impl Buffer {
         for pos in 0..self.size {
             let c = self.get_char_unchecked(pos);
             if *c == '\n' && crlf {
-                let encoding = '\r'.encode_utf8(&mut bytes);
-                chunk.extend_from_slice(encoding.as_bytes());
+                chunk.extend_from_slice(&CR_ENCODING);
             }
             let encoding = c.encode_utf8(&mut bytes);
             chunk.extend_from_slice(encoding.as_bytes());
