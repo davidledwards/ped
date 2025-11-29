@@ -364,7 +364,7 @@ impl Buffer {
         const WRITE_CHUNK_SIZE: usize = 65_536;
 
         // UTF-8 encoding of `\r`.
-        const CR_ENCODING: [u8; 1] = ['\r' as u8; 1];
+        const CR_ENCODING: [u8; 1] = [b'\r'; 1];
 
         let mut bytes = [0; 4];
         let mut chunk = Vec::with_capacity(WRITE_CHUNK_SIZE);
