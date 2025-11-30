@@ -113,6 +113,8 @@ impl TermPattern {
         if len > 0 {
             let mut gs_shift = vec![len; len];
             let mut border = vec![0; len + 1];
+
+            // First phase computes borders.
             border[len] = len + 1;
             let mut i = len;
             let mut j = len + 1;
@@ -127,10 +129,12 @@ impl TermPattern {
                 j -= 1;
                 border[i] = j;
             }
+
+            // Second phase fills remaining shifts.
             j = border[0];
-            for i in 0..len {
-                if gs_shift[i] == len {
-                    gs_shift[i] = j;
+            for (i, shift) in gs_shift.iter_mut().enumerate() {
+                if *shift == len {
+                    *shift = j;
                 }
                 if i == j {
                     j = border[j];
