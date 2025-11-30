@@ -3,7 +3,6 @@
 use crate::buffer::Buffer;
 use crate::etc;
 use regex_lite::Regex;
-use std::cmp;
 use std::collections::HashMap;
 use std::ops::Range;
 
@@ -22,12 +21,16 @@ pub trait Pattern {
     ///
     /// A return value of `None` indicates that `buffer` does not contain a match for
     /// the pattern.
-    fn find(&self, buffer: &Buffer, pos: usize) -> Option<(usize, usize)>;
+    fn find(&self, buffer: &Buffer, pos: usize) -> Option<Match>;
 
     /// Equivalent to [`find`](Self::find) with the exception that `buffer` is an
     /// `&str` type.
-    fn find_str(&self, buffer: &str, pos: usize) -> Option<(usize, usize)>;
+    fn find_str(&self, buffer: &str, pos: usize) -> Option<Match>;
 }
+
+/// Represents a pattern match, where the first value is the _starting_ buffer
+/// position and the second value is the _ending_ buffer position.
+pub struct Match(pub usize, pub usize);
 
 /// Returns a pattern-matching algorithm using `term` as the search string, and
 /// `case_strict` to indicate the sensitivity of case when searching.
@@ -139,7 +142,7 @@ impl TermPattern {
         }
     }
 
-    fn search(&self, buffer: &Buffer, pos: usize) -> Option<(usize, usize)> {
+    fn search(&self, buffer: &Buffer, pos: usize) -> Option<Match> {
         let len = self.pattern.len();
         if len > 0 && pos + len <= buffer.size() {
             // Since Boyer-Moore searches backwards relative to pattern, this is the
@@ -158,28 +161,22 @@ impl TermPattern {
                 }
                 if i == 0 {
                     // Pattern matched.
-                    return Some((pos, pos + len));
+                    return Some(Match(pos, pos + len));
                 } else {
                     // Bad character that did not match pattern.
                     let bc = self.buf_at(buffer, pos + i - 1);
 
                     // Calculate shift distance using bad character shift table.
                     let bc_shift = if let Some(&p) = self.bc_shift.get(&bc) {
-                        if p < i - 1 {
-                            // Rightmost position of bad character in shift table must
-                            // be less than current position in pattern where match stopped.
-                            i - 1 - p
-                        } else {
-                            // Cannot shift backwards, so shift by one.
-                            1
-                        }
+                        // Shift distance must be at least 1.
+                        (i - 1).saturating_sub(p).max(1)
                     } else {
                         // Bad character does not exist in pattern, so shift past
                         // remaining characters in pattern.
                         i
                     };
                     let gs_shift = self.gs_shift[i - 1];
-                    pos += cmp::max(bc_shift, gs_shift);
+                    pos += bc_shift.max(gs_shift);
                 }
             }
             // At this point, buffer was exhausted without match.
@@ -206,7 +203,7 @@ impl Pattern for TermPattern {
         &self.term
     }
 
-    fn find(&self, buffer: &Buffer, pos: usize) -> Option<(usize, usize)> {
+    fn find(&self, buffer: &Buffer, pos: usize) -> Option<Match> {
         self.search(buffer, pos).or_else(|| {
             if pos > 0 {
                 self.search(buffer, 0)
@@ -216,7 +213,7 @@ impl Pattern for TermPattern {
         })
     }
 
-    fn find_str(&self, buffer: &str, pos: usize) -> Option<(usize, usize)> {
+    fn find_str(&self, buffer: &str, pos: usize) -> Option<Match> {
         let mut buf = Buffer::new();
         buf.insert_str(buffer);
         self.find(&buf, pos)
@@ -237,7 +234,7 @@ impl RegexPattern {
         RegexPattern { regex }
     }
 
-    fn search(&self, buffer: &str, pos: usize) -> Option<(usize, usize)> {
+    fn search(&self, buffer: &str, pos: usize) -> Option<Match> {
         // Convert starting position into an offset.
         let pos_offset = etc::pos_to_offset(buffer, pos);
 
@@ -249,7 +246,7 @@ impl RegexPattern {
 
             // This trick saves us from rescanning entire buffer to find ending offset.
             let end_pos = start_pos + etc::offset_to_pos(&buffer[start..], end - start);
-            (start_pos, end_pos)
+            Match(start_pos, end_pos)
         })
     }
 }
@@ -259,14 +256,14 @@ impl Pattern for RegexPattern {
         self.regex.as_str()
     }
 
-    fn find(&self, buffer: &Buffer, pos: usize) -> Option<(usize, usize)> {
+    fn find(&self, buffer: &Buffer, pos: usize) -> Option<Match> {
         // Entire buffer must be converted to string since regex library only works
         // with &str as opposed to iterators.
         let buf = buffer.iter().collect::<String>();
         self.find_str(&buf, pos)
     }
 
-    fn find_str(&self, buffer: &str, pos: usize) -> Option<(usize, usize)> {
+    fn find_str(&self, buffer: &str, pos: usize) -> Option<Match> {
         self.search(buffer, pos).or_else(|| {
             if pos > 0 {
                 self.search(buffer, 0)
@@ -287,103 +284,111 @@ mod tests {
     #[test]
     fn search_term_normal() {
         let pattern = TermPattern::new("BrOwN FoX", false);
-        let found = pattern.find_str(TEXT, 0).unwrap();
-        assert_eq!(found, (10, 19));
+        let Match(start_pos, end_pos) = pattern.find_str(TEXT, 0).unwrap();
+        assert_eq!(start_pos, 10);
+        assert_eq!(end_pos, 19);
     }
 
     #[test]
     fn search_term_normal_at_end() {
         let pattern = TermPattern::new("DOG", false);
-        let found = pattern.find_str(TEXT, 0).unwrap();
-        assert_eq!(found, (40, 43));
+        let Match(start_pos, end_pos) = pattern.find_str(TEXT, 0).unwrap();
+        assert_eq!(start_pos, 40);
+        assert_eq!(end_pos, 43);
     }
 
     #[test]
     fn search_term_normal_not_found() {
         let pattern = TermPattern::new("jumpz", false);
         let found = pattern.find_str(TEXT, 0);
-        assert_eq!(found, None);
+        assert!(found.is_none());
     }
 
     #[test]
     fn search_term_case() {
         let pattern = TermPattern::new("jump", true);
-        let found = pattern.find_str(TEXT, 0).unwrap();
-        assert_eq!(found, (20, 24));
+        let Match(start_pos, end_pos) = pattern.find_str(TEXT, 0).unwrap();
+        assert_eq!(start_pos, 20);
+        assert_eq!(end_pos, 24);
     }
 
     #[test]
     fn search_term_case_at_end() {
         let pattern = TermPattern::new("dog", false);
-        let found = pattern.find_str(TEXT, 0).unwrap();
-        assert_eq!(found, (40, 43));
+        let Match(start_pos, end_pos) = pattern.find_str(TEXT, 0).unwrap();
+        assert_eq!(start_pos, 40);
+        assert_eq!(end_pos, 43);
     }
 
     #[test]
     fn search_term_case_not_found() {
         let pattern = TermPattern::new("Jump", true);
         let found = pattern.find_str(TEXT, 0);
-        assert_eq!(found, None);
+        assert!(found.is_none());
     }
 
     #[test]
     fn search_regex_normal() {
         let pattern = RegexPattern::new(build_regex_normal("qu[A-Z]+\\s*.+wN"));
-        let found = pattern.find_str(TEXT, 0).unwrap();
-        assert_eq!(found, (4, 15))
+        let Match(start_pos, end_pos) = pattern.find_str(TEXT, 0).unwrap();
+        assert_eq!(start_pos, 4);
+        assert_eq!(end_pos, 15);
     }
 
     #[test]
     fn search_regex_normal_at_end() {
         let pattern = RegexPattern::new(build_regex_normal("LazY.*$"));
-        let found = pattern.find_str(TEXT, 0).unwrap();
-        assert_eq!(found, (35, 43))
+        let Match(start_pos, end_pos) = pattern.find_str(TEXT, 0).unwrap();
+        assert_eq!(start_pos, 35);
+        assert_eq!(end_pos, 43);
     }
 
     #[test]
     fn search_regex_normal_not_found() {
         let pattern = RegexPattern::new(build_regex_normal("qu[a-z]+\\s.+nw"));
         let found = pattern.find_str(TEXT, 0);
-        assert_eq!(found, None);
+        assert!(found.is_none());
     }
 
     #[test]
     fn search_regex_case() {
         let pattern = RegexPattern::new(build_regex_case("qu[a-z]+\\s*.+wn"));
-        let found = pattern.find_str(TEXT, 0).unwrap();
-        assert_eq!(found, (4, 15))
+        let Match(start_pos, end_pos) = pattern.find_str(TEXT, 0).unwrap();
+        assert_eq!(start_pos, 4);
+        assert_eq!(end_pos, 15);
     }
 
     #[test]
     fn search_regex_case_at_end() {
         let pattern = RegexPattern::new(build_regex_case("lazy.*$"));
-        let found = pattern.find_str(TEXT, 0).unwrap();
-        assert_eq!(found, (35, 43))
+        let Match(start_pos, end_pos) = pattern.find_str(TEXT, 0).unwrap();
+        assert_eq!(start_pos, 35);
+        assert_eq!(end_pos, 43);
     }
 
     #[test]
     fn search_regex_case_not_found() {
         let pattern = RegexPattern::new(build_regex_case("qu[A-Z]+\\s.+wn"));
         let found = pattern.find_str(TEXT, 0);
-        assert_eq!(found, None);
+        assert!(found.is_none());
     }
 
     #[test]
     fn search_empty_buffer() {
         let pattern = TermPattern::new("anything", false);
         let found = pattern.find_str("", 0);
-        assert_eq!(found, None);
+        assert!(found.is_none());
 
         let pattern = RegexPattern::new(build_regex_normal("any.+thing"));
         let found = pattern.find_str("", 0);
-        assert_eq!(found, None);
+        assert!(found.is_none());
     }
 
     #[test]
     fn search_with_empty_term() {
         let pattern = TermPattern::new("", false);
         let found = pattern.find_str(TEXT, 0);
-        assert_eq!(found, None);
+        assert!(found.is_none());
     }
 
     fn build_regex_normal(term: &str) -> Regex {

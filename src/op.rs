@@ -17,6 +17,7 @@ use crate::env::{Environment, Focus};
 use crate::help;
 use crate::operation::{Action, Operation};
 use crate::question;
+use crate::search::Match;
 use crate::size::{Point, Size};
 use crate::source::Source;
 use crate::workspace::Placement;
@@ -658,16 +659,19 @@ fn search_next(env: &mut Environment) -> Option<Action> {
         let pos = if pos == cur_pos { cur_pos + 1 } else { cur_pos };
 
         // Find next match and highlight if found.
-        let found = pattern.find(&editor.buffer(), pos);
-        if let Some((start_pos, end_pos)) = found {
-            editor.move_to(start_pos, Align::Center);
-            editor.clear_mark();
-            editor.set_soft_mark_at(end_pos);
-            editor.render();
-            editor.set_last_match(start_pos, pattern);
-        } else {
-            // Restore match state that was taken earlier.
-            editor.set_last_match(pos, pattern);
+        let result = pattern.find(&editor.buffer(), pos);
+        match result {
+            Some(Match(start_pos, end_pos)) => {
+                editor.move_to(start_pos, Align::Center);
+                editor.clear_mark();
+                editor.set_soft_mark_at(end_pos);
+                editor.render();
+                editor.set_last_match(start_pos, pattern);
+            }
+            None => {
+                // Restore match state that was taken earlier.
+                editor.set_last_match(pos, pattern);
+            }
         }
         None
     } else {
