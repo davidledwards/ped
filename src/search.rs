@@ -3,6 +3,7 @@
 use crate::buffer::Buffer;
 use crate::etc;
 use regex_lite::Regex;
+use std::cmp;
 use std::collections::HashMap;
 use std::ops::Range;
 
@@ -67,6 +68,33 @@ struct TermPattern {
 }
 
 impl TermPattern {
+    pub fn new(term: &str, case_strict: bool) -> TermPattern {
+        // Pattern is downcased when case-sensitivity is relaxed, otherwise
+        // it will be faithful represention of term.
+        let pattern = term
+            .chars()
+            .map(|c| {
+                if case_strict {
+                    c
+                } else {
+                    c.to_ascii_lowercase()
+                }
+            })
+            .collect::<Vec<_>>();
+
+        // Construct shift tables.
+        let bc_shift = Self::build_bc_shift(&pattern);
+        let gs_shift = Self::build_gs_shift(&pattern);
+
+        TermPattern {
+            term: term.to_string(),
+            pattern,
+            bc_shift,
+            gs_shift,
+            case_strict,
+        }
+    }
+
     fn build_bc_shift(pattern: &[char]) -> HashMap<char, usize> {
         let len = pattern.len();
         pattern
@@ -86,9 +114,7 @@ impl TermPattern {
             let mut i = len;
             let mut j = len + 1;
             while i > 0 {
-                // Find border of pattern[i..pat_len]
                 while j <= len && pattern[i - 1] != pattern[j - 1] {
-                    // If good_suffix[j-1] hasn't been set yet, set it
                     if gs_shift[j - 1] == len {
                         gs_shift[j - 1] = j - i;
                     }
@@ -113,39 +139,19 @@ impl TermPattern {
         }
     }
 
-    pub fn new(term: &str, case_strict: bool) -> TermPattern {
-        // Pattern is downcased when case-sensitivity is relaxed, otherwise
-        // it is faithful represention of term.
-        let pattern = term
-            .chars()
-            .map(|c| {
-                if case_strict {
-                    c
-                } else {
-                    c.to_ascii_lowercase()
-                }
-            })
-            .collect::<Vec<_>>();
-
-        let bc_shift = Self::build_bc_shift(&pattern);
-        let gs_shift = Self::build_gs_shift(&pattern);
-
-        TermPattern {
-            term: term.to_string(),
-            pattern,
-            bc_shift,
-            gs_shift,
-            case_strict,
-        }
-    }
-
     fn search(&self, buffer: &Buffer, pos: usize) -> Option<(usize, usize)> {
         let len = self.pattern.len();
         if len > 0 && pos + len <= buffer.size() {
+            // Since Boyer-Moore searches backwards relative to pattern, this is the
+            // position in buffer at which searching should stop, otherwise pattern
+            // would extend beyond end of buffer.
             let stop_pos = buffer.size() - len;
+
+            // Search until first is found or stop position is reached.
             let mut pos = pos;
             while pos <= stop_pos {
-                // Pattern matching occurs right-to-left.
+                // Pattern matching occurs right-to-left, so keep matching characters
+                // until pattern is exhausted or mismatch occurs.
                 let mut i = len;
                 while i > 0 && self.pattern[i - 1] == self.buf_at(buffer, pos + i - 1) {
                     i -= 1;
@@ -154,14 +160,26 @@ impl TermPattern {
                     // Pattern matched.
                     return Some((pos, pos + len));
                 } else {
+                    // Bad character that did not match pattern.
                     let bc = self.buf_at(buffer, pos + i - 1);
+
+                    // Calculate shift distance using bad character shift table.
                     let bc_shift = if let Some(&p) = self.bc_shift.get(&bc) {
-                        if p < i - 1 { i - 1 - p } else { 1 }
+                        if p < i - 1 {
+                            // Rightmost position of bad character in shift table must
+                            // be less than current position in pattern where match stopped.
+                            i - 1 - p
+                        } else {
+                            // Cannot shift backwards, so shift by one.
+                            1
+                        }
                     } else {
+                        // Bad character does not exist in pattern, so shift past
+                        // remaining characters in pattern.
                         i
                     };
                     let gs_shift = self.gs_shift[i - 1];
-                    pos += bc_shift.max(gs_shift);
+                    pos += cmp::max(bc_shift, gs_shift);
                 }
             }
             // At this point, buffer was exhausted without match.
