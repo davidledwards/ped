@@ -59,7 +59,7 @@ Alternatively, a configuration file can be specified on the command line using t
 ped --config ~/alt/.pedrc README.md
 ```
 
-See [.pedrc](.pedrc) for a detailed explanation of configuration settings. In the absence of a configuration file, `ped` will rely on default values.
+See [.pedrc](content/.pedrc) for a detailed explanation of configuration settings. In the absence of a configuration file, `ped` will rely on default values.
 
 `ped` will also try to locate syntax configuration files in one of the following directories in order of precedence. See the [ped-syntax](https://github.com/davidledwards/ped-syntax) repository for more information about creating and installing syntax files.
 
@@ -96,7 +96,7 @@ ped --bare-syntax README.md
 
 The editor comes prebuilt with a default set of opinionated key bindings. Until the project reaches version `1.0`, these builtin key bindings may change.
 
-These key bindings can be enumerated from the CLI, the output of which may be included in a configuration file under the `[bindings]` section. See [.pedrc](.pedrc) for more details on modifying key bindings.
+These key bindings can be enumerated from the CLI, the output of which may be included in a configuration file under the `[bindings]` section. See [.pedrc](content/.pedrc) for more details on modifying key bindings.
 
 Prints the key bindings.
 
