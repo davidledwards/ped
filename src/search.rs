@@ -114,7 +114,7 @@ impl TermPattern {
             let mut gs_shift = vec![len; len];
             let mut border = vec![0; len + 1];
 
-            // First phase computes borders.
+            // First phase computes border shifts.
             border[len] = len + 1;
             let mut i = len;
             let mut j = len + 1;
@@ -209,6 +209,8 @@ impl Pattern for TermPattern {
 
     fn find(&self, buffer: &Buffer, pos: usize) -> Option<Match> {
         self.search(buffer, pos).or_else(|| {
+            // Search continues by wrapping to beginning of buffer but only if it
+            // started somewhere after beginning.
             if pos > 0 {
                 self.search(buffer, 0)
             } else {
@@ -218,8 +220,11 @@ impl Pattern for TermPattern {
     }
 
     fn find_str(&self, buffer: &str, pos: usize) -> Option<Match> {
-        let mut buf = Buffer::new();
-        buf.insert_str(buffer);
+        // Unfortunately, the search algorithm only operates on Buffer types, so
+        // string slices must be converted prior to search.
+        let cs = buffer.chars().collect::<Vec<_>>();
+        let mut buf = Buffer::with_capacity(cs.len());
+        buf.insert(&cs);
         self.find(&buf, pos)
     }
 }
@@ -239,7 +244,7 @@ impl RegexPattern {
     }
 
     fn search(&self, buffer: &str, pos: usize) -> Option<Match> {
-        // Convert starting position into an offset.
+        // Convert starting position into correct offset into string slice.
         let pos_offset = etc::pos_to_offset(buffer, pos);
 
         self.regex.find_at(buffer, pos_offset).map(|m| {
@@ -248,7 +253,10 @@ impl RegexPattern {
             let Range { start, end } = m.range();
             let start_pos = etc::offset_to_pos(buffer, start);
 
-            // This trick saves us from rescanning entire buffer to find ending offset.
+            // This trick saves us from rescanning entire buffer to find ending offset,
+            // which works because the subslice beginning at the start position of match
+            // is a valid UTF-8 code point boundary, thus we can safely scan from that
+            // point forward by the size of the match.
             let end_pos = start_pos + etc::offset_to_pos(&buffer[start..], end - start);
             Match(start_pos, end_pos)
         })
@@ -270,6 +278,8 @@ impl Pattern for RegexPattern {
     fn find_str(&self, buffer: &str, pos: usize) -> Option<Match> {
         self.search(buffer, pos).or_else(|| {
             if pos > 0 {
+                // Search continues by wrapping to beginning of buffer but only if it
+                // started somewhere after beginning.
                 self.search(buffer, 0)
             } else {
                 None
