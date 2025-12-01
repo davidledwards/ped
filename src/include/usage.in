@@ -24,6 +24,7 @@ Interrogation
   --bindings         : print key bindings in TOML format
   --colors           : print color names in TOML format
   --theme            : print color theme in TOML format
+  --syntaxes         : print available syntaxes
   --describe OP      : print descripion of operation (--ops shows list)
 
 Mouse

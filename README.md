@@ -25,10 +25,10 @@ brew install ped
 
 Releases can be downloaded directly from [GitHub](https://github.com/davidledwards/ped/releases).
 
-Alternatively, using the [GitHub CLI](https://cli.github.com/), releases can also be downloaded from the command line. For example, to download version `0.35.0`, run the following command.
+Alternatively, using the [GitHub CLI](https://cli.github.com/), releases can also be downloaded from the command line. For example, to download version `0.36.0`, run the following command.
 
 ```shell
-gh release download --repo https://github.com/davidledwards/ped v0.35.0
+gh release download --repo https://github.com/davidledwards/ped v0.36.0
 ```
 
 ## Usage
@@ -70,6 +70,12 @@ Alternatively, a directory containing syntax configurations can be specified usi
 
 ```shell
 ped --syntax ~/alt/syntax README.md
+```
+
+Prints the available syntax configurations located by `ped`.
+
+```shell
+ped --syntaxes
 ```
 
 `ped` can also be instructed to ignore all configuration files, including syntax configurations, using the `--bare` (or `-b`) and `--bare-syntax` (or `-B`) options, respectively. This is useful in circumstances where configuration files contain errors, which will cause `ped` to exit prematurely.

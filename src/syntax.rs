@@ -213,6 +213,11 @@ impl Registry {
         })
     }
 
+    /// Returns a reference to the map of canonical syntax names to syntax configurations.
+    pub fn syntaxes(&self) -> &HashMap<String, Syntax> {
+        &self.syntax_map
+    }
+
     /// Creates a registry by enumerating and loading files from `dir`.
     fn load_registry<P: AsRef<Path>>(dir: P, colors: &Colors) -> Result<Registry> {
         let paths = sys::list_files(dir.as_ref());

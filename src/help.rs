@@ -7,9 +7,9 @@ use crate::config::{ConfigurationRef, Theme};
 use crate::editor::{Editor, EditorRef};
 use crate::etc;
 use crate::key::{self, KEY_MAPPINGS, Key};
-use crate::op;
-use crate::op::OP_MAPPINGS;
+use crate::op::{self, OP_MAPPINGS};
 use crate::source::Source;
+use crate::syntax::Syntax;
 use indexmap::IndexMap;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write;
@@ -19,6 +19,7 @@ pub const KEYS_EDITOR_NAME: &str = "keys";
 pub const OPS_EDITOR_NAME: &str = "operations";
 pub const BINDINGS_EDITOR_NAME: &str = "bindings";
 pub const COLORS_EDITOR_NAME: &str = "colors";
+pub const SYNTAXES_EDITOR_NAME: &str = "syntaxes";
 
 /// Returns an ephemeral editor, named `@help`, containing general help content.
 pub fn help_editor(config: ConfigurationRef) -> EditorRef {
@@ -67,11 +68,9 @@ pub fn keys_content() -> String {
 }
 
 fn keys_buffer() -> Buffer {
-    const HEADER: &str = "[Keys]";
-
     let keys = prepare_keys();
     let mut buf = Buffer::new();
-    writeln!(buf, "{HEADER}");
+    writeln!(buf, "[Key]");
     for key_name in keys {
         writeln!(buf, "{key_name}");
     }
@@ -110,9 +109,7 @@ fn ops_buffer() -> Buffer {
 
     // Calculate maximum width of key sequences to align output.
     let ops = prepare_ops();
-    let key_width = ops.keys().fold(HEADER_OP.len(), |width, k| {
-        if k.len() > width { k.len() } else { width }
-    });
+    let key_width = ops.keys().map(|k| k.len()).max().unwrap_or(HEADER_OP.len());
 
     // Emit formatted operations.
     let mut buf = Buffer::new();
@@ -128,7 +125,7 @@ fn prepare_ops() -> BTreeMap<String, String> {
     OP_MAPPINGS
         .iter()
         .map(|(op, _, desc)| (op.to_string(), desc.to_string()))
-        .collect::<BTreeMap<_, _>>()
+        .collect()
 }
 
 /// Returns an ephemeral editor, named `@bindings`, containing a list of key bindings.
@@ -156,9 +153,11 @@ fn bindings_buffer(bindings: &HashMap<Vec<Key>, String>) -> Buffer {
     let bindings = prepare_bindings(bindings);
 
     // Calculate maximum width of key sequences to align output.
-    let key_width = bindings.keys().fold(HEADER_KEY.len(), |width, k| {
-        if k.len() > width { k.len() } else { width }
-    });
+    let key_width = bindings
+        .keys()
+        .map(|k| k.len())
+        .max()
+        .unwrap_or(HEADER_KEY.len());
 
     // Emit formatted bindings.
     let mut buf = Buffer::new();
@@ -174,7 +173,7 @@ fn prepare_bindings(bindings: &HashMap<Vec<Key>, String>) -> BTreeMap<String, St
     bindings
         .iter()
         .map(|(keys, op)| (key::pretty(keys), op.to_string()))
-        .collect::<BTreeMap<_, _>>()
+        .collect()
 }
 
 /// Returns an ephemeral editor, named `@colors`, containing a list of color names
@@ -200,13 +199,11 @@ fn colors_buffer(colors: &HashMap<String, u8>) -> Buffer {
 
     // Calculate maximum width of color names to align output.
     let colors = prepare_colors(colors);
-    let name_width = colors.keys().fold(HEADER_NAME.len(), |width, name| {
-        if name.len() > width {
-            name.len()
-        } else {
-            width
-        }
-    });
+    let name_width = colors
+        .keys()
+        .map(|name| name.len())
+        .max()
+        .unwrap_or(HEADER_NAME.len());
 
     // Emit formatted colors.
     let mut buf = Buffer::new();
@@ -228,7 +225,7 @@ fn prepare_colors(colors: &HashMap<String, u8>) -> IndexMap<String, u8> {
     colors
         .iter()
         .map(|(name, color)| (name.to_string(), **color))
-        .collect::<IndexMap<_, _>>()
+        .collect()
 }
 
 /// Returns a TOML-formatted list of theme color names and values.
@@ -257,4 +254,37 @@ pub fn theme_content(theme: &Theme) -> String {
         writeln!(out, "'{name}' = {}", t_fn(theme));
     }
     out
+}
+
+/// Returns an ephemeral editor, named `@syntaxes`, containing a list of available syntaxes.
+pub fn syntaxes_editor(config: ConfigurationRef) -> EditorRef {
+    let buffer = syntaxes_buffer(config.registry.syntaxes());
+    Editor::readonly(config, Source::as_ephemeral(SYNTAXES_EDITOR_NAME), buffer).into_ref()
+}
+
+/// Returns a formatted list of available syntaxes
+pub fn syntaxes_content(syntaxes: &HashMap<String, Syntax>) -> String {
+    let syntaxes = prepare_syntaxes(syntaxes);
+    let mut out = String::new();
+    for name in syntaxes {
+        writeln!(out, "{name}");
+    }
+    out
+}
+
+fn syntaxes_buffer(syntaxes: &HashMap<String, Syntax>) -> Buffer {
+    let syntaxes = prepare_syntaxes(syntaxes);
+    let mut buf = Buffer::new();
+    writeln!(buf, "[Syntax]");
+    for name in syntaxes {
+        writeln!(buf, "{name}");
+    }
+    buf.set_pos(0);
+    buf
+}
+
+fn prepare_syntaxes(syntaxes: &HashMap<String, Syntax>) -> Vec<String> {
+    let mut syntaxes = syntaxes.keys().cloned().collect::<Vec<_>>();
+    syntaxes.sort();
+    syntaxes
 }

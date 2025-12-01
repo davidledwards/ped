@@ -140,6 +140,10 @@ fn run_opts(opts: &Options) -> Result<()> {
         let content = help::theme_content(&config.theme);
         write!(stdout(), "{content}")?;
         Ok(())
+    } else if opts.syntaxes {
+        let content = help::syntaxes_content(config.registry.syntaxes());
+        write!(stdout(), "{content}")?;
+        Ok(())
     } else if let Some(ref op) = opts.describe {
         if let Some(desc) = op::describe(op) {
             writeln!(stdout(), "{desc}")?;

@@ -63,6 +63,13 @@ fn help_colors(env: &mut Environment) -> Option<Action> {
     })
 }
 
+/// Operation: `help-syntaxes`
+fn help_syntaxes(env: &mut Environment) -> Option<Action> {
+    toggle_help(env, help::SYNTAXES_EDITOR_NAME, |config| {
+        help::syntaxes_editor(config)
+    })
+}
+
 fn toggle_help<F>(env: &mut Environment, editor_name: &str, editor_fn: F) -> Option<Action>
 where
     F: Fn(ConfigurationRef) -> EditorRef,
@@ -1026,7 +1033,7 @@ pub fn set_focus(env: &mut Environment, p: Point) {
 
 /// Predefined mapping of editing operations to editing functions.
 #[rustfmt::skip]
-pub const OP_MAPPINGS: [(&str, Operation, &str); 83] = [
+pub const OP_MAPPINGS: [(&str, Operation, &str); 84] = [
     // --- exit and cancellation ---
     ("quit", quit,
         "ask to save dirty editors and quit"),
@@ -1042,6 +1049,8 @@ pub const OP_MAPPINGS: [(&str, Operation, &str); 83] = [
         "show or hide @bindings window"),
     ("help-colors", help_colors,
         "show or hide @colors window"),
+    ("help-syntaxes", help_syntaxes,
+        "show or hide @syntaxes window"),
 
     // --- navigation and selection ---
     ("move-backward", move_backward,
