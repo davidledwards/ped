@@ -1,0 +1,123 @@
+# A sample ped configuration file, which adheres to the TOML specification.
+
+# This section contains settings that are usually offered as command-line
+# options.
+#
+[settings]
+# Enables highlighting of the cursor row.
+# Default = true
+spotlight = false
+
+# Shows line numbers in the left margin.
+# Default = true
+lines = false
+
+# Makes \n characters visible using a special character.
+# Default = false
+eol = true
+
+# Insert tabs as \t instead of spaces.
+# Default = false
+tab-hard = true
+
+# Sets the tab stop size, which applies only when tab-hard = false
+# Default = 4
+tab-size = 8
+
+# When saving files, writes EOL as `\r\n` sequence instead of `\n`.
+# Default = false
+crlf = true
+
+# Tracks lateral mouse movement as left and right scrolling events.
+# Default = false
+track-lateral = true
+
+# This section contains custom-defined color names that map to color values.
+#
+# Colors are values in the range of [0, 255] and follow the 8-bit ANSI standard
+# at <https://en.wikipedia.org/wiki/ANSI_escape_code#8-bit>.
+#
+# Standard ANSI colors in the range of [0, 15] are predefined, so there is no
+# need to define them in this section unless the desire is to map a standard
+# color name to a different color value.
+#
+# Predefine ANSI colors:
+#   black = 0
+#   red = 1
+#   green = 2
+#   yellow = 3
+#   blue = 4
+#   magenta = 5
+#   cyan = 6
+#   white = 7
+#   gray = 8
+#   bright-red = 9
+#   bright-green = 10
+#   bright-yellow = 11
+#   bright-blue = 12
+#   bright-magenta = 13
+#   bright-cyan = 14
+#   bright-white = 15
+#
+# Additional custom colors have been predefined and may be listed by running
+# `ped --colors`.
+#
+[colors]
+funky-red = 196
+charcoal = 232
+light-gray = 234
+medium-gray = 237
+
+# This section allows the configuration of alternative colors.
+#
+# Values from the [colors] section may be referenced here.
+#
+# Recognized color settings:
+#   text-fg
+#   text-bg
+#   select-bg
+#   spotlight-bg
+#   whitespace-fg
+#   accent-fg
+#   echo-fg
+#   prompt-fg
+#   banner-fg
+#   dirty-fg
+#   active-bg
+#   inactive-bg
+#   margin-fg
+#   margin-bg
+#   line-fg
+#
+[theme]
+echo-fg = "funky-red"
+
+# This section allows key sequences to be rebound to editing operations.
+#
+# An entry in this section follows the given format, where a sequence of keys
+# can be chained together using a ":" delimiter:
+#
+#   "key[:key]..." = "operation"
+#
+# The list of available keys and operations can be discovered using the command
+# line options --print-keys and --print-ops, respectively, and current key
+# bindings can be discovered using --print-bindings.
+#
+# A minimal set of keys are prohibited from being rebound, which are noted
+# below with an explanation as to why:
+#
+#   C-q : provides a way to quit ped
+#   C-g : provides a way to cancel any operation
+#   ESC : this key is a prefix of many other keys
+#
+[bindings]
+# A binding to a single key.
+"C-^" = "set-mark"
+
+# A binding to a sequence of keys.
+"M-x:y:z" = "move-top"
+
+# Note that "M-<key>" may be used as shorthand for "ESC:<key>". Both of the
+# following bindings are identical.
+"M-x:e" = "move-end"
+"ESC:x:e" = "move-end"
