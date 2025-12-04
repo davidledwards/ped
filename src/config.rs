@@ -206,7 +206,7 @@ impl Theme {
     const ECHO_FG: u8 = 208;
     const PROMPT_FG: u8 = 102;
     const BANNER_FG: u8 = 254;
-    const DIRTY_FG: u8 = 82;
+    const DIRTY_FG: u8 = 45;
     const ACTIVE_BG: u8 = 60;
     const INACTIVE_BG: u8 = 237;
     const MARGIN_FG: u8 = 61;
