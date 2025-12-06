@@ -1,8 +1,8 @@
 //! A restricted environment available to editing functions.
 //!
 //! All editing functions, which are bound to key sequences at runtime, are external
-//! to the core [`Editor`]. A restricted set of functions is necessary not only to
-//! simplify operations, but more importantly, to enforce certain invariants.
+//! to the core [`crate::editor::Editor`]. A restricted set of functions is necessary
+//! not only to simplify operations, but more importantly, to enforce certain invariants.
 
 use crate::clip::Clipboard;
 use crate::editor::{Align, EditorBuilder, EditorRef};
@@ -127,8 +127,7 @@ impl Environment {
             .map(|(v_id, _)| *v_id)
     }
 
-    /// Returns the id of the editor whose [`source`](Editor::source) matches `source`,
-    /// otherwise `None`.
+    /// Returns the id of the editor whose source matches `source`, otherwise `None`.
     pub fn find_editor_id(&self, source: &str) -> Option<u32> {
         self.editor_map
             .iter()

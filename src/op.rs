@@ -1,9 +1,9 @@
 //! A collection of functions intended to be associated with names of editing
-//! operations. These functions serve as the glue between [`Key`]s and respective
-//! actions in the context of the editing experience.
+//! operations. These functions serve as the glue between [`crate::key::Key`]s and
+//! respective actions in the context of the editing experience.
 //!
-//! Editing operations are designed to be callable only indirectly through [`OpMap`]
-//! instances created by [`init_op_map`]. The mapping of names to functions is captured
+//! Editing operations are designed to be callable only indirectly through instances
+//! created by [`init_op_map`]. The mapping of names to functions is captured
 //! in [`OP_MAPPINGS`].
 //!
 //! See [`Bindings`](crate::bind::Bindings) for further details on binding keys

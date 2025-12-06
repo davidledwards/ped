@@ -67,7 +67,7 @@ impl Bindings {
         })
     }
 
-    /// Converts the key sequence `key_seq` to a vector of [`Key']s.
+    /// Converts the key sequence `key_seq` to a vector of [`Key`]s.
     ///
     /// If `strict` is `true`, then the presence of a restricted key sequence will
     /// result in `Err`.

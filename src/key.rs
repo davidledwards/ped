@@ -202,8 +202,8 @@ impl Keyboard {
     /// Reads a sequence of bytes prefixed with `ESC`.
     ///
     /// In most cases, this reads an ANSI escape sequence. However, it may produce
-    /// [`Key::Control(27)`] itself if no further bytes are read, or [`Key::None`] if
-    /// the sequence is unrecognized.
+    /// [`Key::Control(27)`](Key::Control) itself if no further bytes are read,
+    /// or [`Key::None`] if the sequence is unrecognized.
     fn read_escape(&mut self) -> Result<Key> {
         let key = match self.next()? {
             Some(b'[') => self.read_csi()?,

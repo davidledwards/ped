@@ -6,8 +6,8 @@ use crate::user::Question;
 /// A function type that implements an editing operation.
 pub type Operation = fn(&mut Environment) -> Option<Action>;
 
-/// An action returned by an [`OpFn`] that is meant to be carried out by a controller
-/// orchestrating calls to such functions.
+/// An action returned by an [`Operation`] that is meant to be carried out by a
+/// controller orchestrating calls to such functions.
 pub enum Action {
     Quit,
     Redraw,
