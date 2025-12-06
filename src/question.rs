@@ -1,7 +1,7 @@
 //! A collection of questions used by editing operations.
 
 use crate::ed;
-use crate::editor::{Align, Capture, EditorRef, ImmutableEditor};
+use crate::editor::{Align, Capture, EditorRef};
 use crate::env::{Environment, Focus};
 use crate::key::{Key, SHIFT_TAB, TAB};
 use crate::operation::Action;
@@ -339,7 +339,7 @@ impl Question for InsertUnicode {
             && let Some(c) = self.parse_code(value)
         {
             let mut editor = self.editor.borrow_mut();
-            if let Some(editor) = editor.modify() {
+            if editor.is_mutable() {
                 editor.clear_mark();
                 editor.insert_char(c);
                 editor.render();

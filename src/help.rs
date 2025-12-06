@@ -4,7 +4,7 @@
 
 use crate::buffer::Buffer;
 use crate::config::{ConfigurationRef, Theme};
-use crate::editor::{Editor, EditorRef};
+use crate::editor::{EditorBuilder, EditorRef};
 use crate::etc;
 use crate::key::{self, KEY_MAPPINGS, Key};
 use crate::op::{self, OP_MAPPINGS};
@@ -24,7 +24,12 @@ pub const SYNTAXES_EDITOR_NAME: &str = "syntaxes";
 /// Returns an ephemeral editor, named `@help`, containing general help content.
 pub fn help_editor(config: ConfigurationRef) -> EditorRef {
     let buffer = help_buffer(config.bindings.bindings());
-    Editor::readonly(config, Source::as_ephemeral(HELP_EDITOR_NAME), buffer).into_ref()
+    EditorBuilder::new(config)
+        .source(Source::as_ephemeral(HELP_EDITOR_NAME))
+        .buffer(buffer)
+        .readonly()
+        .build()
+        .into_ref()
 }
 
 fn help_buffer(bindings: &HashMap<Vec<Key>, String>) -> Buffer {
@@ -49,12 +54,12 @@ fn help_buffer(bindings: &HashMap<Vec<Key>, String>) -> Buffer {
 
 /// Returns an ephemeral editor, named `@keys`, containing a list of available keys.
 pub fn keys_editor(config: ConfigurationRef) -> EditorRef {
-    Editor::readonly(
-        config,
-        Source::as_ephemeral(KEYS_EDITOR_NAME),
-        keys_buffer(),
-    )
-    .into_ref()
+    EditorBuilder::new(config)
+        .source(Source::as_ephemeral(KEYS_EDITOR_NAME))
+        .buffer(keys_buffer())
+        .readonly()
+        .build()
+        .into_ref()
 }
 
 /// Returns a formatted list of available keys.
@@ -90,7 +95,12 @@ fn prepare_keys() -> Vec<String> {
 /// Returns an ephemeral editor, named `@operations`, containing a list of available
 /// editing operations.
 pub fn ops_editor(config: ConfigurationRef) -> EditorRef {
-    Editor::readonly(config, Source::as_ephemeral(OPS_EDITOR_NAME), ops_buffer()).into_ref()
+    EditorBuilder::new(config)
+        .source(Source::as_ephemeral(OPS_EDITOR_NAME))
+        .buffer(ops_buffer())
+        .readonly()
+        .build()
+        .into_ref()
 }
 
 /// Returns a formatted list of available editing operations.
@@ -131,7 +141,12 @@ fn prepare_ops() -> BTreeMap<String, String> {
 /// Returns an ephemeral editor, named `@bindings`, containing a list of key bindings.
 pub fn bindings_editor(config: ConfigurationRef) -> EditorRef {
     let buffer = bindings_buffer(config.bindings.bindings());
-    Editor::readonly(config, Source::as_ephemeral(BINDINGS_EDITOR_NAME), buffer).into_ref()
+    EditorBuilder::new(config)
+        .source(Source::as_ephemeral(BINDINGS_EDITOR_NAME))
+        .buffer(buffer)
+        .readonly()
+        .build()
+        .into_ref()
 }
 
 /// Returns a TOML-formatted list of key bindings.
@@ -180,7 +195,12 @@ fn prepare_bindings(bindings: &HashMap<Vec<Key>, String>) -> BTreeMap<String, St
 /// and values.
 pub fn colors_editor(config: ConfigurationRef) -> EditorRef {
     let buffer = colors_buffer(config.colors.colors());
-    Editor::readonly(config, Source::as_ephemeral(COLORS_EDITOR_NAME), buffer).into_ref()
+    EditorBuilder::new(config)
+        .source(Source::as_ephemeral(COLORS_EDITOR_NAME))
+        .buffer(buffer)
+        .readonly()
+        .build()
+        .into_ref()
 }
 
 /// Returns a TOML-formatted list of color names and values.
@@ -259,7 +279,12 @@ pub fn theme_content(theme: &Theme) -> String {
 /// Returns an ephemeral editor, named `@syntaxes`, containing a list of available syntaxes.
 pub fn syntaxes_editor(config: ConfigurationRef) -> EditorRef {
     let buffer = syntaxes_buffer(config.registry.syntaxes());
-    Editor::readonly(config, Source::as_ephemeral(SYNTAXES_EDITOR_NAME), buffer).into_ref()
+    EditorBuilder::new(config)
+        .source(Source::as_ephemeral(SYNTAXES_EDITOR_NAME))
+        .buffer(buffer)
+        .readonly()
+        .build()
+        .into_ref()
 }
 
 /// Returns a formatted list of available syntaxes

@@ -10,7 +10,7 @@
 use crate::config::ConfigurationRef;
 use crate::echo::Echo;
 use crate::ed;
-use crate::editor::{Align, ImmutableEditor};
+use crate::editor::Align;
 use crate::env::{Environment, Focus};
 use crate::error::Result;
 use crate::etc::{PACKAGE_NAME, PACKAGE_VERSION};

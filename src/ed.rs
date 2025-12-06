@@ -2,7 +2,7 @@
 
 use crate::buffer::Buffer;
 use crate::config::ConfigurationRef;
-use crate::editor::{Editor, EditorRef, ImmutableEditor};
+use crate::editor::{EditorBuilder, EditorRef};
 use crate::env::Environment;
 use crate::error::{Error, Result};
 use crate::io;
@@ -113,7 +113,10 @@ pub fn open_editor(config: ConfigurationRef, path: &str) -> Result<EditorRef> {
 
     // Create file buffer with position set at top.
     buffer.set_pos(0);
-    let editor = Editor::mutable(config, Source::as_file(path, time), Some(buffer));
+    let editor = EditorBuilder::new(config)
+        .source(Source::as_file(path, time))
+        .buffer(buffer)
+        .build();
     Ok(editor.into_ref())
 }
 

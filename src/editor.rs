@@ -20,323 +20,8 @@ use std::ops::Range;
 use std::rc::Rc;
 use std::time::Instant;
 
-/// An editing session containing a [`kernel`](EditorKernel) that carries out most
-/// operations.
+/// An editing session with an underlying [`Buffer`] and an attachable [`Window`].
 pub struct Editor {
-    /// The kernel where all operations are implemented.
-    kernel: EditorKernel,
-
-    /// A value of `true` implies that _mutable_ operations are not allowed.
-    readonly: bool,
-}
-
-pub type EditorRef = Rc<RefCell<Editor>>;
-
-/// A collection of _immutable_ operations that can be performed on an [`Editor`].
-///
-/// The notion of immutability in this context is not strictly defined, but rather
-/// seen from the perspective of the kinds of operations that can be performed
-/// regardless of whether the underlying buffer can be mutated. Hence, some of these
-/// operations actually require mutable references even though they are logically
-/// immutable.
-pub trait ImmutableEditor {
-    /// Returns a partial clone of this editor using `source`.
-    ///
-    /// Specifically, the buffer is cloned as well as the current buffer position and
-    /// cursor values. All other attributes are initialized as if a new editor were
-    /// being created.
-    fn clone_as(&self, source: Source) -> Editor;
-
-    /// Returns a reference to the source.
-    fn source(&self) -> &Source;
-
-    /// Changes the `source` associated with this editor.
-    fn assume(&mut self, source: Source);
-
-    /// Returns a reference to the underlying buffer.
-    fn buffer(&self) -> Ref<'_, Buffer>;
-
-    /// Returns `true` if the buffer has changed.
-    fn is_dirty(&self) -> bool;
-
-    /// Makes this editor _not_ dirty.
-    fn clear_dirty(&mut self);
-
-    /// Returns the cursor position on the display in terms of _row_ and _column_.
-    ///
-    /// The _row_ and _column_ values are `0`-based and exclusively bounded by
-    /// [`size()`](Self::size).
-    fn cursor(&self) -> Point;
-
-    /// Returns the location of the cursor position in the buffer in terms of _line_
-    /// and _column_.
-    ///
-    /// The _line_ and _column_ values are `0`-based. Note that neither of these values
-    /// are bounded by the size of the display, which is the case with
-    /// [`cursor`](Self::cursor).
-    fn location(&self) -> Point;
-
-    /// Returns the number of rows available on the editor canvas.
-    fn rows(&self) -> u32;
-
-    /// Returns the size of the editor canvas.
-    fn size(&self) -> Size;
-
-    /// Returns the buffer position corresponding to the [`cursor`](Self::cursor).
-    fn pos(&self) -> usize;
-
-    /// Returns `true` if the tab mode is _hard_ and `false` if _soft_.
-    fn get_tab(&self) -> bool;
-
-    /// Sets the tab mode based on the value of `hard`.
-    fn set_tab(&mut self, hard: bool);
-
-    /// Returns `true` if EOL characters should be written as `\r\n`.
-    fn get_crlf(&self) -> bool;
-
-    /// Sets the CRLF behavior based on the value of `crlf`.
-    fn set_crlf(&mut self, crlf: bool);
-
-    /// Sets the cursor location and corresponding buffer position to `cursor`, though
-    /// the final cursor location is constrained by end-of-line and end-of-buffer
-    /// boundaries.
-    ///
-    /// This function was designed for responding to _mouse click_ events where the
-    /// position of the click is captured in `cursor`.
-    ///
-    /// The coordinates in `cursor` are presumed to be relative to the origin of the
-    /// editor canvas.
-    fn set_focus(&mut self, cursor: Point);
-
-    /// Attaches the `window` to this editor.
-    fn attach(&mut self, window: WindowRef, align: Align);
-
-    /// Detaches the existing window from this editor.
-    fn detach(&mut self);
-
-    /// Sets the position of the cursor based on the alignment objective `align`.
-    fn align_cursor(&mut self, align: Align);
-
-    /// Draws the canvas and banner regardless of whether any updates have occurred.
-    fn draw(&mut self);
-
-    /// Makes the cursor visible.
-    fn show_cursor(&mut self);
-
-    /// Tries to move the cursor _backward_ from the current buffer position by `len`
-    /// characters.
-    fn move_backward(&mut self, len: usize);
-
-    /// Tries to move the cursor _forward_ from the current buffer position by `len`
-    /// characters.
-    fn move_forward(&mut self, len: usize);
-
-    /// Tries to move the cursor _backward_ by one word from the current buffer
-    /// position.
-    fn move_backward_word(&mut self);
-
-    /// Tries to move the cursor _forward_ by one word from the current buffer
-    /// position.
-    fn move_forward_word(&mut self);
-
-    /// Tries to move the cursor _up_ by the specified number of `try_rows`.
-    ///
-    /// If `pin` is `true`, then the cursor will remain on the current row if the
-    /// resulting display makes it possible. Pinning is useful when _paging up_.
-    ///
-    /// If `pin` is `false`, then the cursor will move up in tandem with `try_rows`,
-    /// though not to extend beyond the top of the display.
-    fn move_up(&mut self, try_rows: u32, pin: bool);
-
-    /// Tries to move the cursor _down_ by the specified number of `try_rows`.
-    ///
-    /// If `pin` is `true`, then the cursor will remain on the current row. Pinning is
-    /// useful when _paging down_.
-    ///
-    /// If `pin` is `false`, then the cursor will move down in tandem with `try_rows`,
-    /// though not to extend beyond the bottom of the display.
-    fn move_down(&mut self, try_rows: u32, pin: bool);
-
-    /// Moves the cursor to the _start_ of the current row.
-    fn move_start(&mut self);
-
-    /// Moves the cursor to the _end_ of the current row.
-    fn move_end(&mut self);
-
-    /// Moves the cursor to the _top_ of the buffer.
-    fn move_top(&mut self);
-
-    /// Moves the cursor to the _bottom_ of the buffer.
-    fn move_bottom(&mut self);
-
-    /// Moves the buffer position to the first character of `line` and places the
-    /// cursor on the display according to the `align` objective.
-    fn move_line(&mut self, line: u32, align: Align);
-
-    /// Moves the current buffer position to `pos` and places the cursor on the
-    /// display according to the `align` objective.
-    ///
-    /// When [`Align::Auto`] is specified, the placement of the cursor depends on
-    /// the target `pos` relative to the current buffer position. Specifically, it
-    /// behaves as follows:
-    /// - _when `pos` is above the current line but still visible on the display_:
-    ///   aligns the cursor on the target row above the current line, though not to
-    ///   extend beyond the top row
-    /// - _when `pos` is on the current line_: aligns the cursor on the current row
-    /// - _when `pos` is beyond the current line_: aligns the cursor on the target
-    ///   row below the current line, though not to extend beyond the borrom row
-    fn move_to(&mut self, pos: usize, align: Align);
-
-    /// Tries scrolling _up_ the contents of the display by the specified number of
-    /// `try_rows` while preserving the cursor position, which also means the cursor
-    /// moves _up_ as the contents scroll.
-    fn scroll_up(&mut self, try_rows: u32);
-
-    /// Tries scrolling _down_ the contents of the display by the specified number of
-    /// `try_rows` while preserving the cursor position, which also means the cursor
-    /// moves _down_ as the contents scroll.
-    fn scroll_down(&mut self, try_rows: u32);
-
-    /// Sets a _hard_ mark at the current buffer position and returns the previous
-    /// mark if set.
-    fn set_hard_mark(&mut self) -> Option<Mark>;
-
-    /// Sets a _soft_ mark at the current buffer position unless a _soft_ mark was
-    /// previously set.
-    ///
-    /// Note that if a _hard_ mark was previously set, the _soft_ mark will replace
-    /// it.
-    ///
-    /// Returns the previous _hard_ mark if set, otherwise `None`.
-    fn set_soft_mark(&mut self) -> Option<Mark>;
-
-    /// Sets a _soft_ mark at buffer position `pos` unless a _soft_ mark was previously
-    /// set.
-    ///
-    /// Note that if a _hard_ mark was previously set, the _soft_ mark will replace
-    /// it.
-    ///
-    /// Returns the previous _hard_ mark if set, otherwise `None`.
-    fn set_soft_mark_at(&mut self, pos: usize) -> Option<Mark>;
-
-    /// Clears and returns the mark if _soft_, otherwise `None` is returned.
-    fn clear_soft_mark(&mut self) -> Option<Mark>;
-
-    /// Clears and returns the mark.
-    fn clear_mark(&mut self) -> Option<Mark>;
-
-    /// Returns the text between the current buffer position and `mark`.
-    fn copy_mark(&self, mark: Mark) -> Vec<char>;
-
-    /// Returns the text of the line on which the current buffer position rests.
-    fn copy_line(&self) -> Vec<char>;
-
-    /// Returns the text between `from_pos` and `end_pos`.
-    ///
-    /// Specifically, the range of characters is bounded _inclusively below_ and
-    /// _exclusively above_. If `from_pos` is less than `to_pos`, then the range is
-    /// [`from_pos`, `to_pos`), otherwise it is [`to_pos`, `from_pos`).
-    ///
-    /// This function will return an empty vector if `from_pos` is equal to `to_pos`.
-    fn copy(&self, from_pos: usize, to_pos: usize) -> Vec<char>;
-
-    /// Reverts the last change to the buffer, if any, and makes that change eligible
-    /// to be reapplied via [`redo`](Editor::redo).
-    ///
-    /// Returns `true` if the change was reverted and `false` if the _undo_ stack is
-    /// empty.
-    fn undo(&mut self) -> bool;
-
-    /// Applies the last change to the buffer, if any, that was reverted via
-    /// [`undo`](Editor::undo).
-    ///
-    /// Returns `true` if the change was applies and `false` if the _redo_ stack is
-    /// empty.
-    fn redo(&mut self) -> bool;
-
-    /// Returned the captured state of the editor.
-    fn capture(&self) -> Capture;
-
-    /// Restores the editor to the captured state in `capture`.
-    ///
-    /// Note that if the editor changes after state has been captured, there is no
-    /// guarantee that said state will be restored precisely as it was.
-    fn restore(&mut self, capture: &Capture);
-
-    /// Tokenizes the buffer if changes occurred since the last tokenization, returning
-    /// `true` if tokenization occurred and `false` otherwise.
-    fn tokenize(&mut self) -> bool;
-
-    /// Renders the contents of the editor.
-    fn render(&mut self);
-
-    /// Sets the last match from a prior search, where `pos` is the starting positon of
-    /// the match and `pattern` is the applicable search pattern.
-    fn set_last_match(&mut self, pos: usize, pattern: Box<dyn Pattern>);
-
-    /// Takes the last match from a prior search.
-    fn take_last_match(&mut self) -> Option<(usize, Box<dyn Pattern>)>;
-}
-
-/// A collection of _mutable_ operations that can be performed on an [`Editor`].
-///
-/// The notion of mutability in this context simply implies the ability to change the
-/// underlying buffer.
-///
-/// This trait also inherits immutable operations, as these operations are typically
-/// interleaved with mutable operations.
-pub trait MutableEditor: ImmutableEditor {
-    /// Inserts the character `c` at the current buffer position.
-    fn insert_char(&mut self, c: char);
-
-    /// Inserts the string slice `str` at the current buffer position.
-    fn insert_str(&mut self, text: &str);
-
-    /// Inserts the `TAB` character.
-    fn insert_tab(&mut self);
-
-    /// Inserts the array of `text` at the current buffer position.
-    fn insert(&mut self, text: &[char]);
-
-    /// Removes and returns the character before the current buffer position.
-    ///
-    /// An empty vector is returned if the current position is already at the top
-    /// of the buffer.
-    fn remove_before(&mut self) -> Vec<char>;
-
-    /// Removes and returns the character after the current buffer position.
-    ///
-    /// An empty vector is returned if the current position is already at the
-    /// bottom of the buffer.
-    fn remove_after(&mut self) -> Vec<char>;
-
-    /// Removes and returns the text between the current buffer position and `mark`.
-    fn remove_mark(&mut self, mark: Mark) -> Vec<char>;
-
-    /// Removes and returns the text of the line on which the current buffer position
-    /// rests.
-    fn remove_line(&mut self) -> Vec<char>;
-
-    /// Removes and returns the text between the start of the current line and the
-    /// current buffer position.
-    fn remove_start(&mut self) -> Vec<char>;
-
-    /// Removes and returns the text between the current buffer position and the end
-    /// of the current line.
-    fn remove_end(&mut self) -> Vec<char>;
-
-    /// Removes and returns the text between the current buffer position and `pos`.
-    ///
-    /// Specifically, the range of characters is bounded _inclusively below_ and
-    /// _exclusively above_. If `pos` is less than the current buffer position, then
-    /// the range is [`pos`, `cur_pos`), otherwise it is [`cur_pos`, `pos`).
-    ///
-    /// This function will return an empty vector if `pos` is equal to `cur_pos`.
-    fn remove(&mut self, pos: usize) -> Vec<char>;
-}
-
-/// An editing kernel with an underlying [`Buffer`] and an attachable [`Window`].
-struct EditorKernel {
     /// Global configuration.
     config: ConfigurationRef,
 
@@ -345,6 +30,11 @@ struct EditorKernel {
 
     /// Buffer containing the contents of this editor.
     buffer: BufferRef,
+
+    /// A value of `true` implies that _mutable_ operations are not allowed, though
+    /// the notion of mutability is context-dependent and must be enforced by the
+    /// caller.
+    readonly: bool,
 
     /// A logical clock that increments with each change to the buffer.
     clock: u64,
@@ -415,6 +105,23 @@ struct EditorKernel {
 
     /// An optional last match from a prior search.
     last_match: Option<(usize, Box<dyn Pattern>)>,
+}
+
+pub type EditorRef = Rc<RefCell<Editor>>;
+
+/// Used for building [`Editor`]s.
+pub struct EditorBuilder {
+    /// Required to build any editor.
+    config: ConfigurationRef,
+
+    /// Defaults to [`Source::Null`] if not explicitly set.
+    source: Source,
+
+    /// Defaults to `None`, which implies that an empty buffer will be created.
+    buffer: Option<Buffer>,
+
+    /// Defaults to `false`.
+    readonly: bool,
 }
 
 /// The distinct types of changes to a buffer recorded in the _undo_ and _redo_ stacks.
@@ -715,7 +422,7 @@ impl Draw {
     // Special character shown for all other ASCII control characters.
     const CTRL_CHAR: char = '\u{00bf}';
 
-    fn new(editor: &EditorKernel) -> Draw {
+    fn new(editor: &Editor) -> Draw {
         let config = editor.config.clone();
         let margin_color = Color::new(config.theme.margin_fg, config.theme.margin_bg);
         let line_color = Color::new(config.theme.line_fg, config.theme.margin_bg);
@@ -810,7 +517,7 @@ impl Draw {
 
 impl Render {
     /// Creates an initial rendering context from `editor`.
-    fn new(editor: &EditorKernel) -> Render {
+    fn new(editor: &Editor) -> Render {
         Render {
             pos: editor.top_line.row_pos,
             row: 0,
@@ -865,31 +572,122 @@ impl Render {
     }
 }
 
+impl EditorBuilder {
+    pub fn new(config: ConfigurationRef) -> EditorBuilder {
+        EditorBuilder {
+            config,
+            source: Source::Null,
+            buffer: None,
+            readonly: false,
+        }
+    }
+
+    pub fn source(mut self, source: Source) -> EditorBuilder {
+        self.source = source;
+        self
+    }
+
+    pub fn buffer(mut self, buffer: Buffer) -> EditorBuilder {
+        self.buffer = Some(buffer);
+        self
+    }
+
+    pub fn readonly(mut self) -> EditorBuilder {
+        self.readonly = true;
+        self
+    }
+
+    pub fn build(self) -> Editor {
+        Editor::new(self.config, self.source, self.buffer, self.readonly)
+    }
+}
+
 impl Editor {
-    /// Creates a readonly editor using `source` and `buffer`.
-    ///
-    /// A readonly editor is not permitted to obtain a mutable interface.
-    pub fn readonly(config: ConfigurationRef, source: Source, buffer: Buffer) -> Editor {
-        Self::new(config, source, Some(buffer), true)
-    }
+    /// Number of columns allocated to the margin.
+    const MARGIN_COLS: u32 = 6;
 
-    /// Creates a mutable editor using `source` and an optional `buffer`, which if
-    /// `None` automatically creates an empty buffer.
-    ///
-    /// A mutable editor is permitted to obtain a mutable interface.
-    pub fn mutable(config: ConfigurationRef, source: Source, buffer: Option<Buffer>) -> Editor {
-        Self::new(config, source, buffer, false)
-    }
+    /// Upper bound (exclusive) on line numbers that can be displayed in the margin.
+    const LINE_LIMIT: u32 = 10_u32.pow(Self::MARGIN_COLS - 1);
 
+    /// Number of columns used to display lower-order digits of line numbers that
+    /// must be clipped when larger than `LINE_LIMIT`.
+    const CLIP_LOWER_COLS: u32 = Self::MARGIN_COLS / 2;
+
+    /// Number of columns used to hide higher-order digits of line numbers that
+    /// must be clipped when larger than `LINE_LIMIT`.
+    const CLIP_UPPER_COLS: u32 = Self::MARGIN_COLS - Self::CLIP_LOWER_COLS - 1;
+
+    /// An upper bound on the tolerable number of milliseconds to tokenize the
+    /// buffer in real-time, otherwise the operation is deferred.
+    const TOKENIZE_COST_LIMIT: u128 = 50;
+
+    /// Creates a new, possibly `readonly`, editor using `source` and an optional `buffer`,
+    /// which if `None` automatically creates an empty buffer.
     fn new(
         config: ConfigurationRef,
         source: Source,
         buffer: Option<Buffer>,
         readonly: bool,
     ) -> Editor {
+        let buffer = buffer.unwrap_or_default().into_ref();
+        let cur_pos = buffer.borrow().get_pos();
+
+        // Constructs syntax configuration based on type of buffer and file extension,
+        // if applicable.
+        let syntax = if let Source::File(path, _) = &source {
+            config
+                .registry
+                .find(path)
+                .cloned()
+                .unwrap_or_else(Syntax::default)
+        } else if let Source::Ephemeral(_) = &source {
+            config
+                .registry
+                .find(source.to_string())
+                .cloned()
+                .unwrap_or_else(Syntax::default)
+        } else {
+            Syntax::default()
+        };
+
+        // Tokenize buffer.
+        let mut tokenizer = Tokenizer::new(syntax);
+        let timer = Instant::now();
+        let syntax_cursor = tokenizer.tokenize(&buffer.borrow());
+        let tokenize_cost = timer.elapsed().as_millis();
+
+        // Additional settings.
+        let tab_hard = config.settings.tab_hard;
+        let tab_cols = config.settings.tab_size;
+        let crlf = config.settings.crlf;
+
         Editor {
-            kernel: EditorKernel::new(config, source, buffer),
+            config,
+            source,
+            buffer,
             readonly,
+            clock: 0,
+            undo: Vec::new(),
+            redo: Vec::new(),
+            tokenizer: tokenizer.into_ref(),
+            tokenize_cost,
+            tokenize_clock: 0,
+            syntax_cursor,
+            commit_clock: 0,
+            cur_pos,
+            top_line: Line::default(),
+            cur_line: Line::default(),
+            snap_col: None,
+            cursor: Point::ORIGIN,
+            mark: None,
+            window: Window::zombie().into_ref(),
+            rows: 0,
+            cols: 0,
+            margin_enabled: false,
+            tab_hard,
+            tab_cols,
+            crlf,
+            last_match: None,
         }
     }
 
@@ -903,302 +701,48 @@ impl Editor {
         !self.readonly
     }
 
-    /// Returns a mutable editor if not classified as _readonly_, otherwise `None`.
-    pub fn modify(&mut self) -> Option<&mut dyn MutableEditor> {
-        if self.readonly {
-            None
-        } else {
-            Some(&mut self.kernel)
-        }
-    }
-
     /// Clears the contents of the buffer and resets internal state as if the editor was
     /// just created.
     pub fn reset(&mut self) {
-        self.kernel =
-            EditorKernel::new(self.kernel.config.clone(), self.kernel.source.clone(), None);
-    }
-}
-
-impl ImmutableEditor for Editor {
-    #[inline]
-    fn clone_as(&self, source: Source) -> Editor {
-        self.kernel.clone_as(source)
+        *self = Self::new(
+            self.config.clone(),
+            self.source.clone(),
+            None,
+            self.readonly,
+        );
     }
 
-    #[inline]
-    fn source(&self) -> &Source {
-        self.kernel.source()
+    /// Returns a partial clone of this editor using `source`.
+    ///
+    /// Specifically, the buffer is cloned as well as the current buffer position and
+    /// cursor values. All other attributes are initialized as if a new editor were
+    /// being created.
+    pub fn clone_as(&self, source: Source) -> Editor {
+        let mut buffer = self.buffer().clone();
+        buffer.set_pos(self.cur_pos);
+        let mut editor = Self::new(self.config.clone(), source, Some(buffer), false);
+        editor.cursor = self.cursor;
+        editor
     }
 
-    #[inline]
-    fn assume(&mut self, source: Source) {
-        self.kernel.assume(source);
-    }
-
-    #[inline]
-    fn buffer(&self) -> Ref<'_, Buffer> {
-        self.kernel.buffer()
-    }
-
-    #[inline]
-    fn is_dirty(&self) -> bool {
-        self.kernel.is_dirty()
-    }
-
-    #[inline]
-    fn clear_dirty(&mut self) {
-        self.kernel.clear_dirty();
-    }
-
-    #[inline]
-    fn cursor(&self) -> Point {
-        self.kernel.cursor()
-    }
-
-    #[inline]
-    fn location(&self) -> Point {
-        self.kernel.location()
-    }
-
-    #[inline(always)]
-    fn rows(&self) -> u32 {
-        self.kernel.rows()
-    }
-
-    #[inline]
-    fn size(&self) -> Size {
-        self.kernel.size()
-    }
-
-    #[inline]
-    fn pos(&self) -> usize {
-        self.kernel.pos()
-    }
-
-    #[inline]
-    fn get_tab(&self) -> bool {
-        self.kernel.get_tab()
-    }
-
-    #[inline]
-    fn set_tab(&mut self, hard: bool) {
-        self.kernel.set_tab(hard);
-    }
-
-    #[inline]
-    fn get_crlf(&self) -> bool {
-        self.kernel.get_crlf()
-    }
-
-    #[inline]
-    fn set_crlf(&mut self, crlf: bool) {
-        self.kernel.set_crlf(crlf);
-    }
-
-    #[inline]
-    fn set_focus(&mut self, cursor: Point) {
-        self.kernel.set_focus(cursor);
-    }
-
-    #[inline]
-    fn attach(&mut self, window: WindowRef, align: Align) {
-        self.kernel.attach(window, align);
-    }
-
-    #[inline]
-    fn detach(&mut self) {
-        self.kernel.detach();
-    }
-
-    #[inline]
-    fn align_cursor(&mut self, align: Align) {
-        self.kernel.align_cursor(align);
-    }
-
-    #[inline]
-    fn draw(&mut self) {
-        self.kernel.draw();
-    }
-
-    #[inline]
-    fn show_cursor(&mut self) {
-        self.kernel.show_cursor();
-    }
-
-    #[inline]
-    fn move_backward(&mut self, len: usize) {
-        self.kernel.move_backward(len);
-    }
-
-    #[inline]
-    fn move_forward(&mut self, len: usize) {
-        self.kernel.move_forward(len);
-    }
-
-    #[inline]
-    fn move_backward_word(&mut self) {
-        self.kernel.move_backward_word();
-    }
-
-    #[inline]
-    fn move_forward_word(&mut self) {
-        self.kernel.move_forward_word();
-    }
-
-    #[inline]
-    fn move_up(&mut self, try_rows: u32, pin: bool) {
-        self.kernel.move_up(try_rows, pin);
-    }
-
-    #[inline]
-    fn move_down(&mut self, try_rows: u32, pin: bool) {
-        self.kernel.move_down(try_rows, pin);
-    }
-
-    #[inline]
-    fn move_start(&mut self) {
-        self.kernel.move_start();
-    }
-
-    #[inline]
-    fn move_end(&mut self) {
-        self.kernel.move_end();
-    }
-
-    #[inline]
-    fn move_top(&mut self) {
-        self.kernel.move_top();
-    }
-
-    #[inline]
-    fn move_bottom(&mut self) {
-        self.kernel.move_bottom();
-    }
-
-    #[inline]
-    fn move_line(&mut self, line: u32, align: Align) {
-        self.kernel.move_line(line, align);
-    }
-
-    #[inline]
-    fn move_to(&mut self, pos: usize, align: Align) {
-        self.kernel.move_to(pos, align);
-    }
-
-    #[inline]
-    fn scroll_up(&mut self, try_rows: u32) {
-        self.kernel.scroll_up(try_rows);
-    }
-
-    #[inline]
-    fn scroll_down(&mut self, try_rows: u32) {
-        self.kernel.scroll_down(try_rows);
-    }
-
-    #[inline]
-    fn set_hard_mark(&mut self) -> Option<Mark> {
-        self.kernel.set_hard_mark()
-    }
-
-    #[inline]
-    fn set_soft_mark(&mut self) -> Option<Mark> {
-        self.kernel.set_soft_mark()
-    }
-
-    #[inline]
-    fn set_soft_mark_at(&mut self, pos: usize) -> Option<Mark> {
-        self.kernel.set_soft_mark_at(pos)
-    }
-
-    #[inline]
-    fn clear_soft_mark(&mut self) -> Option<Mark> {
-        self.kernel.clear_soft_mark()
-    }
-
-    #[inline]
-    fn clear_mark(&mut self) -> Option<Mark> {
-        self.kernel.clear_mark()
-    }
-
-    #[inline]
-    fn copy_mark(&self, mark: Mark) -> Vec<char> {
-        self.kernel.copy_mark(mark)
-    }
-
-    #[inline]
-    fn copy_line(&self) -> Vec<char> {
-        self.kernel.copy_line()
-    }
-
-    #[inline]
-    fn copy(&self, from_pos: usize, to_pos: usize) -> Vec<char> {
-        self.kernel.copy(from_pos, to_pos)
-    }
-
-    #[inline]
-    fn undo(&mut self) -> bool {
-        self.kernel.undo()
-    }
-
-    #[inline]
-    fn redo(&mut self) -> bool {
-        self.kernel.redo()
-    }
-
-    #[inline]
-    fn capture(&self) -> Capture {
-        self.kernel.capture()
-    }
-
-    #[inline]
-    fn restore(&mut self, capture: &Capture) {
-        self.kernel.restore(capture);
-    }
-
-    #[inline]
-    fn tokenize(&mut self) -> bool {
-        self.kernel.tokenize()
-    }
-
-    #[inline]
-    fn render(&mut self) {
-        self.kernel.render();
-    }
-
-    #[inline]
-    fn set_last_match(&mut self, pos: usize, pattern: Box<dyn Pattern>) {
-        self.kernel.set_last_match(pos, pattern);
-    }
-
-    #[inline]
-    fn take_last_match(&mut self) -> Option<(usize, Box<dyn Pattern>)> {
-        self.kernel.take_last_match()
-    }
-}
-
-impl ImmutableEditor for EditorKernel {
-    fn clone_as(&self, source: Source) -> Editor {
-        Editor {
-            kernel: self.clone_kernel(source),
-            readonly: false,
-        }
-    }
-
-    fn source(&self) -> &Source {
+    /// Returns a reference to the source.
+    pub fn source(&self) -> &Source {
         &self.source
     }
 
-    fn assume(&mut self, source: Source) {
+    /// Changes the `source` associated with this editor.
+    pub fn assume(&mut self, source: Source) {
         self.source = source;
     }
 
+    /// Returns a reference to the underlying buffer.
     #[inline]
-    fn buffer(&self) -> Ref<'_, Buffer> {
+    pub fn buffer(&self) -> Ref<'_, Buffer> {
         self.buffer.borrow()
     }
 
-    fn is_dirty(&self) -> bool {
+    /// Returns `true` if the buffer has changed.
+    pub fn is_dirty(&self) -> bool {
         // It might seem reasonable to expect `clock > commit_clock` is more correct
         // when determining dirtiness of buffer since it would not make sense that
         // commit_clock occurs after most recent change. However, changes in undo
@@ -1207,38 +751,54 @@ impl ImmutableEditor for EditorKernel {
         self.clock != self.commit_clock
     }
 
-    fn clear_dirty(&mut self) {
+    /// Makes this editor _not_ dirty.
+    pub fn clear_dirty(&mut self) {
         self.commit_clock = self.clock;
         self.show_banner();
     }
 
+    /// Returns the cursor position on the display in terms of _row_ and _column_.
+    ///
+    /// The _row_ and _column_ values are `0`-based and exclusively bounded by
+    /// [`size()`](Self::size).
     #[inline]
-    fn cursor(&self) -> Point {
+    pub fn cursor(&self) -> Point {
         self.cursor
     }
 
+    /// Returns the location of the cursor position in the buffer in terms of _line_
+    /// and _column_.
+    ///
+    /// The _line_ and _column_ values are `0`-based. Note that neither of these values
+    /// are bounded by the size of the display, which is the case with
+    /// [`cursor`](Self::cursor).
     #[inline]
-    fn location(&self) -> Point {
+    pub fn location(&self) -> Point {
         Point::new(self.cur_line.line, self.cur_line.line_col(self.cursor.col))
     }
 
-    fn rows(&self) -> u32 {
+    /// Returns the number of rows available on the editor canvas.
+    pub fn rows(&self) -> u32 {
         self.rows
     }
 
-    fn size(&self) -> Size {
+    /// Returns the size of the editor canvas.
+    pub fn size(&self) -> Size {
         (self.rows, self.cols).into()
     }
 
-    fn pos(&self) -> usize {
+    /// Returns the buffer position corresponding to the [`cursor`](Self::cursor).
+    pub fn pos(&self) -> usize {
         self.cur_pos
     }
 
-    fn get_tab(&self) -> bool {
+    /// Returns `true` if the tab mode is _hard_ and `false` if _soft_.
+    pub fn get_tab(&self) -> bool {
         self.tab_hard
     }
 
-    fn set_tab(&mut self, hard: bool) {
+    /// Sets the tab mode based on the value of `hard`.
+    pub fn set_tab(&mut self, hard: bool) {
         self.tab_hard = hard;
         self.window
             .borrow()
@@ -1248,11 +808,13 @@ impl ImmutableEditor for EditorKernel {
             .draw();
     }
 
-    fn get_crlf(&self) -> bool {
+    /// Returns `true` if EOL characters should be written as `\r\n`.
+    pub fn get_crlf(&self) -> bool {
         self.crlf
     }
 
-    fn set_crlf(&mut self, crlf: bool) {
+    /// Sets the CRLF behavior based on the value of `crlf`.
+    pub fn set_crlf(&mut self, crlf: bool) {
         self.crlf = crlf;
         self.window
             .borrow()
@@ -1262,7 +824,16 @@ impl ImmutableEditor for EditorKernel {
             .draw();
     }
 
-    fn set_focus(&mut self, cursor: Point) {
+    /// Sets the cursor location and corresponding buffer position to `cursor`, though
+    /// the final cursor location is constrained by end-of-line and end-of-buffer
+    /// boundaries.
+    ///
+    /// This function was designed for responding to _mouse click_ events where the
+    /// position of the click is captured in `cursor`.
+    ///
+    /// The coordinates in `cursor` are presumed to be relative to the origin of the
+    /// editor canvas.
+    pub fn set_focus(&mut self, cursor: Point) {
         // Ensure target cursor is bounded by effective area of canvas, which takes
         // into account left margin if enabled.
         let try_row = cmp::min(cursor.row, self.rows);
@@ -1282,7 +853,8 @@ impl ImmutableEditor for EditorKernel {
         self.cursor = Point::new(row, col);
     }
 
-    fn attach(&mut self, window: WindowRef, align: Align) {
+    /// Attaches the `window` to this editor.
+    pub fn attach(&mut self, window: WindowRef, align: Align) {
         // Allocate leftmost columns of window to line numbers, but only if enabled and
         // total width of window is large enough to reasonably accommodate.
         self.window = window.clone();
@@ -1297,11 +869,13 @@ impl ImmutableEditor for EditorKernel {
         }
     }
 
-    fn detach(&mut self) {
+    /// Detaches the existing window from this editor.
+    pub fn detach(&mut self) {
         self.attach(Window::zombie().into_ref(), Align::Auto);
     }
 
-    fn align_cursor(&mut self, align: Align) {
+    /// Sets the position of the cursor based on the alignment objective `align`.
+    pub fn align_cursor(&mut self, align: Align) {
         // Determine ideal row where cursor would like to be focused, though this should
         // be considered a hint.
         let try_row = match align {
@@ -1322,13 +896,15 @@ impl ImmutableEditor for EditorKernel {
         self.cursor = Point::new(row, col);
     }
 
-    fn draw(&mut self) {
+    /// Draws the canvas and banner regardless of whether any updates have occurred.
+    pub fn draw(&mut self) {
         self.window.borrow().canvas.borrow_mut().clear();
         self.show_banner();
         self.render();
     }
 
-    fn show_cursor(&mut self) {
+    /// Makes the cursor visible.
+    pub fn show_cursor(&mut self) {
         let cursor = if self.margin_enabled {
             self.cursor + Size::cols(Self::MARGIN_COLS)
         } else {
@@ -1337,35 +913,50 @@ impl ImmutableEditor for EditorKernel {
         self.window.borrow().canvas.borrow_mut().set_cursor(cursor);
     }
 
-    fn move_backward(&mut self, len: usize) {
+    /// Tries to move the cursor _backward_ from the current buffer position by `len`
+    /// characters.
+    pub fn move_backward(&mut self, len: usize) {
         let pos = self.cur_pos - cmp::min(len, self.cur_pos);
         if pos < self.cur_pos {
             self.move_to(pos, Align::Auto);
         }
     }
 
-    fn move_forward(&mut self, len: usize) {
+    /// Tries to move the cursor _forward_ from the current buffer position by `len`
+    /// characters.
+    pub fn move_forward(&mut self, len: usize) {
         let pos = cmp::min(self.cur_pos + len, self.buffer().size());
         if pos > self.cur_pos {
             self.move_to(pos, Align::Auto);
         }
     }
 
-    fn move_backward_word(&mut self) {
+    /// Tries to move the cursor _backward_ by one word from the current buffer
+    /// position.
+    pub fn move_backward_word(&mut self) {
         let pos = self.find_word_before(self.cur_pos);
         if pos < self.cur_pos {
             self.move_to(pos, Align::Auto);
         }
     }
 
-    fn move_forward_word(&mut self) {
+    /// Tries to move the cursor _forward_ by one word from the current buffer
+    /// position.
+    pub fn move_forward_word(&mut self) {
         let pos = self.find_word_after(self.cur_pos);
         if pos > self.cur_pos {
             self.move_to(pos, Align::Auto);
         }
     }
 
-    fn move_up(&mut self, try_rows: u32, pin: bool) {
+    /// Tries to move the cursor _up_ by the specified number of `try_rows`.
+    ///
+    /// If `pin` is `true`, then the cursor will remain on the current row if the
+    /// resulting display makes it possible. Pinning is useful when _paging up_.
+    ///
+    /// If `pin` is `false`, then the cursor will move up in tandem with `try_rows`,
+    /// though not to extend beyond the top of the display.
+    pub fn move_up(&mut self, try_rows: u32, pin: bool) {
         let rows = self.up_cur_line(try_rows);
         if rows > 0 {
             let row = if pin {
@@ -1394,7 +985,14 @@ impl ImmutableEditor for EditorKernel {
         }
     }
 
-    fn move_down(&mut self, try_rows: u32, pin: bool) {
+    /// Tries to move the cursor _down_ by the specified number of `try_rows`.
+    ///
+    /// If `pin` is `true`, then the cursor will remain on the current row. Pinning is
+    /// useful when _paging down_.
+    ///
+    /// If `pin` is `false`, then the cursor will move down in tandem with `try_rows`,
+    /// though not to extend beyond the bottom of the display.
+    pub fn move_down(&mut self, try_rows: u32, pin: bool) {
         let rows = self.down_cur_line(try_rows);
         if rows > 0 {
             let row = if pin {
@@ -1418,7 +1016,8 @@ impl ImmutableEditor for EditorKernel {
         }
     }
 
-    fn move_start(&mut self) {
+    /// Moves the cursor to the _start_ of the current row.
+    pub fn move_start(&mut self) {
         if self.cursor.col > 0 {
             self.cur_pos = self.cur_line.row_pos;
             self.cursor.col = 0;
@@ -1426,7 +1025,8 @@ impl ImmutableEditor for EditorKernel {
         self.snap_col = None;
     }
 
-    fn move_end(&mut self) {
+    /// Moves the cursor to the _end_ of the current row.
+    pub fn move_end(&mut self) {
         let end_col = self.cur_line.end_col(self.cols);
         if self.cursor.col < end_col {
             self.cur_pos = self.cur_line.pos_of(end_col);
@@ -1435,21 +1035,37 @@ impl ImmutableEditor for EditorKernel {
         self.snap_col = None;
     }
 
-    fn move_top(&mut self) {
+    /// Moves the cursor to the _top_ of the buffer.
+    pub fn move_top(&mut self) {
         self.move_to(0, Align::Top);
     }
 
-    fn move_bottom(&mut self) {
+    /// Moves the cursor to the _bottom_ of the buffer.
+    pub fn move_bottom(&mut self) {
         let pos = self.buffer().size();
         self.move_to(pos, Align::Bottom);
     }
 
-    fn move_line(&mut self, line: u32, align: Align) {
+    /// Moves the buffer position to the first character of `line` and places the
+    /// cursor on the display according to the `align` objective.
+    pub fn move_line(&mut self, line: u32, align: Align) {
         let pos = self.buffer().find_line(line);
         self.move_to(pos, align);
     }
 
-    fn move_to(&mut self, pos: usize, align: Align) {
+    /// Moves the current buffer position to `pos` and places the cursor on the
+    /// display according to the `align` objective.
+    ///
+    /// When [`Align::Auto`] is specified, the placement of the cursor depends on
+    /// the target `pos` relative to the current buffer position. Specifically, it
+    /// behaves as follows:
+    /// - _when `pos` is above the current line but still visible on the display_:
+    ///   aligns the cursor on the target row above the current line, though not to
+    ///   extend beyond the top row
+    /// - _when `pos` is on the current line_: aligns the cursor on the current row
+    /// - _when `pos` is beyond the current line_: aligns the cursor on the target
+    ///   row below the current line, though not to extend beyond the borrom row
+    pub fn move_to(&mut self, pos: usize, align: Align) {
         let row = if pos < self.top_line.row_pos {
             self.find_up_cur_line(pos);
             let rows = match align {
@@ -1504,7 +1120,10 @@ impl ImmutableEditor for EditorKernel {
         self.cursor = Point::new(row, col);
     }
 
-    fn scroll_up(&mut self, try_rows: u32) {
+    /// Tries scrolling _up_ the contents of the display by the specified number of
+    /// `try_rows` while preserving the cursor position, which also means the cursor
+    /// moves _up_ as the contents scroll.
+    pub fn scroll_up(&mut self, try_rows: u32) {
         let rows = self.down_top_line(try_rows);
         if rows > 0 {
             let (row, col) = if rows > self.cursor.row {
@@ -1525,7 +1144,10 @@ impl ImmutableEditor for EditorKernel {
         }
     }
 
-    fn scroll_down(&mut self, try_rows: u32) {
+    /// Tries scrolling _down_ the contents of the display by the specified number of
+    /// `try_rows` while preserving the cursor position, which also means the cursor
+    /// moves _down_ as the contents scroll.
+    pub fn scroll_down(&mut self, try_rows: u32) {
         let rows = self.up_top_line(try_rows);
         if rows > 0 {
             let row = self.cursor.row + rows;
@@ -1547,11 +1169,20 @@ impl ImmutableEditor for EditorKernel {
         }
     }
 
-    fn set_hard_mark(&mut self) -> Option<Mark> {
+    /// Sets a _hard_ mark at the current buffer position and returns the previous
+    /// mark if set.
+    pub fn set_hard_mark(&mut self) -> Option<Mark> {
         self.mark.replace(Mark(self.cur_pos, false))
     }
 
-    fn set_soft_mark(&mut self) -> Option<Mark> {
+    /// Sets a _soft_ mark at the current buffer position unless a _soft_ mark was
+    /// previously set.
+    ///
+    /// Note that if a _hard_ mark was previously set, the _soft_ mark will replace
+    /// it.
+    ///
+    /// Returns the previous _hard_ mark if set, otherwise `None`.
+    pub fn set_soft_mark(&mut self) -> Option<Mark> {
         if let Some(mark @ Mark(_, soft)) = self.mark {
             if soft {
                 None
@@ -1565,7 +1196,14 @@ impl ImmutableEditor for EditorKernel {
         }
     }
 
-    fn set_soft_mark_at(&mut self, pos: usize) -> Option<Mark> {
+    /// Sets a _soft_ mark at buffer position `pos` unless a _soft_ mark was previously
+    /// set.
+    ///
+    /// Note that if a _hard_ mark was previously set, the _soft_ mark will replace
+    /// it.
+    ///
+    /// Returns the previous _hard_ mark if set, otherwise `None`.
+    pub fn set_soft_mark_at(&mut self, pos: usize) -> Option<Mark> {
         let pos = cmp::min(pos, self.buffer().size());
         if let Some(mark @ Mark(_, soft)) = self.mark {
             if soft {
@@ -1580,7 +1218,8 @@ impl ImmutableEditor for EditorKernel {
         }
     }
 
-    fn clear_soft_mark(&mut self) -> Option<Mark> {
+    /// Clears and returns the mark if _soft_, otherwise `None` is returned.
+    pub fn clear_soft_mark(&mut self) -> Option<Mark> {
         if let Some(Mark(_, true)) = self.mark {
             self.clear_mark()
         } else {
@@ -1588,25 +1227,40 @@ impl ImmutableEditor for EditorKernel {
         }
     }
 
-    fn clear_mark(&mut self) -> Option<Mark> {
+    /// Clears and returns the mark.
+    pub fn clear_mark(&mut self) -> Option<Mark> {
         self.mark.take()
     }
 
-    fn copy_mark(&self, mark: Mark) -> Vec<char> {
+    /// Returns the text between the current buffer position and `mark`.
+    pub fn copy_mark(&self, mark: Mark) -> Vec<char> {
         let Range { start, end } = self.get_mark_range(mark);
         self.copy(start, end)
     }
 
-    fn copy_line(&self) -> Vec<char> {
+    /// Returns the text of the line on which the current buffer position rests.
+    pub fn copy_line(&self) -> Vec<char> {
         let Range { start, end } = self.cur_line.line_range();
         self.copy(start, end)
     }
 
-    fn copy(&self, from_pos: usize, to_pos: usize) -> Vec<char> {
+    /// Returns the text between `from_pos` and `end_pos`.
+    ///
+    /// Specifically, the range of characters is bounded _inclusively below_ and
+    /// _exclusively above_. If `from_pos` is less than `to_pos`, then the range is
+    /// [`from_pos`, `to_pos`), otherwise it is [`to_pos`, `from_pos`).
+    ///
+    /// This function will return an empty vector if `from_pos` is equal to `to_pos`.
+    pub fn copy(&self, from_pos: usize, to_pos: usize) -> Vec<char> {
         self.buffer().copy(from_pos, to_pos)
     }
 
-    fn undo(&mut self) -> bool {
+    /// Reverts the last change to the buffer, if any, and makes that change eligible
+    /// to be reapplied via [`redo`](Editor::redo).
+    ///
+    /// Returns `true` if the change was reverted and `false` if the _undo_ stack is
+    /// empty.
+    pub fn undo(&mut self) -> bool {
         if let Some((clock, change)) = self.undo.pop() {
             self.undo_change(&change);
             self.redo.push((clock, change));
@@ -1620,7 +1274,12 @@ impl ImmutableEditor for EditorKernel {
         }
     }
 
-    fn redo(&mut self) -> bool {
+    /// Applies the last change to the buffer, if any, that was reverted via
+    /// [`undo`](Editor::undo).
+    ///
+    /// Returns `true` if the change was applies and `false` if the _redo_ stack is
+    /// empty.
+    pub fn redo(&mut self) -> bool {
         if let Some((clock, change)) = self.redo.pop() {
             self.redo_change(&change);
             self.undo.push((clock, change));
@@ -1634,7 +1293,8 @@ impl ImmutableEditor for EditorKernel {
         }
     }
 
-    fn capture(&self) -> Capture {
+    /// Returned the captured state of the editor.
+    pub fn capture(&self) -> Capture {
         Capture {
             pos: self.cur_pos,
             cursor: self.cursor,
@@ -1642,7 +1302,11 @@ impl ImmutableEditor for EditorKernel {
         }
     }
 
-    fn restore(&mut self, capture: &Capture) {
+    /// Restores the editor to the captured state in `capture`.
+    ///
+    /// Note that if the editor changes after state has been captured, there is no
+    /// guarantee that said state will be restored precisely as it was.
+    pub fn restore(&mut self, capture: &Capture) {
         self.move_to(capture.pos, Align::Row(capture.cursor.row));
         if let Some(Mark(pos, soft)) = capture.mark {
             let pos = cmp::min(pos, self.buffer().size());
@@ -1652,7 +1316,9 @@ impl ImmutableEditor for EditorKernel {
         }
     }
 
-    fn tokenize(&mut self) -> bool {
+    /// Tokenizes the buffer if changes occurred since the last tokenization, returning
+    /// `true` if tokenization occurred and `false` otherwise.
+    pub fn tokenize(&mut self) -> bool {
         if self.tokenize_clock != self.clock {
             self.possibly_tokenize(true);
             true
@@ -1661,7 +1327,8 @@ impl ImmutableEditor for EditorKernel {
         }
     }
 
-    fn render(&mut self) {
+    /// Renders the contents of the editor.
+    pub fn render(&mut self) {
         // Renders visible buffer content.
         let draw = Draw::new(self);
         let render = Render::new(self);
@@ -1686,25 +1353,29 @@ impl ImmutableEditor for EditorKernel {
             .draw();
     }
 
-    fn set_last_match(&mut self, pos: usize, pattern: Box<dyn Pattern>) {
+    /// Sets the last match from a prior search, where `pos` is the starting positon of
+    /// the match and `pattern` is the applicable search pattern.
+    pub fn set_last_match(&mut self, pos: usize, pattern: Box<dyn Pattern>) {
         self.last_match = Some((pos, pattern));
     }
 
-    fn take_last_match(&mut self) -> Option<(usize, Box<dyn Pattern>)> {
+    /// Takes the last match from a prior search.
+    pub fn take_last_match(&mut self) -> Option<(usize, Box<dyn Pattern>)> {
         self.last_match.take()
     }
-}
 
-impl MutableEditor for EditorKernel {
-    fn insert_char(&mut self, c: char) {
+    /// Inserts the character `c` at the current buffer position.
+    pub fn insert_char(&mut self, c: char) {
         self.insert_normal(&[c])
     }
 
-    fn insert_str(&mut self, text: &str) {
+    /// Inserts the string slice `str` at the current buffer position.
+    pub fn insert_str(&mut self, text: &str) {
         self.insert_normal(&text.chars().collect::<Vec<_>>())
     }
 
-    fn insert_tab(&mut self) {
+    /// Inserts the `TAB` character.
+    pub fn insert_tab(&mut self) {
         if self.tab_hard {
             self.insert_char('\t');
         } else {
@@ -1713,11 +1384,16 @@ impl MutableEditor for EditorKernel {
         }
     }
 
-    fn insert(&mut self, text: &[char]) {
+    /// Inserts the array of `text` at the current buffer position.
+    pub fn insert(&mut self, text: &[char]) {
         self.insert_normal(text);
     }
 
-    fn remove_before(&mut self) -> Vec<char> {
+    /// Removes and returns the character before the current buffer position.
+    ///
+    /// An empty vector is returned if the current position is already at the top
+    /// of the buffer.
+    pub fn remove_before(&mut self) -> Vec<char> {
         if self.cur_pos > 0 {
             self.remove(self.cur_pos - 1)
         } else {
@@ -1725,7 +1401,11 @@ impl MutableEditor for EditorKernel {
         }
     }
 
-    fn remove_after(&mut self) -> Vec<char> {
+    /// Removes and returns the character after the current buffer position.
+    ///
+    /// An empty vector is returned if the current position is already at the
+    /// bottom of the buffer.
+    pub fn remove_after(&mut self) -> Vec<char> {
         if self.cur_pos < self.buffer().size() {
             self.remove(self.cur_pos + 1)
         } else {
@@ -1733,18 +1413,23 @@ impl MutableEditor for EditorKernel {
         }
     }
 
-    fn remove_mark(&mut self, mark: Mark) -> Vec<char> {
+    /// Removes and returns the text between the current buffer position and `mark`.
+    pub fn remove_mark(&mut self, mark: Mark) -> Vec<char> {
         let Mark(pos, soft) = mark;
         self.remove_internal(pos, Some(Log::Selection(soft)))
     }
 
-    fn remove_line(&mut self) -> Vec<char> {
+    /// Removes and returns the text of the line on which the current buffer position
+    /// rests.
+    pub fn remove_line(&mut self) -> Vec<char> {
         let Range { start, end } = self.cur_line.line_range();
         self.move_to(start, Align::Auto);
         self.remove(end)
     }
 
-    fn remove_start(&mut self) -> Vec<char> {
+    /// Removes and returns the text between the start of the current line and the
+    /// current buffer position.
+    pub fn remove_start(&mut self) -> Vec<char> {
         if self.cur_pos == self.cur_line.line_pos {
             self.remove_before()
         } else {
@@ -1752,105 +1437,21 @@ impl MutableEditor for EditorKernel {
         }
     }
 
-    fn remove_end(&mut self) -> Vec<char> {
+    /// Removes and returns the text between the current buffer position and the end
+    /// of the current line.
+    pub fn remove_end(&mut self) -> Vec<char> {
         self.remove(self.cur_line.line_pos + self.cur_line.line_len)
     }
 
-    fn remove(&mut self, pos: usize) -> Vec<char> {
+    /// Removes and returns the text between the current buffer position and `pos`.
+    ///
+    /// Specifically, the range of characters is bounded _inclusively below_ and
+    /// _exclusively above_. If `pos` is less than the current buffer position, then
+    /// the range is [`pos`, `cur_pos`), otherwise it is [`cur_pos`, `pos`).
+    ///
+    /// This function will return an empty vector if `pos` is equal to `cur_pos`.
+    pub fn remove(&mut self, pos: usize) -> Vec<char> {
         self.remove_internal(pos, Some(Log::Normal))
-    }
-}
-
-impl EditorKernel {
-    /// Number of columns allocated to the margin.
-    const MARGIN_COLS: u32 = 6;
-
-    /// Upper bound (exclusive) on line numbers that can be displayed in the margin.
-    const LINE_LIMIT: u32 = 10_u32.pow(Self::MARGIN_COLS - 1);
-
-    /// Number of columns used to display lower-order digits of line numbers that
-    /// must be clipped when larger than `LINE_LIMIT`.
-    const CLIP_LOWER_COLS: u32 = Self::MARGIN_COLS / 2;
-
-    /// Number of columns used to hide higher-order digits of line numbers that
-    /// must be clipped when larger than `LINE_LIMIT`.
-    const CLIP_UPPER_COLS: u32 = Self::MARGIN_COLS - Self::CLIP_LOWER_COLS - 1;
-
-    /// An upper bound on the tolerable number of milliseconds to tokenize the
-    /// buffer in real-time, otherwise the operation is deferred.
-    const TOKENIZE_COST_LIMIT: u128 = 50;
-
-    /// Creates a new editor using `source` and an optional `buffer`, which if `None`
-    /// automatically creates an empty buffer.
-    fn new(config: ConfigurationRef, source: Source, buffer: Option<Buffer>) -> EditorKernel {
-        let buffer = buffer.unwrap_or_default().into_ref();
-        let cur_pos = buffer.borrow().get_pos();
-
-        // Constructs syntax configuration based on type of buffer and file extension,
-        // if applicable.
-        let syntax = if let Source::File(path, _) = &source {
-            config
-                .registry
-                .find(path)
-                .cloned()
-                .unwrap_or_else(Syntax::default)
-        } else if let Source::Ephemeral(_) = &source {
-            config
-                .registry
-                .find(source.to_string())
-                .cloned()
-                .unwrap_or_else(Syntax::default)
-        } else {
-            Syntax::default()
-        };
-
-        // Tokenize buffer.
-        let mut tokenizer = Tokenizer::new(syntax);
-        let timer = Instant::now();
-        let syntax_cursor = tokenizer.tokenize(&buffer.borrow());
-        let tokenize_cost = timer.elapsed().as_millis();
-
-        // Additional settings.
-        let tab_hard = config.settings.tab_hard;
-        let tab_cols = config.settings.tab_size;
-        let crlf = config.settings.crlf;
-
-        EditorKernel {
-            config,
-            source,
-            buffer,
-            clock: 0,
-            undo: Vec::new(),
-            redo: Vec::new(),
-            tokenizer: tokenizer.into_ref(),
-            tokenize_cost,
-            tokenize_clock: 0,
-            syntax_cursor,
-            commit_clock: 0,
-            cur_pos,
-            top_line: Line::default(),
-            cur_line: Line::default(),
-            snap_col: None,
-            cursor: Point::ORIGIN,
-            mark: None,
-            window: Window::zombie().into_ref(),
-            rows: 0,
-            cols: 0,
-            margin_enabled: false,
-            tab_hard,
-            tab_cols,
-            crlf,
-            last_match: None,
-        }
-    }
-
-    /// Returns a partial clone of this kernel using `source`.
-    fn clone_kernel(&self, source: Source) -> EditorKernel {
-        let mut buffer = self.buffer().clone();
-        buffer.set_pos(self.cur_pos);
-        let mut editor = Self::new(self.config.clone(), source, Some(buffer));
-        editor.cursor = self.cursor;
-        editor
     }
 
     #[inline]
@@ -2316,7 +1917,7 @@ impl EditorKernel {
         }
     }
 
-    /// An unchecked version of [prev_line](EditorKernel::prev_line) that assumes `line`
+    /// An unchecked version of [prev_line](Editor::prev_line) that assumes `line`
     /// is not at the top of the buffer.
     fn prev_line_unchecked(&self, line: &Line) -> Line {
         self.prev_line(line)
@@ -2357,7 +1958,7 @@ impl EditorKernel {
         }
     }
 
-    /// An unchecked version of [next_line](EditorKernel::next_line) that assumes `line`
+    /// An unchecked version of [next_line](Editor::next_line) that assumes `line`
     /// is not at the bottom of the buffer.
     fn next_line_unchecked(&self, line: &Line) -> Line {
         self.next_line(line)

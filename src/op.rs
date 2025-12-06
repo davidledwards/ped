@@ -12,7 +12,7 @@
 use crate::clip::Scope;
 use crate::config::ConfigurationRef;
 use crate::ed;
-use crate::editor::{Align, EditorRef, ImmutableEditor};
+use crate::editor::{Align, EditorRef};
 use crate::env::{Environment, Focus};
 use crate::help;
 use crate::operation::{Action, Operation};
@@ -417,7 +417,7 @@ fn goto_line(env: &mut Environment) -> Option<Action> {
 
 pub fn insert_char(env: &mut Environment, c: char) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
-    if let Some(editor) = editor.modify() {
+    if editor.is_mutable() {
         editor.clear_mark();
         editor.insert_char(c);
         editor.render();
@@ -430,7 +430,7 @@ pub fn insert_char(env: &mut Environment, c: char) -> Option<Action> {
 /// Operation: `insert-line`
 fn insert_line(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
-    if let Some(editor) = editor.modify() {
+    if editor.is_mutable() {
         editor.clear_mark();
         editor.insert_char('\n');
         editor.render();
@@ -443,7 +443,7 @@ fn insert_line(env: &mut Environment) -> Option<Action> {
 /// Operation: `insert-tab`
 fn insert_tab(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
-    if let Some(editor) = editor.modify() {
+    if editor.is_mutable() {
         editor.clear_mark();
         editor.insert_tab();
         editor.render();
@@ -467,7 +467,7 @@ fn insert_unicode_hex(env: &mut Environment) -> Option<Action> {
 fn remove_before(env: &mut Environment) -> Option<Action> {
     let text = {
         let mut editor = env.get_active_editor().borrow_mut();
-        if let Some(editor) = editor.modify() {
+        if editor.is_mutable() {
             let maybe_mark = editor.clear_mark();
             let text = if let Some(mark) = maybe_mark {
                 let text = editor.remove_mark(mark);
@@ -491,7 +491,7 @@ fn remove_before(env: &mut Environment) -> Option<Action> {
 /// Operation: `remove-after`
 fn remove_after(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
-    if let Some(editor) = editor.modify() {
+    if editor.is_mutable() {
         editor.clear_mark();
         editor.remove_after();
         editor.render();
@@ -504,7 +504,7 @@ fn remove_after(env: &mut Environment) -> Option<Action> {
 /// Operation: `remove-start`
 fn remove_start(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
-    if let Some(editor) = editor.modify() {
+    if editor.is_mutable() {
         editor.clear_mark();
         editor.remove_start();
         editor.render();
@@ -517,7 +517,7 @@ fn remove_start(env: &mut Environment) -> Option<Action> {
 /// Operation: `remove-end`
 fn remove_end(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
-    if let Some(editor) = editor.modify() {
+    if editor.is_mutable() {
         editor.clear_mark();
         editor.remove_end();
         editor.render();
@@ -586,7 +586,7 @@ fn paste_global(env: &mut Environment) -> Option<Action> {
 
 fn paste_from(env: &mut Environment, scope: Scope) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
-    if let Some(editor) = editor.modify() {
+    if editor.is_mutable() {
         let maybe_text = env.clipboard.get_text(scope);
         if let Some(text) = maybe_text {
             editor.insert(&text);
@@ -611,7 +611,7 @@ fn cut_global(env: &mut Environment) -> Option<Action> {
 fn cut_to(env: &mut Environment, scope: Scope) -> Option<Action> {
     let text = {
         let mut editor = env.get_active_editor().borrow_mut();
-        if let Some(editor) = editor.modify() {
+        if editor.is_mutable() {
             let text = {
                 let maybe_mark = editor.clear_mark();
                 if let Some(mark) = maybe_mark {

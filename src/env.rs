@@ -5,7 +5,7 @@
 //! simplify operations, but more importantly, to enforce certain invariants.
 
 use crate::clip::Clipboard;
-use crate::editor::{Align, Editor, EditorRef, ImmutableEditor};
+use crate::editor::{Align, EditorBuilder, EditorRef};
 use crate::source::Source;
 use crate::window::{BannerRef, WindowRef};
 use crate::workspace::{Placement, WorkspaceRef};
@@ -48,12 +48,10 @@ impl Environment {
         for (id, name) in Self::BUILTIN_EDITORS {
             editor_map.insert(
                 id,
-                Editor::mutable(
-                    workspace.borrow().config.clone(),
-                    Source::Ephemeral(name.to_string()),
-                    None,
-                )
-                .into_ref(),
+                EditorBuilder::new(workspace.borrow().config.clone())
+                    .source(Source::Ephemeral(name.to_string()))
+                    .build()
+                    .into_ref(),
             );
         }
         let editor_id_seq = editor_map.len() as u32;
