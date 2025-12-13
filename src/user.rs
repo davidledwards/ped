@@ -160,8 +160,7 @@ struct YesNoCompleter;
 
 impl YesNoCompleter {
     fn hint() -> Option<String> {
-        const HINT: &str = " (y)es, (n)o";
-        Some(HINT.to_string())
+        Some(" (y)es, (n)o".to_string())
     }
 
     fn parse(value: &str) -> Option<&'static str> {
@@ -204,8 +203,7 @@ struct YesNoAllCompleter;
 
 impl YesNoAllCompleter {
     fn hint() -> Option<String> {
-        const HINT: &str = " (y)es, (n)o, (a)ll";
-        Some(HINT.to_string())
+        Some(" (y)es, (n)o, (a)ll".to_string())
     }
 
     fn parse(value: &str) -> Option<&'static str> {
@@ -243,7 +241,7 @@ impl Completer for YesNoAllCompleter {
 }
 
 /// A completer that accepts numbers in the range defined by `u32`.
-pub struct NumberCompleter {
+struct NumberCompleter {
     radix: u32,
 }
 
