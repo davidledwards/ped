@@ -112,7 +112,7 @@ fn run_opts(opts: &Options) -> Result<()> {
     // all other settings.
     let mut config = if opts.bare {
         Configuration::default()
-    } else if let Some(ref config_path) = opts.config_path {
+    } else if let Some(config_path) = &opts.config_path {
         Configuration::load_file(config_path)?
     } else {
         Configuration::load()?
@@ -122,7 +122,7 @@ fn run_opts(opts: &Options) -> Result<()> {
     // Load optional syntax configurations via registry and update configuration.
     config.registry = if opts.bare || opts.bare_syntax {
         Registry::default()
-    } else if let Some(ref syntax_dir) = opts.syntax_dir {
+    } else if let Some(syntax_dir) = &opts.syntax_dir {
         Registry::load_dir(syntax_dir, &config.colors)?
     } else {
         Registry::load(&config.colors)?
@@ -144,7 +144,7 @@ fn run_opts(opts: &Options) -> Result<()> {
         let content = help::syntaxes_content(config.registry.syntaxes());
         write!(stdout(), "{content}")?;
         Ok(())
-    } else if let Some(ref op) = opts.describe {
+    } else if let Some(op) = &opts.describe {
         if let Some(desc) = op::describe(op) {
             writeln!(stdout(), "{desc}")?;
             Ok(())

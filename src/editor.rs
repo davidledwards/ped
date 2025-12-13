@@ -1046,10 +1046,10 @@ impl Editor {
         self.move_to(pos, Align::Bottom);
     }
 
-    /// Moves the buffer position to the first character of `line` and places the
-    /// cursor on the display according to the `align` objective.
-    pub fn move_line(&mut self, line: u32, align: Align) {
-        let pos = self.buffer().find_line(line);
+    /// Moves the buffer position to `line` and `col`, and places the cursor on the
+    /// display according to the `align` objective.
+    pub fn move_line_col(&mut self, line: u32, col: u32, align: Align) {
+        let pos = self.buffer().find_line_col(line, col);
         self.move_to(pos, align);
     }
 

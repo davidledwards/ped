@@ -46,14 +46,23 @@ pub trait Question {
 /// from a user.
 pub trait Completer {
     /// Initializes the completer and returns an optional hint.
-    fn prepare(&mut self) -> Option<String>;
+    ///
+    /// The default implementation returns `None`.
+    fn prepare(&mut self) -> Option<String> {
+        None
+    }
 
     /// Allows the completer to evaluate the input `value` in its current form and
     /// return an optional hint.
     ///
     /// Under normal circumstances, this method is expected to be called with each
-    /// change by the user, including insertion and removal of characters.
-    fn evaluate(&mut self, value: &str) -> Option<String>;
+    /// change to the input, including insertion and removal of characters.
+    ///
+    /// The default implementation returns `None`.
+    #[allow(unused_variables, reason = "retain expressiveness")]
+    fn evaluate(&mut self, value: &str) -> Option<String> {
+        None
+    }
 
     /// Allows the completer to make a suggestion based on the input `value` in its
     /// current form and the directional nature of `suggest` by returning a tuple
@@ -62,15 +71,24 @@ pub trait Completer {
     /// Under normal circumstances, this method is called only when a request is made
     /// by the user, such as pressing the TAB key (forward suggestion) or S-TAB key
     /// (backward suggestion).
-    fn suggest(&mut self, value: &str, suggest: Suggest) -> (Option<String>, Option<String>);
+    ///
+    /// The default implementation returns `(None, None)`.
+    #[allow(unused_variables, reason = "retain expressiveness")]
+    fn suggest(&mut self, value: &str, suggest: Suggest) -> (Option<String>, Option<String>) {
+        (None, None)
+    }
 
-    /// Allows the completer to accept, or not, the input `value` in its current form,
+    /// Allows the completer to accept or reject the input `value` in its current form,
     /// returning `Some` with a possibly altered final form, or `None` if the value is
     /// rejected.
     ///
     /// Under normal circumstances, this method is called only when the user requests
     /// that the input be accepted, such as pressing the RETURN key.
-    fn accept(&mut self, value: &str) -> Option<String>;
+    ///
+    /// The default implementation returns `Some(value)`.
+    fn accept(&mut self, value: &str) -> Option<String> {
+        Some(value.to_string())
+    }
 }
 
 /// Captures the directional notion of suggestions.
@@ -87,19 +105,37 @@ pub fn null_completer() -> Box<dyn Completer> {
 
 /// Returns an implementation of [`Completer`] that accepts `y`es/`n`o input.
 pub fn yes_no_completer() -> Box<dyn Completer> {
-    Box::new(YesNoCompleter::new())
+    Box::new(YesNoCompleter)
 }
 
 /// Returns an implementation of [`Completer`] that accepts `y`es/`n`o/`a`ll
 /// input.
 pub fn yes_no_all_completer() -> Box<dyn Completer> {
-    Box::new(YesNoAllCompleter::new())
+    Box::new(YesNoAllCompleter)
 }
 
 /// Returns an implementation of [`Completer`] that accepts numbers represented by
 /// the given `radix` and in the range defined by `u32`.
 pub fn number_completer(radix: u32) -> Box<dyn Completer> {
     Box::new(NumberCompleter::new(radix))
+}
+
+/// Parses the input `value` and returns a number represented by the given `radix`
+/// if correctly formed, otherwise `None`.
+pub fn number_parse(value: &str, radix: u32) -> Option<u32> {
+    NumberCompleter::new(radix).parse(value)
+}
+
+/// Returns an implementation of [`Completer`] that accepts a _line_ number followed
+/// by an optional _column_ number.
+pub fn line_column_completer() -> Box<dyn Completer> {
+    Box::new(LineColumnCompleter)
+}
+
+/// Parses the input `value` and returns a _line_ number and an optional _column_ number
+/// if correctly formed, otherwise `None`.
+pub fn line_column_parse(value: &str) -> Option<(u32, Option<u32>)> {
+    LineColumnCompleter::parse(value)
 }
 
 /// Returns an implementation of [`Completer`] that accepts a finite collection of
@@ -116,107 +152,93 @@ pub fn file_completer(dir: PathBuf) -> Box<dyn Completer> {
 /// A completer that does nothing.
 struct NullCompleter;
 
-impl Completer for NullCompleter {
-    fn prepare(&mut self) -> Option<String> {
-        None
-    }
-
-    fn evaluate(&mut self, _: &str) -> Option<String> {
-        None
-    }
-
-    fn suggest(&mut self, _: &str, _: Suggest) -> (Option<String>, Option<String>) {
-        (None, None)
-    }
-
-    fn accept(&mut self, value: &str) -> Option<String> {
-        Some(value.to_string())
-    }
-}
+impl Completer for NullCompleter {}
 
 /// A completer that accepts case-insensitive values `"y"` and `"n"`, always yielding
 /// accepted values in lowercase.
-struct YesNoCompleter {
-    hint: Option<String>,
-}
+struct YesNoCompleter;
 
 impl YesNoCompleter {
-    const HINT: &str = " (y)es, (n)o";
-    const ACCEPTED: [&str; 2] = ["y", "n"];
+    fn hint() -> Option<String> {
+        const HINT: &str = " (y)es, (n)o";
+        Some(HINT.to_string())
+    }
 
-    fn new() -> YesNoCompleter {
-        YesNoCompleter {
-            hint: Some(Self::HINT.to_string()),
-        }
+    fn parse(value: &str) -> Option<&'static str> {
+        const ACCEPTED: [&str; 2] = ["y", "n"];
+        let value = value.to_lowercase();
+        ACCEPTED
+            .iter()
+            .position(|&s| s == value)
+            .map(|i| ACCEPTED[i])
     }
 }
 
 impl Completer for YesNoCompleter {
     fn prepare(&mut self) -> Option<String> {
-        self.hint.clone()
+        Self::hint()
     }
 
     fn evaluate(&mut self, value: &str) -> Option<String> {
-        if Self::ACCEPTED.contains(&value.to_lowercase().as_ref()) {
+        let value = value.trim();
+        if Self::parse(value).is_some() {
             None
         } else {
-            self.hint.clone()
+            Self::hint()
         }
     }
 
     fn suggest(&mut self, _: &str, _: Suggest) -> (Option<String>, Option<String>) {
-        (None, self.hint.clone())
+        (None, Self::hint())
     }
 
     fn accept(&mut self, value: &str) -> Option<String> {
-        if Self::ACCEPTED.contains(&value) {
-            Some(value.to_lowercase())
-        } else {
-            None
-        }
+        let value = value.trim();
+        Self::parse(value).map(|v| v.to_string())
     }
 }
 
 /// A completer that accepts case-insensitive values `"y"`, `"n"`, and `"a"`, always
 /// yielding accepted values in lowercase.
-struct YesNoAllCompleter {
-    hint: Option<String>,
-}
+struct YesNoAllCompleter;
 
 impl YesNoAllCompleter {
-    const HINT: &str = " (y)es, (n)o, (a)ll";
-    const ACCEPTED: [&str; 3] = ["y", "n", "a"];
+    fn hint() -> Option<String> {
+        const HINT: &str = " (y)es, (n)o, (a)ll";
+        Some(HINT.to_string())
+    }
 
-    fn new() -> YesNoAllCompleter {
-        YesNoAllCompleter {
-            hint: Some(Self::HINT.to_string()),
-        }
+    fn parse(value: &str) -> Option<&'static str> {
+        const ACCEPTED: [&str; 3] = ["y", "n", "a"];
+        let value = value.to_lowercase();
+        ACCEPTED
+            .iter()
+            .position(|&s| s == value)
+            .map(|i| ACCEPTED[i])
     }
 }
 
 impl Completer for YesNoAllCompleter {
     fn prepare(&mut self) -> Option<String> {
-        self.hint.clone()
+        Self::hint()
     }
 
     fn evaluate(&mut self, value: &str) -> Option<String> {
-        if Self::ACCEPTED.contains(&value.to_lowercase().as_ref()) {
+        let value = value.trim();
+        if Self::parse(value).is_some() {
             None
         } else {
-            self.hint.clone()
+            Self::hint()
         }
     }
 
     fn suggest(&mut self, _: &str, _: Suggest) -> (Option<String>, Option<String>) {
-        (None, self.hint.clone())
+        (None, Self::hint())
     }
 
     fn accept(&mut self, value: &str) -> Option<String> {
-        if Self::ACCEPTED.contains(&value) {
-            Some(value.to_lowercase())
-        } else {
-            None
-        }
+        let value = value.trim();
+        Self::parse(value).map(|v| v.to_string())
     }
 }
 
@@ -226,38 +248,72 @@ pub struct NumberCompleter {
 }
 
 impl NumberCompleter {
-    const INVALID_HINT: &str = " (invalid)";
-
-    pub fn new(radix: u32) -> NumberCompleter {
+    fn new(radix: u32) -> NumberCompleter {
         NumberCompleter { radix }
+    }
+
+    fn parse(&self, value: &str) -> Option<u32> {
+        match u32::from_str_radix(value, self.radix) {
+            Ok(n) => Some(n),
+            Err(_) => None,
+        }
     }
 }
 
 impl Completer for NumberCompleter {
-    fn prepare(&mut self) -> Option<String> {
-        None
-    }
-
     fn evaluate(&mut self, value: &str) -> Option<String> {
         let value = value.trim();
-        if value.len() == 0 || u32::from_str_radix(value, self.radix).is_ok() {
+        if value.len() == 0 || self.parse(value).is_some() {
             None
         } else {
-            Some(Self::INVALID_HINT.to_string())
+            Some(" (invalid)".to_string())
         }
-    }
-
-    fn suggest(&mut self, _: &str, _: Suggest) -> (Option<String>, Option<String>) {
-        (None, None)
     }
 
     fn accept(&mut self, value: &str) -> Option<String> {
         let value = value.trim();
-        if u32::from_str_radix(value, self.radix).is_ok() {
-            Some(value.to_string())
-        } else {
-            None
+        self.parse(value).map(|_| value.to_string())
+    }
+}
+
+/// A completer that accepts a _line_ number followed by an optional _column_ number.
+struct LineColumnCompleter;
+
+impl LineColumnCompleter {
+    fn parse(value: &str) -> Option<(u32, Option<u32>)> {
+        let vs = value
+            .split(',')
+            .map(|v| v.trim())
+            .filter(|v| v.len() > 0)
+            .collect::<Vec<_>>();
+
+        match &vs[..] {
+            [line] => match line.parse::<u32>() {
+                Ok(l) => Some((l, None)),
+                Err(_) => None,
+            },
+            [line, col] => match (line.parse::<u32>(), col.parse::<u32>()) {
+                (Ok(l), Ok(c)) => Some((l, Some(c))),
+                _ => None,
+            },
+            _ => None,
         }
+    }
+}
+
+impl Completer for LineColumnCompleter {
+    fn evaluate(&mut self, value: &str) -> Option<String> {
+        let value = value.trim();
+        if value.len() == 0 || Self::parse(value).is_some() {
+            None
+        } else {
+            Some(" (invalid)".to_string())
+        }
+    }
+
+    fn accept(&mut self, value: &str) -> Option<String> {
+        let value = value.trim();
+        Self::parse(value).map(|_| value.to_string())
     }
 }
 
@@ -499,9 +555,5 @@ impl Completer for FileCompleter {
                 (Some(replace), Some(hint))
             }
         }
-    }
-
-    fn accept(&mut self, value: &str) -> Option<String> {
-        Some(value.to_string())
     }
 }

@@ -283,6 +283,28 @@ impl Buffer {
         }
     }
 
+    /// Returns the position of the `0`-based `line` and `col` number.
+    ///
+    /// If `col` would extend beyond the end of `line`, or more precisely, if the
+    /// distance between the starting position of `line` and the next `\n` is less
+    /// than `col`, then the resulting position will be anchored to the `\n`.
+    ///
+    /// If `line` would extend beyond the end of the buffer, then the end of buffer
+    /// is returned.
+    pub fn find_line_col(&self, line: u32, col: u32) -> usize {
+        let pos = self.find_line(line);
+        if pos < self.size {
+            self.forward(pos)
+                .index()
+                .take(col as usize)
+                .find(|&(_, c)| c == '\n')
+                .map(|(_pos, _)| _pos)
+                .unwrap_or(pos + col as usize)
+        } else {
+            pos
+        }
+    }
+
     /// Returns the position of the first character of the line relative to `pos`.
     ///
     /// Specifically, this function returns the position of the character following the

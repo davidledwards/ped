@@ -234,9 +234,6 @@ struct GotoLine {
 }
 
 impl GotoLine {
-    const PROMPT: &str = "goto line:";
-    const INVALID_HINT: &str = " (invalid)";
-
     fn new(editor: EditorRef) -> GotoLine {
         let capture = editor.borrow().capture();
         GotoLine { editor, capture }
@@ -251,24 +248,26 @@ impl GotoLine {
 
 impl Question for GotoLine {
     fn prompt(&self) -> String {
-        Self::PROMPT.to_string()
+        "goto line[,col]:".to_string()
     }
 
     fn completer(&self) -> Box<dyn Completer> {
-        user::number_completer(10)
+        user::line_column_completer()
     }
 
     fn react(&mut self, _: &mut Environment, value: &str, _: &Key) -> Option<String> {
         let value = value.trim();
         if value.len() > 0 {
-            if let Ok(line) = value.parse::<u32>() {
-                let line = if line > 0 { line - 1 } else { 0 };
-                let mut editor = self.editor.borrow_mut();
-                editor.move_line(line, Align::Center);
-                editor.render();
-                None
-            } else {
-                Some(Self::INVALID_HINT.to_string())
+            match user::line_column_parse(value) {
+                Some((line, col)) => {
+                    let line = line.saturating_sub(1);
+                    let col = col.unwrap_or(0).saturating_sub(1);
+                    let mut editor = self.editor.borrow_mut();
+                    editor.move_line_col(line, col, Align::Center);
+                    editor.render();
+                    None
+                }
+                None => Some(" (invalid)".to_string()),
             }
         } else {
             self.restore();
@@ -293,17 +292,13 @@ struct InsertUnicode {
 }
 
 impl InsertUnicode {
-    const INVALID_HINT: &str = " (invalid)";
-
     fn new(editor: EditorRef, radix: u32) -> InsertUnicode {
         debug_assert!(radix == 10 || radix == 16);
         InsertUnicode { editor, radix }
     }
 
-    fn parse_code(&self, value: &str) -> Option<char> {
-        u32::from_str_radix(value, self.radix)
-            .ok()
-            .and_then(char::from_u32)
+    fn parse(&self, value: &str) -> Option<char> {
+        user::number_parse(value, self.radix).and_then(char::from_u32)
     }
 }
 
@@ -320,14 +315,14 @@ impl Question for InsertUnicode {
     fn react(&mut self, _: &mut Environment, value: &str, _: &Key) -> Option<String> {
         let value = value.trim();
         if value.len() > 0 {
-            if let Some(c) = self.parse_code(value) {
+            if let Some(c) = self.parse(value) {
                 if c.is_control() {
                     None
                 } else {
                     Some(format!(" '{c}'"))
                 }
             } else {
-                Some(Self::INVALID_HINT.to_string())
+                Some(" (invalid)".to_string())
             }
         } else {
             None
@@ -336,7 +331,7 @@ impl Question for InsertUnicode {
 
     fn respond(&mut self, _: &mut Environment, value: Option<&str>) -> Option<Action> {
         if let Some(value) = value
-            && let Some(c) = self.parse_code(value)
+            && let Some(c) = self.parse(value)
         {
             let mut editor = self.editor.borrow_mut();
             if editor.is_mutable() {

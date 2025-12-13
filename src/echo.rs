@@ -33,7 +33,7 @@ impl Echo {
     }
 
     pub fn draw(&mut self) {
-        if let Some(ref text) = self.text {
+        if let Some(text) = &self.text {
             let (origin, size) = self.workspace.borrow().shared_region();
 
             // Possibly clip text to fit size constraint of viewable region.

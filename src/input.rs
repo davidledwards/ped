@@ -342,7 +342,7 @@ impl InputEditor {
     /// Sets column sizes for the _prompt_ and _input_ areas, and allocates an
     /// appropriately-sized canvas.
     fn set_sizes(&mut self) {
-        if let Some(ref prompt) = self.prompt {
+        if let Some(prompt) = &self.prompt {
             // Editor is enabled.
             let (origin, size) = self.workspace.borrow().shared_region();
             (self.prompt_cols, self.input_cols) = Self::calc_sizes(size.cols, prompt);

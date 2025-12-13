@@ -2,7 +2,7 @@
 name = "ped"
 version = "0.37.0"
 edition = "2024"
-rust-version = "1.91"
+rust-version = "1.92"
 authors = ["David Edwards <david.l.edwards@gmail.com>"]
 description = "The pedestrian text editor"
 readme = "README.md"
