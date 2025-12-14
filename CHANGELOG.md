@@ -11,6 +11,7 @@ This file contains relevant information for each release. Please refer to the co
 #### Changed
 
 - Foreground color of file path for _dirty_ buffers has been changed from `82` to `45`, which provides much better contrast with existing background color of banner bar
+- Width of Unicode code point displayed on banner bar extended from `4` to `6` digits
 
 ### [0.36.0](https://github.com/davidledwards/ped/tree/v0.36.0) | `2025-11-30`
 
