@@ -293,13 +293,18 @@ impl Buffer {
     /// is returned.
     pub fn find_line_col(&self, line: u32, col: u32) -> usize {
         let pos = self.find_line(line);
-        if pos < self.size {
-            self.forward(pos)
-                .index()
-                .take(col as usize)
-                .find(|&(_, c)| c == '\n')
-                .map(|(_pos, _)| _pos)
-                .unwrap_or(pos + col as usize)
+        if pos < self.size && col > 0 {
+            let r = self.forward(pos).index().try_fold(0, |n, (pos, c)| {
+                if n == col || c == '\n' {
+                    ControlFlow::Break(pos)
+                } else {
+                    ControlFlow::Continue(n + 1)
+                }
+            });
+            match r {
+                ControlFlow::Break(pos) => pos,
+                _ => self.size,
+            }
         } else {
             pos
         }
@@ -852,6 +857,32 @@ mod tests {
 
         // Line numbers beyond end of buffer always yield position at end of buffer.
         let pos = buf.find_line(u32::MAX);
+        assert_eq!(pos, buf.size());
+    }
+
+    #[test]
+    fn find_line_col() {
+        const TEXT: &str = "Lorem\nipsum\ndolor\nsit\namet,\nconsectetur\nporttitor";
+
+        let mut buf = Buffer::new();
+        buf.insert_str(TEXT);
+
+        // Check normal and edge cases from beginning of buffer.
+        let pos = buf.find_line_col(0, 3);
+        assert_eq!(pos, 3);
+        let pos = buf.find_line_col(0, 10);
+        assert_eq!(pos, 5);
+
+        // Check normal and edge cases from middle of buffer.
+        let pos = buf.find_line_col(2, 2);
+        assert_eq!(pos, 14);
+        let pos = buf.find_line_col(2, 10);
+        assert_eq!(pos, 17);
+
+        // Check normal and edge cases near end of buffer.
+        let pos = buf.find_line_col(6, 5);
+        assert_eq!(pos, 45);
+        let pos = buf.find_line_col(6, 10);
         assert_eq!(pos, buf.size());
     }
 
