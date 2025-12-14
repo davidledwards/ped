@@ -251,10 +251,7 @@ impl NumberCompleter {
     }
 
     fn parse(&self, value: &str) -> Option<u32> {
-        match u32::from_str_radix(value, self.radix) {
-            Ok(n) => Some(n),
-            Err(_) => None,
-        }
+        u32::from_str_radix(value, self.radix).ok()
     }
 }
 
