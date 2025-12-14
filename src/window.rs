@@ -67,8 +67,8 @@ impl Banner {
     /// Number of columns allocated to showing Unicode code point of character
     /// under cursor.
     ///
-    /// Layout is `-????-` where '????` is the hex value of code point.
-    const CHAR_COLS: u32 = 6;
+    /// Layout is `-??????-` where '??????` is the hex value of code point.
+    const CHAR_COLS: u32 = 8;
 
     /// Number of columns allocated to line numbers.
     const LINE_COLS: u32 = 7;
@@ -301,7 +301,7 @@ impl Banner {
             col += self.canvas.write_str(
                 0,
                 col,
-                &format!("{:04x}", self.ch as u32),
+                &format!("{:06x}", self.ch as u32),
                 self.accent_color,
             );
             col += self.canvas.write_char(0, col, '-', self.banner_color);
