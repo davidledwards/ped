@@ -69,7 +69,7 @@ impl Banner {
     const CODE_POINT_COLS: u32 = 6;
 
     /// Bit mask to ensure code points do not format beyond the specified width.
-    const CODE_POINT_MASK: u32 = (1 << Self::CODE_POINT_COLS * 4) - 1;
+    const CODE_POINT_MASK: u32 = (1 << (Self::CODE_POINT_COLS * 4)) - 1;
 
     /// Number of columns allocated to showing Unicode code point of character
     /// under cursor.

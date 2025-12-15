@@ -1,5 +1,6 @@
 //! A collection of questions used by editing operations.
 
+use crate::config::ConfigurationRef;
 use crate::ed;
 use crate::editor::{Align, Capture, EditorRef};
 use crate::env::{Environment, Focus};
@@ -101,6 +102,13 @@ fn kill_override(editor: EditorRef, close_and_switch: Option<(u32, u32)>) -> Opt
 /// optionally opening a new window whose placement is defined by `place`.
 pub fn select(editors: Vec<(u32, EditorRef)>, place: Option<Placement>) -> Option<Action> {
     Action::question(Select::new(editors, place).into())
+}
+
+/// Returns a question that orchestrates the execution of any editing operation, all of
+/// which are discovered via `env`.
+pub fn run(env: &Environment) -> Option<Action> {
+    let config = env.workspace.borrow().config.clone();
+    Action::question(Run::new(config).into())
 }
 
 impl<T: Question + 'static> From<T> for Box<dyn Question> {
@@ -911,8 +919,6 @@ struct Select {
 }
 
 impl Select {
-    const PROMPT: &str = "select editor:";
-
     fn new(editors: Vec<(u32, EditorRef)>, place: Option<Placement>) -> Select {
         Select { editors, place }
     }
@@ -920,7 +926,8 @@ impl Select {
 
 impl Question for Select {
     fn prompt(&self) -> String {
-        Self::PROMPT.to_string()
+        const PROMPT: &str = "select editor:";
+        PROMPT.to_string()
     }
 
     fn completer(&self) -> Box<dyn Completer> {
@@ -950,6 +957,42 @@ impl Question for Select {
             } else {
                 Action::echo(&format!("{value}: editor not found"))
             }
+        } else {
+            None
+        }
+    }
+}
+
+struct Run {
+    /// Available operations derived from `config`.
+    config: ConfigurationRef,
+}
+
+impl Run {
+    fn new(config: ConfigurationRef) -> Run {
+        Run { config }
+    }
+}
+
+impl Question for Run {
+    fn prompt(&self) -> String {
+        "run:".to_string()
+    }
+
+    fn completer(&self) -> Box<dyn Completer> {
+        let accepted = self
+            .config
+            .bindings
+            .ops()
+            .keys()
+            .map(|op| op.to_string())
+            .collect();
+        user::list_completer(accepted)
+    }
+
+    fn respond(&mut self, _: &mut Environment, value: Option<&str>) -> Option<Action> {
+        if let Some(value) = value {
+            Action::run(value)
         } else {
             None
         }

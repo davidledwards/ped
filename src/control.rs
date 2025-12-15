@@ -36,6 +36,10 @@ pub struct Controller {
     /// The editing environment made accessible to editing functions.
     env: Environment,
 
+    /// An optional editing operation that should be run in the next iteration of the
+    /// controller loop.
+    run_op: Option<String>,
+
     /// A sequence of keys resulting from continuations.
     key_seq: Vec<Key>,
 
@@ -78,6 +82,7 @@ impl Controller {
             config,
             keyboard,
             env,
+            run_op: None,
             key_seq: Vec::new(),
             echo,
             last_echo: None,
@@ -113,13 +118,21 @@ impl Controller {
         self.set_echo(self.welcome());
         self.show_cursor();
         loop {
-            let key = self.keyboard.read().unwrap_or(Key::None);
-            if key == Key::None {
-                self.process_background();
-            } else if let Step::Quit = self.process_key(key) {
-                break;
+            if let Some(op) = self.run_op.take() {
+                if let Step::Quit = self.process_op(&op) {
+                    break;
+                } else {
+                    self.show_cursor();
+                }
             } else {
-                self.show_cursor();
+                let key = self.keyboard.read().unwrap_or(Key::None);
+                if key == Key::None {
+                    self.process_background();
+                } else if let Step::Quit = self.process_key(key) {
+                    break;
+                } else {
+                    self.show_cursor();
+                }
             }
         }
     }
@@ -139,6 +152,23 @@ impl Controller {
         if self.question.is_none() {
             self.env.get_active_editor().borrow_mut().show_cursor();
         }
+    }
+
+    fn process_op(&mut self, op: &str) -> Step {
+        if let Some(op_fn) = self.config.bindings.find_op(op) {
+            match op_fn(&mut self.env) {
+                Some(Action::Quit) => return Step::Quit,
+                Some(Action::Run(op)) => self.run_op = Some(op),
+                Some(Action::Redraw) => self.redraw(),
+                Some(Action::Echo(text)) => self.set_echo(text),
+                Some(Action::Question(question)) => self.set_question(question),
+                None => self.clear_echo(),
+            }
+            self.clear_keys();
+        } else {
+            self.show_undefined_op(op);
+        }
+        Step::Continue
     }
 
     fn process_key(&mut self, key: Key) -> Step {
@@ -176,6 +206,7 @@ impl Controller {
             if let Some(op_fn) = self.config.bindings.find(&self.key_seq) {
                 match op_fn(&mut self.env) {
                     Some(Action::Quit) => return Step::Quit,
+                    Some(Action::Run(op)) => self.run_op = Some(op),
                     Some(Action::Redraw) => self.redraw(),
                     Some(Action::Echo(text)) => self.set_echo(text),
                     Some(Action::Question(question)) => self.set_question(question),
@@ -231,6 +262,7 @@ impl Controller {
         };
         match action {
             Some(Action::Quit) => return Step::Quit,
+            Some(Action::Run(op)) => self.run_op = Some(op),
             Some(Action::Redraw) => self.redraw(),
             Some(Action::Echo(text)) => self.set_echo(text),
             Some(Action::Question(question)) => self.set_question(question),
@@ -336,6 +368,10 @@ impl Controller {
 
     fn show_undefined_keys(&mut self) {
         self.set_echo(format!("{}: undefined key", key::pretty(&self.key_seq)));
+    }
+
+    fn show_undefined_op(&mut self, op: &str) {
+        self.set_echo(format!("{op}: undefined operation"))
     }
 
     fn set_echo(&mut self, text: String) {

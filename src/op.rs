@@ -28,6 +28,11 @@ fn quit(env: &mut Environment) -> Option<Action> {
     question::quit(env)
 }
 
+/// Operation: `run`
+fn run(env: &mut Environment) -> Option<Action> {
+    question::run(env)
+}
+
 /// Operation: `help`
 fn help(env: &mut Environment) -> Option<Action> {
     toggle_help(env, help::HELP_EDITOR_NAME, |config| {
@@ -1033,10 +1038,14 @@ pub fn set_focus(env: &mut Environment, p: Point) {
 
 /// Predefined mapping of editing operations to editing functions.
 #[rustfmt::skip]
-pub const OP_MAPPINGS: [(&str, Operation, &str); 84] = [
+pub const OP_MAPPINGS: [(&str, Operation, &str); 85] = [
     // --- exit and cancellation ---
     ("quit", quit,
         "ask to save dirty editors and quit"),
+
+    // --- operations ---
+    ("run", run,
+        "run any operation"),
 
     // --- help ---
     ("help", help,

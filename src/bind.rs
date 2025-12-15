@@ -122,11 +122,21 @@ impl Bindings {
         &self.bind_map
     }
 
+    /// Returns a reference to the current operations.
+    pub fn ops(&self) -> &HashMap<&'static str, Operation> {
+        &self.op_map
+    }
+
     /// Returns the function pointer bound to `keys`, otherwise `None`.
     pub fn find(&self, keys: &Vec<Key>) -> Option<&Operation> {
         self.bind_map
             .get(keys)
             .and_then(|op| self.op_map.get(op as &str))
+    }
+
+    /// Returns the function pointer bound to `op`, otherwise `None`.
+    pub fn find_op(&self, op: &str) -> Option<&Operation> {
+        self.op_map.get(op)
     }
 
     /// Returns a vector of keys bound to `op`, which may be empty.
@@ -154,9 +164,10 @@ impl Bindings {
     }
 
     /// A collection of key sequences that are restricted from being rebound.
-    const RESTRICTED_KEYS: [&[Key]; 3] = [
+    const RESTRICTED_KEYS: [&[Key]; 4] = [
         &[Key::Control(7)],  // C-g
         &[Key::Control(17)], // C-q
+        &[Key::Control(26)], // C-z
         &[Key::Control(27)], // C-[ (ESC)
     ];
 }

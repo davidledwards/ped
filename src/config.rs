@@ -338,9 +338,12 @@ impl Configuration {
     }
 
     #[rustfmt::skip]
-    const DEFAULT_BINDINGS: [(&'static str, &'static str); 100] = [
+    const DEFAULT_BINDINGS: [(&'static str, &'static str); 101] = [
         // --- exit and cancellation ---
         ("C-q", "quit"),
+
+        // --- operations ---
+        ("C-z", "run"),
 
         // --- help ---
         ("C-h", "help"),

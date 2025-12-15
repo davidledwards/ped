@@ -7,6 +7,7 @@ This file contains relevant information for each release. Please refer to the co
 #### Added
 
 - `goto-line` now accepts an optional column number
+- `run`, which is strictly bound to `C-z`, provides the ability to run any operation (full list discoverable by `ped --ops`)
 
 #### Changed
 

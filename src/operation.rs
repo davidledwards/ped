@@ -10,6 +10,7 @@ pub type Operation = fn(&mut Environment) -> Option<Action>;
 /// controller orchestrating calls to such functions.
 pub enum Action {
     Quit,
+    Run(String),
     Redraw,
     Echo(String),
     Question(Box<dyn Question>),
@@ -18,6 +19,11 @@ pub enum Action {
 impl Action {
     pub fn quit() -> Option<Action> {
         Some(Action::Quit)
+    }
+
+    pub fn run<T: ToString + ?Sized>(op: &T) -> Option<Action> {
+        let action = Action::Run(op.to_string());
+        Some(action)
     }
 
     pub fn redraw() -> Option<Action> {

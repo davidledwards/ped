@@ -108,6 +108,7 @@ echo-fg = "funky-red"
 #
 #   C-q : provides a way to quit ped
 #   C-g : provides a way to cancel any operation
+#   C-z : provides a way to run any operation
 #   ESC : this key is a prefix of many other keys
 #
 [bindings]
