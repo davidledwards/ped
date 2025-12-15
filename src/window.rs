@@ -64,11 +64,18 @@ impl Banner {
     /// Layout is `-??-` where each `?` is a separate single-character indicator.
     const MODE_COLS: u32 = 4;
 
+    /// Number of columns required to show the largest Unicode code point
+    /// (`0x10FFFF`) in hex format.
+    const CODE_POINT_COLS: u32 = 6;
+
+    /// Bit mask to ensure code points do not format beyond the specified width.
+    const CODE_POINT_MASK: u32 = (1 << Self::CODE_POINT_COLS * 4) - 1;
+
     /// Number of columns allocated to showing Unicode code point of character
     /// under cursor.
     ///
     /// Layout is `-??????-` where '??????` is the hex value of code point.
-    const CHAR_COLS: u32 = 8;
+    const CHAR_COLS: u32 = Self::CODE_POINT_COLS + 2;
 
     /// Number of columns allocated to line numbers.
     const LINE_COLS: u32 = 7;
@@ -298,10 +305,11 @@ impl Banner {
             // leftmost position in right area.
             let mut col = start;
             col += self.canvas.write_char(0, col, '-', self.banner_color);
+            let c = (self.ch as u32) & Self::CODE_POINT_MASK;
             col += self.canvas.write_str(
                 0,
                 col,
-                &format!("{:06x}", self.ch as u32),
+                &format!("{:0width$x}", c, width = Self::CODE_POINT_COLS as usize),
                 self.accent_color,
             );
             col += self.canvas.write_char(0, col, '-', self.banner_color);
