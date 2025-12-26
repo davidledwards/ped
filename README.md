@@ -156,6 +156,32 @@ ped --bare --theme
 
 In the course of experimenting with different color combinations, I decided to write a CLI program [tcolor](https://github.com/davidledwards/tcolor) that shows what colors look like on the terminal. The program is quite simple but also effective in visually colors.
 
+## Interface
+
+By default, `ped` will display line numbers in the left margin. This feature can be disabled by specifiying the `--no-lines` option or setting `lines = false` in the configuration file. It will also highlight the cursor row unless `--no-spotlight` is specified or `spotlight = false` is defined. If the line number exceeds `99999`, then only the lower order three digits are displayed along with `--` as a prefix. For example, the line number `218375` is displayed as `--375`.
+
+This is an example of the default configuration.
+
+![](content/ped-lines-spotlight.png)
+
+The banner bar for each open window shows the source of the content, which is usually a file path. However, the source can also be an ephemeral buffer (prefixed by `@`). A well-known ephemeral buffer, called `@scratch`, is always present and can never be closed. Other common uses of ephemeral buffers show help content, such as `@help` when `C-h` is pressed.
+
+The source is followed by a syntax name enclosed in `(` and `)`. The name `Text` is used when no syntax definition exists. There is no highlighting for `Text` content.
+
+To the right of the syntax name is an area that shows certain editor settings surrounded by a single `-` on both edges. The first character indicates how _end-of-line_ characters are written to storage: `/` means that `\n` (LF) is written, and `\` means that `\r\n` (CRLF) is written. The second character indicates the _tab_ mode: `t` means _soft_ tabs are enabled, and `T` means _hard_ tabs. By default, these settings are `/` and `t`, but can be changed globally on the command line or via configuration, or changed on a per-buffer basis.
+
+To right of the editor settings in the area justified towards the right margin and surrounded by `-` is the hexidecimal value of the Unicode code point under the cursor. If the cursor is at EOF, then `000000` is displayed.
+
+Finally, on the edge of the right margin is the line and column number under the cursor. If the line number or column number is larger than `9999999`, then all dashes are displayed, respectively.
+
+The example below shows the file `~/repo/ped/src/buffer.rs` being edited with `Rust` syntax highlighting enabled, _eol_ mode set to LF, _tab_ mode set to _soft_, the code point under the cursor as a space (`0x20`), and the cursor at line `337`, column `1`.
+
+![](content/ped-banner.png)
+
+When a buffer has unsaved modifications, the color of the _source_ changes.
+
+![](content/ped-banner-dirty.png)
+
 ## Limitations
 
 `ped` currently has a few notable limitations or deficiencies that may be addressed in future versions.
