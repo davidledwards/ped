@@ -2,6 +2,12 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
+### [0.38.0](https://github.com/davidledwards/ped/tree/v0.38.0) | `???`
+
+#### Changed
+
+- List of operations in `run` operation are now sorted alphabetically
+
 ### [0.37.0](https://github.com/davidledwards/ped/tree/v0.37.0) | `2025-12-14`
 
 #### Added
