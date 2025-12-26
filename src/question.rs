@@ -980,13 +980,14 @@ impl Question for Run {
     }
 
     fn completer(&self) -> Box<dyn Completer> {
-        let accepted = self
+        let mut accepted = self
             .config
             .bindings
             .ops()
             .keys()
             .map(|op| op.to_string())
-            .collect();
+            .collect::<Vec<_>>();
+        accepted.sort();
         user::list_completer(accepted)
     }
 
