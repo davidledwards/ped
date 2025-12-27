@@ -712,12 +712,12 @@ impl Editor {
         );
     }
 
-    /// Returns a partial clone of this editor using `source`.
+    /// Returns a duplicate of this editor using `source`.
     ///
     /// Specifically, the buffer is cloned as well as the current buffer position and
     /// cursor values. All other attributes are initialized as if a new editor were
     /// being created.
-    pub fn clone_as(&self, source: Source) -> Editor {
+    pub fn duplicate(&self, source: Source) -> Editor {
         let mut buffer = self.buffer().clone();
         buffer.set_pos(self.cur_pos);
         let mut editor = Self::new(self.config.clone(), source, Some(buffer), false);

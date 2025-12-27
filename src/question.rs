@@ -679,11 +679,11 @@ impl Save {
         let timestamp = ed::write_editor(editor, path);
         match timestamp {
             Ok(timestamp) => {
-                // Replace ephemeral editor in current window with cloned version, keeping
-                // position of cursor at same location on terminal.
+                // Replace ephemeral editor in current window with duplicate version,
+                // keeping position of cursor at same location on terminal.
                 let new_editor = editor
                     .borrow()
-                    .clone_as(Source::as_file(path, Some(timestamp)));
+                    .duplicate(Source::as_file(path, Some(timestamp)));
                 let row = new_editor.cursor().row;
                 env.set_editor(new_editor.into_ref(), Align::Row(row));
 
