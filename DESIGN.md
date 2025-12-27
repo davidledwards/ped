@@ -160,6 +160,22 @@ The _controller_ coordinates this interaction by recognizing that an operation b
 
 Conceptually, a _question_ represents the dialog and the acceptance of values provided by the user, whereas the _completer_ complements the question by enhancing the dialog as it responds to individual keys. As an example, the _open file_ question will use a _file_ completer that reads the underlying file system as the user enters text, providing features like auto-complete and tabbing through potential matches.
 
+## Syntax Highlighting
+
+The implementation of _syntax_ highlighting uses familiar constructs, such as regular expressions to define tokens, as well as external configuration files that are discovered and loaded at runtime. Syntax configurations are managed under a separate project since these are not only optional but also evolve independent of the editor itself.
+
+The algorithmic challenge that became evident quite early in the design process was how to apply color updates efficiently as changes were occurring in the buffer. The fundamental problem is that the insertion or removal of text requires some degree of rescanning because existing tokens may be invalidated and new tokens may be recognized. However, it is not immediately obvious where to start the rescanning process.
+
+A classic example that illustrates the problem is the multi-line comment. Suppose the comment is opened on line 1 with a `/*`, but never closed. This implies that the comment token is never recognized. Now, suppose the comment is closed on line 1000 with `*/`. The entire buffer would need to be rescanned to correctly tokenize the text.
+
+In the interest of simplicity, I chose to rescan the entire buffer when changes are made. The tokenization process produces a vector of _spans_ that map to recognized tokens in the buffer. This data structure is very efficient for navigation and scrolling even though it requires _O(n)_ time to move forward and backward. It also aligns well with the rendering process.
+
+Insertion and removal of text uses a clever trick, essentially expanding a span during insertion or collapsing spans upon removal. These operations are very efficient, executing in _O(1)_ time. More importantly, the rescanning process can be deferred while making the immediate rendering operation behave as one might expect even though coloring for a brief period of time may not be entirely accurate.
+
+The need to rescan is detected and executed in background processing, which occurs between keystrokes. It turns out that the CPU is sitting idle most of the time, which makes background processing the ideal place to perform this relatively costly tokenization. Despite the deferral of rescanning, this operation is being executed on the same thread as the controller, so the cost of tokenization must be sensitive to the perception of sluggish responsiveness to users.
+
+Even though rescanning can be done in the background, most text files are small enough that this process can be executed immediately following a modification. However, this decision is governed by a cost measurement captured after every rescan. If that cost exceeds a predefined threshold that would make the user experience feel sluggish, currently `50` milliseconds, then the processing is done in the background.
+
 ## Incremental Search
 
 TODO
@@ -171,23 +187,3 @@ TODO
 - but, we convert once since the contents do not change during incremental
 - term search uses Boyer-Moore and operates over the buffer itself
 - regex uses external library
-
-## Syntax Highlighting
-
-TODO
-
-- uses external syntax config files
-- TOML format
-- used external library to deserialize files
-- separate repo project to manage config files, can be cloned to ~/.ped/syntax
-- regex-based tokens with colors assigned
-- all token regexes combined into single regex via disjunction
-- will tokenizer after change if cost falls below threshold
-- otherwise, do this in the background
-- challenge of how to update after changes, decide to re-tokenize entire buffer
-- vector of spans
-- how it fits into the rendering process
-
-OLD
-
-- The implementation of _syntax_ highlighting uses familiar constructs, such as regular expressions to define tokens, as well as external configuration files that are discovered and loaded at runtime. The algorithmic challenge that became evident quite early in the design process was how to apply color updates efficiently as changes were occurring in the buffer. The fundamental problem is that the insertion or removal of text requires some degree of rescanning because existing tokens may be invalidated and new tokens may be recognized. However, it is not immediately obvious where to start the rescanning process. A classic example that illustrates the problem is the multi-line comment. Suppose the comment is opened on line 1 with a `/*`, but never closed. This implies that the comment token is never recognized. Now, suppose the comment is closed on line 1000 with `*/`. The entire buffer would need to be rescanned to correctly tokenize the text. In the interest of simplicity, I chose to rescan the entire buffer when changes are made. The tokenization process produces a vector of _spans_ that map to recognized tokens in the buffer. This data structure is very efficient for navigation and scrolling even though it requires _O(n)_ time to move forward and backward. It also aligns well with the rendering process. Insertion and removal of text uses a clever trick, essentially expanding a span during insertion or collapsing spans upon removal. These operations are very efficient, executing in _O(1)_ time. More importantly, the rescanning process can be deferred while making the immediate rendering operation behave as one might expect even though coloring for a brief period of time may not be entirely accurate. The need to rescan is detected and executed in background processing, which occurs between keystrokes. It turns out that the CPU is sitting idle most of the time, which makes background processing the ideal place to perform this relatively costly tokenization. Despite the deferral of rescanning, this operation is being executed on the same thread as the controller, so the cost of tokenization must be sensitive to the perception of sluggish responsiveness to users.
