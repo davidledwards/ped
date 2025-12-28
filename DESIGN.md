@@ -172,18 +172,18 @@ In the interest of simplicity, I chose to rescan the entire buffer when changes 
 
 Insertion and removal of text uses a clever trick, essentially expanding a span during insertion or collapsing spans upon removal. These operations are very efficient, executing in _O(1)_ time. More importantly, the rescanning process can be deferred while making the immediate rendering operation behave as one might expect even though coloring for a brief period of time may not be entirely accurate.
 
-The need to rescan is detected and executed in background processing, which occurs between keystrokes. It turns out that the CPU is sitting idle most of the time, which makes background processing the ideal place to perform this relatively costly tokenization. Despite the deferral of rescanning, this operation is being executed on the same thread as the controller, so the cost of tokenization must be sensitive to the perception of sluggish responsiveness to users.
+The rescanning process was initially designed to be executed in the background, which occurs between keystrokes. Not surprisingly, the CPU is sitting idle most of the time, which makes background processing the ideal place to perform this relatively costly tokenization. Despite the deferral of rescanning, this operation is being executed on the same thread as the controller, so the cost of tokenization must be sensitive to the perception of sluggish responsiveness to users.
 
-Even though rescanning can be done in the background, most text files are small enough that this process can be executed immediately following a modification. However, this decision is governed by a cost measurement captured after every rescan. If that cost exceeds a predefined threshold that would make the user experience feel sluggish, currently `50` milliseconds, then the processing is done in the background.
+Even though rescanning can be performed in the background, most text files are small enough that this process can be executed immediately following a modification. Doing so actually creates a more responsive user experience. However, this decision is governed by a cost measurement captured after every rescan. If that cost exceeds a predefined threshold that would make the user experience feel sluggish, currently `50` milliseconds, then the processing is done in the background as previously described. It turns out that most files are small enough that rescanning requires only a few milliseconds, so it almost always executes in the foreground. Fortunately, there is a command-line option to disable syntax highlighting when editing very large files.
 
 ## Incremental Search
 
-TODO
+Since any usable editor must provide basic search capabilities, the initial implementation accepted a _term_, searched for the first occurrence of that term, and then required the user to find the next occurrence. Both _simple_ and _regex_ patterns are supported.
 
-- started with non-incremental search
-- pattern abstraction so we could transparently use term- and regex-based
-- question trait makes it possible for incremental
-- challenge with regex search is that buffer must be converted to string first
-- but, we convert once since the contents do not change during incremental
-- term search uses Boyer-Moore and operates over the buffer itself
-- regex uses external library
+The _simple_ search capability was implemented using the [Boyer-Moore](https://en.wikipedia.org/wiki/Boyer%E2%80%93Moore_string-search_algorithm) algorithm. Surprisingly, this took a bit of time to correctly implement because I was porting a reference implementation from C that used signed integers.
+
+The _regex_ capability was partially implemented using an external library, [regex-lite](https://docs.rs/regex-lite/latest/regex_lite/). This library seemed to strike the right balance between completeness of regular expression support and compactness of size. An unfortunate limitation is that its search functions only accept the `&str` type. This creates an impedance mismatch with the native buffer type, which is effectively `[char]`, requiring the buffer to be transiently converted to a `String` prior to searching.
+
+Once the basic search capabilities worked, I decided to implement an incremental search as the _term_ or _regex_ was being entered by the user. As the user types the expression, a search is performed and the first match is displayed. This turned out to be relatively simple to implement because of the editing primitives that had already been developed. Without leaving the input line, pressing `TAB` will then move to the next match. Doing this repeatedly will eventually rotate through the entire buffer and repeat the process. Pressing `S-TAB` will rotate backwards through the matches.
+
+In order to simplify the higher-level search operations, a _Pattern_ trait was introduced to provide an abstraction over the actual pattern-matching algorithm. Both _simple_ and _regex_ matching algorithms implement this trait.
