@@ -18,6 +18,7 @@ use crate::input::{Directive, InputEditor};
 use crate::key::{self, CTRL_G, Key, Keyboard, Shift};
 use crate::op;
 use crate::operation::Action;
+use crate::opt::File;
 use crate::size::Point;
 use crate::sys::{self, AsString};
 use crate::term;
@@ -94,15 +95,23 @@ impl Controller {
 
     /// Opens the collection of `files`, placing each successive editor at the bottom
     /// of the workspace.
-    pub fn open(&mut self, files: &[String]) -> Result<()> {
+    pub fn open(&mut self, files: &[File]) -> Result<()> {
         let view_id = self.env.get_active_view_id();
-        for (i, path) in files.iter().enumerate() {
-            let path = sys::canonicalize(sys::working_dir().join(path)).as_string();
-            let editor = ed::open_editor(self.config.clone(), &path)?;
+        for (i, file) in files.iter().enumerate() {
+            let editor = {
+                let path = sys::canonicalize(sys::working_dir().join(&file.path)).as_string();
+                ed::open_editor(self.config.clone(), &path)?
+            };
             if i == 0 {
-                self.env.set_editor(editor, Align::Auto);
+                self.env.set_editor(editor.clone(), Align::Auto);
             } else {
-                self.env.open_editor(editor, Placement::Bottom, Align::Auto);
+                self.env
+                    .open_editor(editor.clone(), Placement::Bottom, Align::Auto);
+            }
+            if let Some(loc) = file.loc {
+                let mut editor = editor.borrow_mut();
+                editor.move_location(loc, Align::Center);
+                editor.render();
             }
         }
         self.env.set_active(Focus::To(view_id));

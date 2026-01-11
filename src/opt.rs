@@ -1,6 +1,7 @@
 //! A simple parser for CLI options.
 
 use crate::error::{Error, Result};
+use crate::nav::Location;
 use std::str::FromStr;
 
 /// Represents all potential CLI options.
@@ -26,7 +27,18 @@ pub struct Options {
     pub help: bool,
     pub version: bool,
     pub source: bool,
-    pub files: Vec<String>,
+    pub files: Vec<File>,
+}
+
+pub struct File {
+    pub path: String,
+    pub loc: Option<Location>,
+}
+
+impl File {
+    fn new(path: String) -> File {
+        File { path, loc: None }
+    }
 }
 
 #[allow(clippy::derivable_impls, reason = "retain expressiveness")]
@@ -95,9 +107,19 @@ impl Options {
                 "--help" | "-h" | "-?" => opts.help = true,
                 "--version" | "-v" => opts.version = true,
                 "--source" => opts.source = true,
+                "--goto" | "-g" => {
+                    // Locations are always attached to most recent file seen on command
+                    // line, which implies that presence of multiple goto arguments without
+                    // an intervening file only preserves the last goto location.
+                    let loc = parse_location(&arg, it.next())?;
+                    if let Some(file) = opts.files.last_mut() {
+                        file.loc = Some(loc);
+                    }
+                }
                 "--" => {
                     // All arguments following `--` are interpreted as files.
-                    opts.files.extend(it);
+                    let rest = it.map(File::new).collect::<Vec<_>>();
+                    opts.files.extend(rest);
                     break;
                 }
                 arg if arg.starts_with("--") || arg.starts_with("-") => {
@@ -105,7 +127,7 @@ impl Options {
                 }
                 _ => {
                     // Any other match is presumed to be a file.
-                    opts.files.push(arg)
+                    opts.files.push(File::new(arg))
                 }
             }
         }
@@ -124,6 +146,23 @@ where
             .map_err(|_| Error::invalid_value(arg, &value))
     } else {
         Err(Error::expected_value(arg))
+    }
+}
+
+/// Parses `next_arg` as a _location_.
+fn parse_location(arg: &str, next_arg: Option<String>) -> Result<Location> {
+    if let Some(value) = next_arg {
+        Location::parse(&value).map_err(|_| Error::invalid_location(arg, &value))
+        // match user::line_column_parse(&value) {
+        //     Some((line, col)) => {
+        //         // Line and column numbers provided by users are presumed to be
+        //         // `1`-based, so these must be converted to `0`-based.
+        //         Ok(Location::from_user(line, col.unwrap_or(1)))
+        //     }
+        //     None => Err(Error::invalid_location(arg, &value)),
+        // }
+    } else {
+        Err(Error::expected_location(arg))
     }
 }
 

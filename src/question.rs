@@ -5,6 +5,7 @@ use crate::ed;
 use crate::editor::{Align, Capture, EditorRef};
 use crate::env::{Environment, Focus};
 use crate::key::{Key, SHIFT_TAB, TAB};
+use crate::nav::Location;
 use crate::operation::Action;
 use crate::search::{self, Match, Pattern};
 use crate::source::Source;
@@ -266,16 +267,14 @@ impl Question for GotoLine {
     fn react(&mut self, _: &mut Environment, value: &str, _: &Key) -> Option<String> {
         let value = value.trim();
         if value.len() > 0 {
-            match user::line_column_parse(value) {
-                Some((line, col)) => {
-                    let line = line.saturating_sub(1);
-                    let col = col.unwrap_or(0).saturating_sub(1);
+            match Location::parse(value) {
+                Ok(loc) => {
                     let mut editor = self.editor.borrow_mut();
-                    editor.move_line_col(line, col, Align::Center);
+                    editor.move_location(loc, Align::Center);
                     editor.render();
                     None
                 }
-                None => Some(" (invalid)".to_string()),
+                Err(_) => Some(" (invalid)".to_string()),
             }
         } else {
             self.restore();

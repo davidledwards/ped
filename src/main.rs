@@ -33,6 +33,7 @@ mod help;
 mod input;
 mod io;
 mod key;
+mod nav;
 mod op;
 mod operation;
 mod opt;

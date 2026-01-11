@@ -8,6 +8,7 @@ use crate::buffer::{Buffer, BufferRef};
 use crate::color::Color;
 use crate::config::ConfigurationRef;
 use crate::grid::Cell;
+use crate::nav::{self, Location};
 use crate::search::Pattern;
 use crate::size::{Point, Size};
 use crate::source::Source;
@@ -766,15 +767,10 @@ impl Editor {
         self.cursor
     }
 
-    /// Returns the location of the cursor position in the buffer in terms of _line_
-    /// and _column_.
-    ///
-    /// The _line_ and _column_ values are `0`-based. Note that neither of these values
-    /// are bounded by the size of the display, which is the case with
-    /// [`cursor`](Self::cursor).
+    /// Returns the location of the cursor position in the buffer.
     #[inline]
-    pub fn location(&self) -> Point {
-        Point::new(self.cur_line.line, self.cur_line.line_col(self.cursor.col))
+    pub fn location(&self) -> Location {
+        Location::new(self.cur_line.line, self.cur_line.line_col(self.cursor.col))
     }
 
     /// Returns the number of rows available on the editor canvas.
@@ -784,7 +780,7 @@ impl Editor {
 
     /// Returns the size of the editor canvas.
     pub fn size(&self) -> Size {
-        (self.rows, self.cols).into()
+        Size::new(self.rows, self.cols)
     }
 
     /// Returns the buffer position corresponding to the [`cursor`](Self::cursor).
@@ -1046,10 +1042,10 @@ impl Editor {
         self.move_to(pos, Align::Bottom);
     }
 
-    /// Moves the buffer position to `line` and `col`, and places the cursor on the
-    /// display according to the `align` objective.
-    pub fn move_line_col(&mut self, line: u32, col: u32, align: Align) {
-        let pos = self.buffer().find_line_col(line, col);
+    /// Moves the buffer position to the location `loc`, and places the cursor on
+    /// the display according to the `align` objective.
+    pub fn move_location(&mut self, loc: Location, align: Align) {
+        let pos = nav::find_pos(&self.buffer(), loc);
         self.move_to(pos, align);
     }
 
@@ -1858,7 +1854,7 @@ impl Editor {
             row_len,
             line_pos,
             line_len,
-            line: self.buffer().line_of(line_pos),
+            line: nav::find_location(&self.buffer(), line_pos).line,
             line_bottom,
         }
     }
@@ -1873,7 +1869,7 @@ impl Editor {
     /// always relative to the current line, and that such a change would never
     /// alter the values noted above.
     fn update_line(&self, line: &Line) -> Line {
-        let (next_pos, line_bottom) = self.buffer().find_next_line(line.line_pos);
+        let (next_pos, line_bottom) = nav::find_next_line(&self.buffer(), line.line_pos);
         let line_len = next_pos - line.line_pos;
         let row_len = cmp::min(
             line_len - (line.row_pos - line.line_pos),
@@ -1943,7 +1939,7 @@ impl Editor {
             Some(l)
         } else {
             let line_pos = line.line_pos + line.line_len;
-            let (next_pos, line_bottom) = self.buffer().find_next_line(line_pos);
+            let (next_pos, line_bottom) = nav::find_next_line(&self.buffer(), line_pos);
             let line_len = next_pos - line_pos;
             let row_len = cmp::min(line_len, self.cols as usize);
             let l = Line {
@@ -1971,8 +1967,8 @@ impl Editor {
     /// has been reached.
     fn find_line_bounds(&self, pos: usize) -> (usize, usize, bool) {
         let buffer = self.buffer.borrow();
-        let line_pos = buffer.find_start_line(pos);
-        let (next_pos, line_bottom) = buffer.find_next_line(pos);
+        let line_pos = nav::find_start_line(&buffer, pos);
+        let (next_pos, line_bottom) = nav::find_next_line(&buffer, pos);
         (line_pos, next_pos, line_bottom)
     }
 

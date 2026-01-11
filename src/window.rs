@@ -6,6 +6,7 @@
 use crate::canvas::{Canvas, CanvasRef};
 use crate::color::Color;
 use crate::config::ConfigurationRef;
+use crate::nav::Location;
 use crate::size::{Point, Size};
 use crate::source::Source;
 use crate::sys;
@@ -36,7 +37,7 @@ pub struct Banner {
     eol: char,
     tab: char,
     ch: char,
-    loc: Point,
+    loc: Location,
 }
 
 pub type BannerRef = Rc<RefCell<Banner>>;
@@ -117,7 +118,7 @@ impl Banner {
             eol: '?',
             tab: '?',
             ch: '\0',
-            loc: Point::ORIGIN,
+            loc: Location::TOP,
         };
         this.clear();
         this
@@ -139,7 +140,7 @@ impl Banner {
             eol: '?',
             tab: '?',
             ch: '\0',
-            loc: Point::ORIGIN,
+            loc: Location::TOP,
         }
     }
 
@@ -212,7 +213,7 @@ impl Banner {
         self
     }
 
-    pub fn set_location(&mut self, loc: Point) -> &mut Banner {
+    pub fn set_location(&mut self, loc: Location) -> &mut Banner {
         self.loc = loc;
         self.draw_right();
         self
@@ -317,16 +318,21 @@ impl Banner {
             // Format line and column numbers, both of which might be shown as dashes
             // if values are too large to fit within bounds of available area. Locations
             // always displayed as 1-based, hence adjustment.
-            let loc = self.loc + (1, 1);
-            let line_str = if loc.row < Self::LINE_LIMIT {
-                format!("{}", loc.row)
-            } else {
-                "-".repeat(Self::LINE_COLS as usize)
+            let line_str = {
+                let l = self.loc.line + 1;
+                if l < Self::LINE_LIMIT {
+                    format!("{l}")
+                } else {
+                    "-".repeat(Self::LINE_COLS as usize)
+                }
             };
-            let col_str = if loc.col < Self::COL_LIMIT {
-                format!("{}", loc.col)
-            } else {
-                "-".repeat(Self::COL_COLS as usize)
+            let col_str = {
+                let c = self.loc.col + 1;
+                if c < Self::COL_LIMIT {
+                    format!("{c}")
+                } else {
+                    "-".repeat(Self::COL_COLS as usize)
+                }
             };
 
             // Since location is right-justified, draw any necessary whitespace first.

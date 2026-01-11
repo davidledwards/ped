@@ -3,6 +3,7 @@
 use std::error;
 use std::fmt::{self, Display, Formatter};
 use std::io;
+use std::num::ParseIntError;
 use std::str::Utf8Error;
 use toml::de;
 
@@ -12,6 +13,9 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// The set of possible errors.
 #[derive(Debug)]
 pub enum Error {
+    /// A catch all for untyped errors.
+    General { error: String },
+
     /// An I/O error reported by the operating system.
     Os { cause: io::Error },
 
@@ -29,6 +33,12 @@ pub enum Error {
 
     /// A `value` given for a command-line argument `arg` is not valid.
     InvalidValue { arg: String, value: String },
+
+    /// A _location_ value is expected for a command-line argument `arg`.
+    ExpectedLocation { arg: String },
+
+    /// A _location_ `value` given for a command-line argument `arg` is not valid.
+    InvalidLocation { arg: String, value: String },
 
     /// A `key` name given in a key binding is not valid.
     InvalidKey { key: String },
@@ -50,11 +60,20 @@ pub enum Error {
 
     /// The color `name` is not valid.
     InvalidColor { name: String },
+
+    /// An error parsing a _location_ `value`.
+    ParseLocation { value: String, cause: String },
 }
 
 impl error::Error for Error {}
 
 impl Error {
+    pub fn general(error: &str) -> Error {
+        Error::General {
+            error: error.to_string(),
+        }
+    }
+
     pub fn os() -> Error {
         Error::Os {
             cause: io::Error::last_os_error(),
@@ -95,6 +114,19 @@ impl Error {
 
     pub fn invalid_value(arg: &str, value: &str) -> Error {
         Error::InvalidValue {
+            arg: arg.to_string(),
+            value: value.to_string(),
+        }
+    }
+
+    pub fn expected_location(arg: &str) -> Error {
+        Error::ExpectedLocation {
+            arg: arg.to_string(),
+        }
+    }
+
+    pub fn invalid_location(arg: &str, value: &str) -> Error {
+        Error::InvalidLocation {
             arg: arg.to_string(),
             value: value.to_string(),
         }
@@ -142,21 +174,51 @@ impl Error {
             name: name.to_string(),
         }
     }
+
+    pub fn parse_location(value: &str, e: &ParseIntError) -> Error {
+        Error::ParseLocation {
+            value: value.to_string(),
+            cause: format!("{e}"),
+        }
+    }
 }
 
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Error::Os { cause } => write!(f, "I/O error: {cause}"),
-            Error::Io { path, cause } => write!(f, "{path}: {cause}"),
-            Error::Utf8 { bytes, cause } => write!(f, "{bytes:?}: {cause}"),
-            Error::UnexpectedArg { arg } => write!(f, "{arg}: unexpected argument"),
-            Error::ExpectedValue { arg } => write!(f, "{arg}: expecting value to follow"),
+            Error::General { error } => {
+                write!(f, "{error}")
+            }
+            Error::Os { cause } => {
+                write!(f, "I/O error: {cause}")
+            }
+            Error::Io { path, cause } => {
+                write!(f, "{path}: {cause}")
+            }
+            Error::Utf8 { bytes, cause } => {
+                write!(f, "{bytes:?}: {cause}")
+            }
+            Error::UnexpectedArg { arg } => {
+                write!(f, "{arg}: unexpected argument")
+            }
+            Error::ExpectedValue { arg } => {
+                write!(f, "{arg}: expecting value to follow")
+            }
             Error::InvalidValue { arg, value } => {
                 write!(f, "{value}: invalid value following {arg}")
             }
-            Error::InvalidKey { key } => write!(f, "{key}: invalid key"),
-            Error::InvalidOp { op } => write!(f, "{op}: invalid operation"),
+            Error::ExpectedLocation { arg } => {
+                write!(f, "{arg}: expecting location to follow")
+            }
+            Error::InvalidLocation { arg, value } => {
+                write!(f, "{value}: invalid location following {arg}")
+            }
+            Error::InvalidKey { key } => {
+                write!(f, "{key}: invalid key")
+            }
+            Error::InvalidOp { op } => {
+                write!(f, "{op}: invalid operation")
+            }
             Error::RestrictedKey { key_seq } => {
                 write!(f, "{key_seq}: key sequence cannot be rebound")
             }
@@ -171,6 +233,9 @@ impl Display for Error {
             }
             Error::InvalidColor { name } => {
                 write!(f, "{name}: invalid color")
+            }
+            Error::ParseLocation { value, cause } => {
+                write!(f, "{value}: parse error: {cause}")
             }
         }
     }

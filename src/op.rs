@@ -15,6 +15,7 @@ use crate::ed;
 use crate::editor::{Align, EditorRef};
 use crate::env::{Environment, Focus};
 use crate::help;
+use crate::nav;
 use crate::operation::{Action, Operation};
 use crate::question;
 use crate::search::Match;
@@ -899,7 +900,7 @@ fn describe_editor(env: &mut Environment) -> Option<Action> {
     let eol_mode = if editor.get_crlf() { "CRLF" } else { "LF" };
     let text = format!(
         "lines: {} | chars: {} | cursor: {c_char}{c_code} | tabs: {tab_mode} | eol: {eol_mode}",
-        buffer.line_of(usize::MAX) + 1,
+        nav::find_location(&buffer, usize::MAX).line + 1,
         buffer.size(),
     );
     Action::echo(&text)

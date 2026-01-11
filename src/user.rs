@@ -2,6 +2,7 @@
 
 use crate::env::Environment;
 use crate::key::Key;
+use crate::nav::Location;
 use crate::operation::Action;
 use crate::sys::{self, AsString};
 use std::path::{Path, PathBuf};
@@ -130,12 +131,6 @@ pub fn number_parse(value: &str, radix: u32) -> Option<u32> {
 /// by an optional _column_ number.
 pub fn line_column_completer() -> Box<dyn Completer> {
     Box::new(LineColumnCompleter)
-}
-
-/// Parses the input `value` and returns a _line_ number and an optional _column_ number
-/// if correctly formed, otherwise `None`.
-pub fn line_column_parse(value: &str) -> Option<(u32, Option<u32>)> {
-    LineColumnCompleter::parse(value)
 }
 
 /// Returns an implementation of [`Completer`] that accepts a finite collection of
@@ -274,32 +269,10 @@ impl Completer for NumberCompleter {
 /// A completer that accepts a _line_ number followed by an optional _column_ number.
 struct LineColumnCompleter;
 
-impl LineColumnCompleter {
-    fn parse(value: &str) -> Option<(u32, Option<u32>)> {
-        let vs = value
-            .split(',')
-            .map(|v| v.trim())
-            .filter(|v| v.len() > 0)
-            .collect::<Vec<_>>();
-
-        match &vs[..] {
-            [line] => match line.parse::<u32>() {
-                Ok(l) => Some((l, None)),
-                Err(_) => None,
-            },
-            [line, col] => match (line.parse::<u32>(), col.parse::<u32>()) {
-                (Ok(l), Ok(c)) => Some((l, Some(c))),
-                _ => None,
-            },
-            _ => None,
-        }
-    }
-}
-
 impl Completer for LineColumnCompleter {
     fn evaluate(&mut self, value: &str) -> Option<String> {
         let value = value.trim();
-        if value.len() == 0 || Self::parse(value).is_some() {
+        if value.len() == 0 || Location::parse(value).is_ok() {
             None
         } else {
             Some(" (invalid)".to_string())
@@ -308,7 +281,7 @@ impl Completer for LineColumnCompleter {
 
     fn accept(&mut self, value: &str) -> Option<String> {
         let value = value.trim();
-        Self::parse(value).map(|_| value.to_string())
+        Location::parse(value).ok().map(|loc| loc.to_string())
     }
 }
 
