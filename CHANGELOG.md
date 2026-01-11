@@ -2,7 +2,11 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
-### [0.38.0](https://github.com/davidledwards/ped/tree/v0.38.0) | `???`
+### [0.38.0](https://github.com/davidledwards/ped/tree/v0.38.0) | `2026-01-10`
+
+#### Added
+
+- CLI option `--goto` (or `-g`) that applies to a preceding file path, specifying the _line_ and _column_ number at which the cursor should be positioned
 
 #### Changed
 

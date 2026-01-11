@@ -41,6 +41,12 @@ Edit multiple files, opened in separate windows.
 ped foo.rs bar.rs
 ```
 
+Edit a file and position the cursor at line `327` and column `14`.
+
+```shell
+ped foo.rs --goto 327,14
+```
+
 `ped` will try to locate and read a configuration file at one of the following paths in order of precedence.
 
 - `$HOME/.pedrc`
