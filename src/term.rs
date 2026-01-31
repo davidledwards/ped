@@ -103,7 +103,7 @@ fn register_winsize_handler() {
         check_err(libc::sigemptyset(&mut (*sigact_ptr).sa_mask))
             .expect("trying to register signal handler");
         (*sigact_ptr).sa_flags = SA_SIGINFO;
-        (*sigact_ptr).sa_sigaction = winsize_handler as sighandler_t;
+        (*sigact_ptr).sa_sigaction = winsize_handler as *const () as sighandler_t;
         check_err(libc::sigaction(SIGWINCH, sigact_ptr, ptr::null_mut()))
             .expect("trying to register signal handler");
     });
