@@ -2,6 +2,15 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
+### [0.39.0](https://github.com/davidledwards/ped/tree/v0.39.0) | `2026-03-07`
+
+#### Changed
+
+- Banner now combines EOL/TAB mode settings and Unicode code point value, which were previously separated, using the format `-mm-cccccc-`, where:
+  - first `m` is EOL mode: `/` indicates LF and `\` indicates CRLF
+  - second `m` is TAB mode: `t` indicates _soft_ and `T` indicates _hard_
+  - `cccccc` is 6-digit hex value of character under cursor
+
 ### [0.38.0](https://github.com/davidledwards/ped/tree/v0.38.0) | `2026-01-10`
 
 #### Added

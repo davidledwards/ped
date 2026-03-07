@@ -61,22 +61,21 @@ impl Banner {
     const SYNTAX_COLS: u32 = 2;
 
     /// Number of columns for mode settings.
-    ///
-    /// Layout is `-??-` where each `?` is a separate single-character indicator.
-    const MODE_COLS: u32 = 4;
+    const MODE_COLS: u32 = 2;
 
     /// Number of columns required to show the largest Unicode code point
     /// (`0x10FFFF`) in hex format.
-    const CODE_POINT_COLS: u32 = 6;
+    const CHAR_COLS: u32 = 6;
 
     /// Bit mask to ensure code points do not format beyond the specified width.
-    const CODE_POINT_MASK: u32 = (1 << (Self::CODE_POINT_COLS * 4)) - 1;
+    const CHAR_MASK: u32 = (1 << (Self::CHAR_COLS * 4)) - 1;
 
-    /// Number of columns allocated to showing Unicode code point of character
-    /// under cursor.
+    /// Number of columns allocated to showing mode settings and Unicode code point of
+    /// character under cursor.
     ///
-    /// Layout is `-??????-` where '??????` is the hex value of code point.
-    const CHAR_COLS: u32 = Self::CODE_POINT_COLS + 2;
+    /// Layout is `-mm-cccccc-` where each `m` is a separate single-character indicator
+    /// and 'cccccc` is the hex value of code point.
+    const INFO_COLS: u32 = 1 + Self::MODE_COLS + 1 + Self::CHAR_COLS + 1;
 
     /// Number of columns allocated to line numbers.
     const LINE_COLS: u32 = 7;
@@ -197,13 +196,13 @@ impl Banner {
 
     pub fn set_eol(&mut self, crlf: bool) -> &mut Banner {
         self.eol = if crlf { '\\' } else { '/' };
-        self.draw_left();
+        self.draw_right();
         self
     }
 
     pub fn set_tab(&mut self, tab_hard: bool) -> &mut Banner {
         self.tab = if tab_hard { 'T' } else { 't' };
-        self.draw_left();
+        self.draw_right();
         self
     }
 
@@ -226,17 +225,12 @@ impl Banner {
     #[rustfmt::skip]
     fn draw_left(&mut self) {
         if let Some(Range { start, end }) = self.left_area {
-            // Mode information requires fixed amount of space, so deduct this amount
-            // and standard gap from available space.
-            let avail_cols =
-                end - start        // full range
-                - Self::GAP_COLS   // gap between source and mode
-                - Self::MODE_COLS; // mode area
-
+            // These may be clipped dependening on available space.
             let mut source = self.source.to_string().chars().collect::<Vec<_>>();
             let mut syntax = self.syntax.chars().collect::<Vec<_>>();
 
             // Calculate needed number of columns for both source and syntax.
+            let avail_cols = end - start;
             let need_cols =
                 source.len() as u32   // source
                 + Self::GAP_COLS      // gap between source and syntax
@@ -288,12 +282,6 @@ impl Banner {
                 col += self.canvas.write_char(0, col, ')', self.banner_color);
             }
 
-            // Draw mode information.
-            col += self.canvas.write_str(0, col, " -", self.banner_color);
-            col += self.canvas.write_char(0, col, self.eol, self.accent_color);
-            col += self.canvas.write_char(0, col, self.tab, self.accent_color);
-            col += self.canvas.write_char(0, col, '-', self.banner_color);
-
             // Clear any remaining space.
             self.canvas.fill(0, col..end, ' ', self.banner_color);
         }
@@ -302,15 +290,22 @@ impl Banner {
     #[rustfmt::skip]
     fn draw_right(&mut self) {
         if let Some(Range { start, end }) = self.right_area {
+            // Draw mode information.
+            let mut col = start;
+            col += self.canvas.write_str(0, col, " -", self.banner_color);
+            col += self.canvas.write_char(0, col, self.eol, self.accent_color);
+            col += self.canvas.write_char(0, col, self.tab, self.accent_color);
+
+            // Separate mode information from hex code point that follows.
+            col += self.canvas.write_char(0, col, '-', self.banner_color);
+
             // Draw character under cursor as hex code point, which is anchored at
             // leftmost position in right area.
-            let mut col = start;
-            col += self.canvas.write_char(0, col, '-', self.banner_color);
-            let c = (self.ch as u32) & Self::CODE_POINT_MASK;
+            let c = (self.ch as u32) & Self::CHAR_MASK;
             col += self.canvas.write_str(
                 0,
                 col,
-                &format!("{:0width$x}", c, width = Self::CODE_POINT_COLS as usize),
+                &format!("{:0width$x}", c, width = Self::CHAR_COLS as usize),
                 self.accent_color,
             );
             col += self.canvas.write_char(0, col, '-', self.banner_color);
@@ -359,27 +354,27 @@ impl Banner {
             (None, None)
         } else if cols < Self::MIN_COLS_FOR_RIGHT {
             let left_area =
-                Self::GAP_COLS        // left margin
+                Self::GAP_COLS            // left margin
                 ..cols
-                - Self::GAP_COLS;     // right margin
+                    - Self::GAP_COLS;     // right margin
             (Some(left_area), None)
         } else {
             let left_area =
-                Self::GAP_COLS        // left margin
+                Self::GAP_COLS            // left margin
                 ..cols
-                - Self::GAP_COLS      // right margin
-                - Self::LOCATION_COLS // location area
-                - Self::GAP_COLS      // gap between code point and location
-                - Self::CHAR_COLS     // code point area
-                - Self::GAP_COLS;     // gap betewen left and right areas
+                    - Self::GAP_COLS      // right margin
+                    - Self::LOCATION_COLS // location area
+                    - Self::GAP_COLS      // gap between info and location
+                    - Self::INFO_COLS     // info area
+                    - Self::GAP_COLS;     // gap betewen left and right areas
             let right_area =
                 cols
-                - Self::GAP_COLS      // right margin
-                - Self::LOCATION_COLS // location area
-                - Self::GAP_COLS      // gap between code point and location
-                - Self::CHAR_COLS     // code point area
+                - Self::GAP_COLS          // right margin
+                - Self::LOCATION_COLS     // location area
+                - Self::GAP_COLS          // gap between info and location
+                - Self::INFO_COLS         // info area
                 ..cols
-                    - Self::GAP_COLS; // right margin
+                    - Self::GAP_COLS;     // right margin
             (Some(left_area), Some(right_area))
         }
     }
