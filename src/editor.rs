@@ -20,6 +20,7 @@ use std::cmp;
 use std::ops::Range;
 use std::rc::Rc;
 use std::time::Instant;
+use std::u32;
 
 /// An editing session with an underlying [`Buffer`] and an attachable [`Window`].
 pub struct Editor {
@@ -73,8 +74,15 @@ pub struct Editor {
     /// Line on the display representing the cursor row.
     cur_line: Line,
 
+    /// An offset from the buffer position corresponding to the first character of any
+    /// given line, which corresponds to the left-most column of the display.
+    ///
+    /// In effect, column `0` starts at `line_pos + line_ofs`.
+    line_ofs: usize,
+
     /// An optional column to which the cursor should _snap_ when moving up and down.
-    snap_col: Option<u32>,
+    /// now (line_ofs, col)
+    snap_col: Option<(usize, u32)>,
 
     /// Position of the cursor in the window.
     cursor: Point,
@@ -176,13 +184,6 @@ enum Log {
 /// display.
 #[derive(Clone)]
 struct Line {
-    /// Buffer position corresponding to the first character of the display line,
-    /// which is always greater than or equal to `row_pos`.
-    row_pos: usize,
-
-    /// Length of the display line, including the `\n` if one exists.
-    row_len: usize,
-
     /// Buffer position corresponding to the first character of the buffer line,
     /// which is always less than or equal to `row_pos`.
     line_pos: usize,
@@ -257,11 +258,12 @@ struct Draw {
 
 /// A rendering context that captures state information for rendering functions.
 struct Render {
+    line_ofs: usize,
     pos: usize,
+    start_pos: usize,
     row: u32,
     col: u32,
     line: u32,
-    line_wrapped: bool,
     tokenizer: TokenizerRef,
     syntax_cursor: Cursor,
 }
@@ -306,30 +308,15 @@ impl Change {
 }
 
 impl Line {
-    /// Returns `true` if the row of this line points to the top of the buffer.
+    /// Returns `true` if this line points to the top of the buffer.
     #[inline]
     fn is_top(&self) -> bool {
-        self.row_pos == 0
+        self.line_pos == 0
     }
 
-    /// Returns `true` if the row of this line points to the bottom of the buffer,
-    /// where `cols` is the width of the display.
-    fn is_bottom(&self, cols: u32) -> bool {
-        self.line_bottom && self.row_len < cols as usize
-    }
-
-    /// Returns `true` if the row of this line wraps at least to the next row,
-    /// indicating that the buffer line is longer than the width of the display.
-    #[inline]
-    fn does_wrap(&self) -> bool {
-        self.row_pos + self.row_len < self.line_pos + self.line_len
-    }
-
-    /// Returns `true` if the row of this line has wrapped from at least one prior
-    /// row.
-    #[inline]
-    fn has_wrapped(&self) -> bool {
-        self.row_pos > self.line_pos
+    /// Returns `true` if the row of this line points to the bottom of the buffer.
+    fn is_bottom(&self) -> bool {
+        self.line_bottom
     }
 
     /// Returns a possibly smaller value of `col` if it extends beyond the end of
@@ -339,59 +326,55 @@ impl Line {
     /// which is usually `\n` but may also be any other character if the row wraps.
     /// However, if this is the bottom-most row in the buffer, there is no terminating
     /// `\n`, and thus the right-most column is right of the last character.
-    #[inline]
-    fn snap_col(&self, col: u32, cols: u32) -> u32 {
-        if self.row_len == 0 {
-            0
-        } else if self.is_bottom(cols) {
-            cmp::min(col, self.row_len as u32)
+    fn snap_col(&self, line_ofs: usize, col: u32, cols: u32) -> (usize, u32) {
+        // adding line_ofs to col gives us actual offset into line, and
+        // min of that and line_len is used for snapped col
+
+        let len = if self.is_bottom() {
+            self.line_len
         } else {
-            cmp::min(col, self.row_len as u32 - 1)
+            self.line_len - 1
+        };
+
+        let col_ofs = cmp::min(line_ofs + col as usize, len);
+
+        if col_ofs < line_ofs {
+            // implies that snapped col is left of margin. this can only happen
+            // if line_ofs > 0 since type is u32. need to adjust line_ofs and
+            // snap col to left-most edge
+            (len, 0)
+        } else if col_ofs < line_ofs + cols as usize {
+            // implies that snapped col is visible on current display whose
+            // left margin is line_ofs, so it does not need to change.
+            (line_ofs, (col_ofs - line_ofs) as u32)
+        } else {
+            // implies that snapped col is right of margin, so we need to
+            // adjust line_ofs and snap col to right-most edge
+            (col_ofs - cols as usize + 1, cols - 1)
         }
     }
 
     /// Returns the buffer position of `col` relative to the starting position of
     /// the row.
     #[inline]
-    fn pos_of(&self, col: u32) -> usize {
-        self.row_pos + col as usize
+    fn pos_of(&self, line_ofs: usize, col: u32) -> usize {
+        self.line_pos + line_ofs + col as usize
     }
 
     /// Returns the column number of `pos` relative to the starting position of the
     /// row, though be advised that the resulting column may extend beyond the end
     /// of the row.
     #[inline]
-    fn col_of(&self, pos: usize) -> u32 {
-        (pos - self.row_pos) as u32
-    }
-
-    /// Returns the right-most column number of this row, where `cols` is the width of
-    /// the display.
-    ///
-    /// See [`snap_col`](Line::snap_col) for further details on calculating the
-    /// right-most column.
-    #[inline]
-    fn end_col(&self, cols: u32) -> u32 {
-        if self.row_len == 0 {
-            0
-        } else if self.is_bottom(cols) {
-            self.row_len as u32
-        } else {
-            (self.row_len - 1) as u32
-        }
-    }
-
-    /// Returns the column number of `col` relative to the buffer line, which may be
-    /// larger than the width of the display.
-    #[inline]
-    fn line_col(&self, col: u32) -> u32 {
-        (self.row_pos - self.line_pos) as u32 + col
+    fn col_of(&self, line_ofs: usize, pos: usize, cols: u32) -> (usize, u32) {
+        let line_ofs = cmp::min(pos, self.line_pos + line_ofs) - self.line_pos;
+        let col = (pos - (self.line_pos + line_ofs)) as u32;
+        self.snap_col(line_ofs, col, cols)
     }
 
     /// Returns the buffer position at the end of the row.
     #[inline]
     fn end_pos(&self) -> usize {
-        self.row_pos + self.row_len
+        self.line_pos + self.line_len
     }
 
     fn line_range(&self) -> Range<usize> {
@@ -403,8 +386,6 @@ impl Line {
 impl Default for Line {
     fn default() -> Line {
         Line {
-            row_pos: 0,
-            row_len: 0,
             line_pos: 0,
             line_len: 0,
             line: 0,
@@ -519,12 +500,18 @@ impl Draw {
 impl Render {
     /// Creates an initial rendering context from `editor`.
     fn new(editor: &Editor) -> Render {
+        let line_ofs = editor.line_ofs;
+        let pos = editor.top_line.line_pos;
+        // this tells us when to start displaying text
+        let start_pos = pos + line_ofs;
+
         Render {
-            pos: editor.top_line.row_pos,
+            line_ofs,
+            pos,
+            start_pos,
             row: 0,
             col: 0,
             line: editor.top_line.line + 1,
-            line_wrapped: false,
             tokenizer: editor.tokenizer.clone(),
             syntax_cursor: editor.syntax_cursor,
         }
@@ -532,22 +519,15 @@ impl Render {
 
     /// Returns a new rendering context representing a transition to the next column.
     fn next_col(self) -> Render {
+        let pos = self.pos + 1;
+        let col = if pos > self.start_pos {
+            self.col + 1
+        } else {
+            0
+        };
         Render {
-            pos: self.pos + 1,
-            col: self.col + 1,
-            syntax_cursor: self.syntax_forward(1),
-            ..self
-        }
-    }
-
-    /// Returns a new rendering context representing a transition to the next row,
-    /// indicating that the current line wraps.
-    fn next_row(self) -> Render {
-        Render {
-            pos: self.pos + 1,
-            row: self.row + 1,
-            col: 0,
-            line_wrapped: true,
+            pos,
+            col,
             syntax_cursor: self.syntax_forward(1),
             ..self
         }
@@ -556,12 +536,17 @@ impl Render {
     /// Returns a new rendering context representing a transition to the next line,
     /// which is also the next row.
     fn next_line(self) -> Render {
+        // this is a shortcut that allows us to skip the buffer scan pos already
+        // points to `\n`, skipping one character forward.
+        let pos = self.pos + 1;
+        let start_pos = pos + self.line_ofs;
+
         Render {
-            pos: self.pos + 1,
+            pos,
+            start_pos,
             row: self.row + 1,
             col: 0,
             line: self.line + 1,
-            line_wrapped: false,
             syntax_cursor: self.syntax_forward(1),
             ..self
         }
@@ -678,6 +663,7 @@ impl Editor {
             cur_pos,
             top_line: Line::default(),
             cur_line: Line::default(),
+            line_ofs: 0,
             snap_col: None,
             cursor: Point::ORIGIN,
             mark: None,
@@ -770,7 +756,7 @@ impl Editor {
     /// Returns the location of the cursor position in the buffer.
     #[inline]
     pub fn location(&self) -> Location {
-        Location::new(self.cur_line.line, self.cur_line.line_col(self.cursor.col))
+        Location::new(self.cur_line.line, self.line_ofs as u32 + self.cursor.col)
     }
 
     /// Returns the number of rows available on the editor canvas.
@@ -843,9 +829,10 @@ impl Editor {
         // top line of display.
         self.cur_line = self.top_line.clone();
         let row = self.down_cur_line(try_row);
-        let col = self.cur_line.snap_col(try_col, self.cols);
-        self.snap_col = Some(col);
-        self.cur_pos = self.cur_line.pos_of(col);
+        let (line_ofs, col) = self.cur_line.snap_col(self.line_ofs, try_col, self.cols);
+        self.line_ofs = line_ofs;
+        self.snap_col = Some((self.line_ofs, col));
+        self.cur_pos = self.cur_line.pos_of(self.line_ofs, col);
         self.cursor = Point::new(row, col);
     }
 
@@ -886,7 +873,8 @@ impl Editor {
         // of row to top of buffer.
         self.cur_line = self.find_line(self.cur_pos);
         let row = self.set_top_line(try_row);
-        let col = self.cur_line.col_of(self.cur_pos);
+        let (line_ofs, col) = self.cur_line.col_of(self.line_ofs, self.cur_pos, self.cols);
+        self.line_ofs = line_ofs;
         self.snap_col = None;
         self.align_syntax();
         self.cursor = Point::new(row, col);
@@ -972,10 +960,14 @@ impl Editor {
                 // Cursor remains visible without changing top line.
                 self.cursor.row - rows
             };
-            let try_col = self.snap_col.take().unwrap_or(self.cursor.col);
-            self.snap_col = Some(try_col);
-            let col = self.cur_line.snap_col(try_col, self.cols);
-            self.cur_pos = self.cur_line.pos_of(col);
+            let (try_line_ofs, try_col) = self
+                .snap_col
+                .take()
+                .unwrap_or((self.line_ofs, self.cursor.col));
+            self.snap_col = Some((try_line_ofs, try_col));
+            let (line_ofs, col) = self.cur_line.snap_col(try_line_ofs, try_col, self.cols);
+            self.line_ofs = line_ofs;
+            self.cur_pos = self.cur_line.pos_of(self.line_ofs, col);
             self.align_syntax();
             self.cursor = Point::new(row, col);
         }
@@ -1003,10 +995,14 @@ impl Editor {
                 // Cursor would have moved beyond bottom of display.
                 self.set_top_line(self.rows - 1)
             };
-            let try_col = self.snap_col.take().unwrap_or(self.cursor.col);
-            self.snap_col = Some(try_col);
-            let col = self.cur_line.snap_col(try_col, self.cols);
-            self.cur_pos = self.cur_line.pos_of(col);
+            let (try_line_ofs, try_col) = self
+                .snap_col
+                .take()
+                .unwrap_or((self.line_ofs, self.cursor.col));
+            self.snap_col = Some((try_line_ofs, try_col));
+            let (line_ofs, col) = self.cur_line.snap_col(try_line_ofs, try_col, self.cols);
+            self.line_ofs = line_ofs;
+            self.cur_pos = self.cur_line.pos_of(self.line_ofs, col);
             self.align_syntax();
             self.cursor = Point::new(row, col);
         }
@@ -1014,8 +1010,10 @@ impl Editor {
 
     /// Moves the cursor to the _start_ of the current row.
     pub fn move_start(&mut self) {
-        if self.cursor.col > 0 {
-            self.cur_pos = self.cur_line.row_pos;
+        // cursor can be at col 0 but there may be text to left of margin
+        if self.cursor.col > 0 || self.line_ofs > 0 {
+            self.cur_pos = self.cur_line.line_pos;
+            self.line_ofs = 0;
             self.cursor.col = 0;
         }
         self.snap_col = None;
@@ -1023,11 +1021,11 @@ impl Editor {
 
     /// Moves the cursor to the _end_ of the current row.
     pub fn move_end(&mut self) {
-        let end_col = self.cur_line.end_col(self.cols);
-        if self.cursor.col < end_col {
-            self.cur_pos = self.cur_line.pos_of(end_col);
-            self.cursor.col = end_col;
-        }
+        // force snap to EOL by specifying large column value
+        let (line_ofs, col) = self.cur_line.snap_col(self.line_ofs, u32::MAX, self.cols);
+        self.line_ofs = line_ofs;
+        self.cur_pos = self.cur_line.pos_of(self.line_ofs, col);
+        self.cursor.col = col;
         self.snap_col = None;
     }
 
@@ -1062,7 +1060,7 @@ impl Editor {
     /// - _when `pos` is beyond the current line_: aligns the cursor on the target
     ///   row below the current line, though not to extend beyond the borrom row
     pub fn move_to(&mut self, pos: usize, align: Align) {
-        let row = if pos < self.top_line.row_pos {
+        let row = if pos < self.top_line.line_pos {
             self.find_up_cur_line(pos);
             let rows = match align {
                 Align::Top | Align::Auto => 0,
@@ -1071,7 +1069,7 @@ impl Editor {
                 Align::Row(row) => cmp::min(row, self.rows - 1),
             };
             self.set_top_line(rows)
-        } else if pos < self.cur_line.row_pos {
+        } else if pos < self.cur_line.line_pos {
             let row = self.cursor.row - self.find_up_cur_line(pos);
             let maybe_rows = match align {
                 Align::Auto => None,
@@ -1110,7 +1108,8 @@ impl Editor {
             self.set_top_line(row)
         };
         self.cur_pos = pos;
-        let col = self.cur_line.col_of(self.cur_pos);
+        let (line_ofs, col) = self.cur_line.col_of(self.line_ofs, self.cur_pos, self.cols);
+        self.line_ofs = line_ofs;
         self.snap_col = None;
         self.align_syntax();
         self.cursor = Point::new(row, col);
@@ -1126,10 +1125,14 @@ impl Editor {
                 // Cursor would have moved beyond top of display, which means current
                 // buffer position changes accordingly.
                 self.cur_line = self.top_line.clone();
-                let try_col = self.snap_col.take().unwrap_or(self.cursor.col);
-                self.snap_col = Some(try_col);
-                let col = self.cur_line.snap_col(try_col, self.cols);
-                self.cur_pos = self.cur_line.pos_of(col);
+                let (try_line_ofs, try_col) = self
+                    .snap_col
+                    .take()
+                    .unwrap_or((self.line_ofs, self.cursor.col));
+                self.snap_col = Some((try_line_ofs, try_col));
+                let (line_ofs, col) = self.cur_line.snap_col(try_line_ofs, try_col, self.cols);
+                self.line_ofs = line_ofs;
+                self.cur_pos = self.cur_line.pos_of(line_ofs, col);
                 (0, col)
             } else {
                 // Cursor still visible on display.
@@ -1154,10 +1157,14 @@ impl Editor {
                 // Cursor would have moved beyond bottom of display, which means current
                 // buffer position changes accordingly.
                 self.up_cur_line(row - self.rows + 1);
-                let try_col = self.snap_col.take().unwrap_or(self.cursor.col);
-                self.snap_col = Some(try_col);
-                let col = self.cur_line.snap_col(try_col, self.cols);
-                self.cur_pos = self.cur_line.pos_of(col);
+                let (try_line_ofs, try_col) = self
+                    .snap_col
+                    .take()
+                    .unwrap_or((self.line_ofs, self.cursor.col));
+                self.snap_col = Some((try_line_ofs, try_col));
+                let (line_ofs, col) = self.cur_line.snap_col(try_line_ofs, try_col, self.cols);
+                self.line_ofs = line_ofs;
+                self.cur_pos = self.cur_line.pos_of(self.line_ofs, col);
                 (self.rows - 1_u32, col)
             };
             self.align_syntax();
@@ -1470,7 +1477,7 @@ impl Editor {
         self.syntax_cursor = self
             .tokenizer
             .borrow()
-            .find(self.syntax_cursor, self.top_line.row_pos);
+            .find(self.syntax_cursor, self.top_line.line_pos + self.line_ofs);
     }
 
     /// Sets the values of all banner attributes and draws it.
@@ -1559,7 +1566,8 @@ impl Editor {
                 self.set_top_line(self.rows - 1)
             };
             self.cur_pos = cur_pos;
-            let col = self.cur_line.col_of(self.cur_pos);
+            let (line_ofs, col) = self.cur_line.col_of(self.line_ofs, self.cur_pos, self.cols);
+            self.line_ofs = line_ofs;
             self.snap_col = None;
             self.cursor = Point::new(row, col);
             self.possibly_tokenize(false);
@@ -1642,7 +1650,8 @@ impl Editor {
             self.cur_line = self.update_line(&self.cur_line);
             self.top_line = self.update_line(&self.top_line);
             self.cur_pos = from_pos;
-            let col = self.cur_line.col_of(self.cur_pos);
+            let (line_ofs, col) = self.cur_line.col_of(self.line_ofs, self.cur_pos, self.cols);
+            self.line_ofs = line_ofs;
             self.snap_col = None;
             self.cursor = Point::new(row, col);
             self.possibly_tokenize(false);
@@ -1776,11 +1785,15 @@ impl Editor {
         }
     }
 
+    /// Sets `top_line` to `try_rows` before `cur_line` or possibly fewer if the top of
+    /// the buffer is reached, returning the actual number of rows moved.
     fn set_top_line(&mut self, try_rows: u32) -> u32 {
         self.top_line = self.cur_line.clone();
         self.up_top_line(try_rows)
     }
 
+    /// Moves `top_line` _up_ by `try_rows` or possibly fewer if the top of the buffer
+    /// is reached, returning the actual number of rows moved.
     fn up_top_line(&mut self, try_rows: u32) -> u32 {
         for rows in 0..try_rows {
             if let Some(line) = self.prev_line(&self.top_line) {
@@ -1792,6 +1805,8 @@ impl Editor {
         try_rows
     }
 
+    /// Moves `top_line` _down_ by `try_rows` or possibly fewer if the bottom of the
+    /// buffer is reached, returning the actual number of rows moved.
     fn down_top_line(&mut self, try_rows: u32) -> u32 {
         for rows in 0..try_rows {
             if let Some(line) = self.next_line(&self.top_line) {
@@ -1803,15 +1818,19 @@ impl Editor {
         try_rows
     }
 
+    /// Moves `cur_line` _up_ until the resulting line contains `pos`, returning the
+    /// total number of rows moved.
     fn find_up_cur_line(&mut self, pos: usize) -> u32 {
         let mut rows = 0;
-        while pos < self.cur_line.row_pos {
+        while pos < self.cur_line.line_pos {
             self.cur_line = self.prev_line_unchecked(&self.cur_line);
             rows += 1;
         }
         rows
     }
 
+    /// Moves `cur_line` _up_ by `try_rows` or possibly fewer if the top of the buffer
+    /// is reached, returning the actual number of rows moved.
     fn up_cur_line(&mut self, try_rows: u32) -> u32 {
         for rows in 0..try_rows {
             if let Some(line) = self.prev_line(&self.cur_line) {
@@ -1823,6 +1842,8 @@ impl Editor {
         try_rows
     }
 
+    /// Moves `cur_line` _down_ by `try_rows` or possibly fewer if the bottom of the
+    /// buffer is reached, returning the actual number of rows moved.
     fn down_cur_line(&mut self, try_rows: u32) -> u32 {
         for rows in 0..try_rows {
             if let Some(line) = self.next_line(&self.cur_line) {
@@ -1834,9 +1855,11 @@ impl Editor {
         try_rows
     }
 
+    /// Moves `cur_line` _down_ until the resulting line contains `pos`, returning the
+    /// total number of rows moved.
     fn find_down_cur_line(&mut self, pos: usize) -> u32 {
         let mut rows = 0;
-        while pos >= self.cur_line.end_pos() && !self.cur_line.is_bottom(self.cols) {
+        while pos >= self.cur_line.end_pos() && !self.cur_line.is_bottom() {
             self.cur_line = self.next_line_unchecked(&self.cur_line);
             rows += 1;
         }
@@ -1844,14 +1867,13 @@ impl Editor {
     }
 
     /// Finds and returns the display line corresponding to `pos`.
+    ///
+    /// This function is expensive because it must calculate the line number corresponding
+    /// to `pos` by performing a linear scan from the beginning of the buffer.
     fn find_line(&self, pos: usize) -> Line {
         let (line_pos, next_pos, line_bottom) = self.find_line_bounds(pos);
         let line_len = next_pos - line_pos;
-        let row_pos = pos - ((pos - line_pos) % self.cols as usize);
-        let row_len = cmp::min(line_len - (row_pos - line_pos), self.cols as usize);
         Line {
-            row_pos,
-            row_len,
             line_pos,
             line_len,
             line: nav::find_location(&self.buffer(), line_pos).line,
@@ -1862,8 +1884,8 @@ impl Editor {
     /// Returns an updated `line` based on the assumption of underlying changes to
     /// the buffer.
     ///
-    /// Note that none of `line_pos`, `row_pos`, and `line` are modified as part of
-    /// this update, as those are presumed to have not changed.
+    /// Note that none of `line_pos` and `line` are modified as part of this update,
+    /// as those are presumed to have not changed.
     ///
     /// The rationale for this function is that an insertion or deletion of text is
     /// always relative to the current line, and that such a change would never
@@ -1871,12 +1893,7 @@ impl Editor {
     fn update_line(&self, line: &Line) -> Line {
         let (next_pos, line_bottom) = nav::find_next_line(&self.buffer(), line.line_pos);
         let line_len = next_pos - line.line_pos;
-        let row_len = cmp::min(
-            line_len - (line.row_pos - line.line_pos),
-            self.cols as usize,
-        );
         Line {
-            row_len,
             line_len,
             line_bottom,
             ..*line
@@ -1888,22 +1905,11 @@ impl Editor {
     fn prev_line(&self, line: &Line) -> Option<Line> {
         if line.is_top() {
             None
-        } else if line.has_wrapped() {
-            let l = Line {
-                row_pos: line.row_pos - self.cols as usize,
-                row_len: self.cols as usize,
-                ..*line
-            };
-            Some(l)
         } else {
             let pos = line.line_pos - 1;
             let (line_pos, next_pos, line_bottom) = self.find_line_bounds(pos);
             let line_len = next_pos - line_pos;
-            let row_pos = pos - ((pos - line_pos) % self.cols as usize);
-            let row_len = cmp::min(line_len - (row_pos - line_pos), self.cols as usize);
             let l = Line {
-                row_pos,
-                row_len,
                 line_pos,
                 line_len,
                 line: line.line - 1,
@@ -1923,28 +1929,13 @@ impl Editor {
     /// Returns the line following `line`, or `None` if `line` is already at the
     /// bottom of the buffer.
     fn next_line(&self, line: &Line) -> Option<Line> {
-        if line.is_bottom(self.cols) {
+        if line.is_bottom() {
             None
-        } else if line.does_wrap() {
-            let row_pos = line.row_pos + line.row_len;
-            let row_len = cmp::min(
-                line.line_len - (row_pos - line.line_pos),
-                self.cols as usize,
-            );
-            let l = Line {
-                row_pos,
-                row_len,
-                ..*line
-            };
-            Some(l)
         } else {
             let line_pos = line.line_pos + line.line_len;
             let (next_pos, line_bottom) = nav::find_next_line(&self.buffer(), line_pos);
             let line_len = next_pos - line_pos;
-            let row_len = cmp::min(line_len, self.cols as usize);
             let l = Line {
-                row_pos: line_pos,
-                row_len,
                 line_pos,
                 line_len,
                 line: line.line + 1,
@@ -1977,19 +1968,26 @@ impl Editor {
     fn render_cell(&self, draw: &Draw, render: Render, c: char) -> Option<Render> {
         self.render_margin(draw, &render);
         let window = self.window.borrow();
+        // we should borrow only once
         let mut canvas = window.canvas.borrow_mut();
         let (row, col) = (render.row, render.col + self.margin_cols());
         let render = if c == '\n' {
-            canvas.set_cell(row, col, draw.as_text(c, &render));
-            canvas.fill_cell_from(row, col + 1, draw.as_text(' ', &render));
+            if render.col < self.cols {
+                // only render if text is still visible
+                canvas.set_cell(row, col, draw.as_text(c, &render));
+                canvas.fill_cell_from(row, col + 1, draw.as_text(' ', &render));
+            } else {
+                // do nothing
+            }
             render.next_line()
         } else {
-            canvas.set_cell(row, col, draw.as_text(c, &render));
-            if render.col + 1 < self.cols {
-                render.next_col()
+            if render.pos >= render.start_pos && render.col < self.cols {
+                // only render if text is visible
+                canvas.set_cell(row, col, draw.as_text(c, &render));
             } else {
-                render.next_row()
+                // do nothing
             }
+            render.next_col()
         };
         if render.row < self.rows {
             Some(render)
@@ -2026,9 +2024,7 @@ impl Editor {
         if render.col == 0 && self.margin_enabled {
             let window = self.window.borrow();
             let mut canvas = window.canvas.borrow_mut();
-            if render.line_wrapped {
-                canvas.fill_cell(render.row, 0..Self::MARGIN_COLS, draw.as_margin(' '));
-            } else if render.line < Self::LINE_LIMIT {
+            if render.line < Self::LINE_LIMIT {
                 let s = format!(
                     "{:>cols$} ",
                     render.line,
