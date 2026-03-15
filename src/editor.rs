@@ -1477,7 +1477,7 @@ impl Editor {
         self.syntax_cursor = self
             .tokenizer
             .borrow()
-            .find(self.syntax_cursor, self.top_line.line_pos + self.line_ofs);
+            .find(self.syntax_cursor, self.top_line.line_pos);
     }
 
     /// Sets the values of all banner attributes and draws it.
