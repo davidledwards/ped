@@ -7,7 +7,7 @@
 use crate::buffer::{Buffer, BufferRef};
 use crate::config::ConfigurationRef;
 use crate::nav::{self, Location};
-use crate::render::{Align, Renderer};
+use crate::render::{self, Align, Renderer};
 use crate::search::Pattern;
 use crate::size::{Point, Size};
 use crate::source::Source;
@@ -31,8 +31,8 @@ pub struct Editor {
     /// Buffer containing the contents of this editor.
     buffer: BufferRef,
 
-    /// A renderer for display text in buffer.
-    render: Renderer,
+    /// The rendering engine.
+    rendering: Box<dyn Renderer>,
 
     /// A value of `true` implies that _mutable_ operations are not allowed, though
     /// the notion of mutability is context-dependent and must be enforced by the
@@ -248,7 +248,8 @@ impl Editor {
         let buffer = buffer.unwrap_or_default().into_ref();
 
         // Create renderer with unattached window.
-        let render = Renderer::new(config.clone(), buffer.clone());
+        let rendering = render::scrolling(config.clone(), buffer.clone());
+        // let rendering = render::wrapping(config.clone(), buffer.clone());
 
         // Constructs syntax configuration based on type of buffer and file extension,
         // if applicable.
@@ -283,7 +284,7 @@ impl Editor {
             config,
             source,
             buffer,
-            render,
+            rendering,
             readonly,
             clock: 0,
             undo: Vec::new(),
@@ -372,30 +373,30 @@ impl Editor {
     /// [`size()`](Self::size).
     #[inline(always)]
     pub fn cursor(&self) -> Point {
-        self.render.cursor()
+        self.rendering.cursor()
     }
 
     /// Returns the location of the cursor position in the buffer.
     #[inline(always)]
     pub fn location(&self) -> Location {
-        self.render.location()
+        self.rendering.location()
     }
 
     /// Returns the number of rows available on the editor canvas.
     #[inline(always)]
     pub fn rows(&self) -> u32 {
-        self.render.rows()
+        self.rendering.rows()
     }
 
     /// Returns the size of the editor canvas.
     pub fn size(&self) -> Size {
-        self.render.size()
+        self.rendering.size()
     }
 
     /// Returns the buffer position corresponding to the [`cursor`](Self::cursor).
     #[inline(always)]
     pub fn pos(&self) -> usize {
-        self.render.pos()
+        self.rendering.pos()
     }
 
     /// Returns `true` if the tab mode is _hard_ and `false` if _soft_.
@@ -440,30 +441,30 @@ impl Editor {
     /// The coordinates in `cursor` are presumed to be relative to the origin of the
     /// editor canvas.
     pub fn focus_cursor(&mut self, cursor: Point) {
-        self.render.focus_cursor(cursor);
+        self.rendering.focus_cursor(cursor);
     }
 
     /// Attaches `window` to this editor and positions the cursor as instructed by
     /// `align`.
     pub fn attach(&mut self, window: WindowRef, align: Align) {
         self.window = window.clone();
-        self.render.attach(window);
+        self.rendering.attach(window);
 
         // Align cursor and draw contents only if window is not a zombie.
-        if self.render.is_attached() {
-            self.render.align_cursor(align);
+        if self.rendering.is_attached() {
+            self.rendering.align_cursor(align);
             self.draw();
         }
     }
 
     /// Detaches the existing window from this editor.
     pub fn detach(&mut self) {
-        self.render.detach();
+        self.rendering.detach();
     }
 
     /// Sets the position of the cursor based on the alignment objective `align`.
     pub fn align_cursor(&mut self, align: Align) {
-        self.render.align_cursor(align);
+        self.rendering.align_cursor(align);
         self.align_syntax();
     }
 
@@ -476,7 +477,7 @@ impl Editor {
 
     /// Makes the cursor visible.
     pub fn show_cursor(&mut self) {
-        self.render.show_cursor();
+        self.rendering.show_cursor();
     }
 
     /// Tries to move the cursor _backward_ from the current buffer position by `len`
@@ -524,7 +525,7 @@ impl Editor {
     /// If `pin` is `false`, then the cursor will move up in tandem with `try_rows`,
     /// though not to extend beyond the top of the display.
     pub fn move_up(&mut self, try_rows: u32, pin: bool) {
-        if self.render.move_up(try_rows, pin) > 0 {
+        if self.rendering.move_up(try_rows, pin) > 0 {
             self.align_syntax();
         }
     }
@@ -537,30 +538,30 @@ impl Editor {
     /// If `pin` is `false`, then the cursor will move down in tandem with `try_rows`,
     /// though not to extend beyond the bottom of the display.
     pub fn move_down(&mut self, try_rows: u32, pin: bool) {
-        if self.render.move_down(try_rows, pin) > 0 {
+        if self.rendering.move_down(try_rows, pin) > 0 {
             self.align_syntax();
         }
     }
 
     /// Moves the cursor to the _start_ of the current row.
     pub fn move_start(&mut self) {
-        self.render.move_start();
+        self.rendering.move_start();
     }
 
     /// Moves the cursor to the _end_ of the current row.
     pub fn move_end(&mut self) {
-        self.render.move_end();
+        self.rendering.move_end();
     }
 
     /// Moves the cursor to the _top_ of the buffer.
     pub fn move_top(&mut self) {
-        self.render.move_to(0, Align::Top);
+        self.rendering.move_to(0, Align::Top);
     }
 
     /// Moves the cursor to the _bottom_ of the buffer.
     pub fn move_bottom(&mut self) {
         let pos = self.buffer().size();
-        self.render.move_to(pos, Align::Bottom);
+        self.rendering.move_to(pos, Align::Bottom);
     }
 
     /// Moves the buffer position to the location `loc`, and places the cursor on
@@ -583,7 +584,7 @@ impl Editor {
     /// - _when `pos` is beyond the current line_: aligns the cursor on the target
     ///   row below the current line, though not to extend beyond the borrom row
     pub fn move_to(&mut self, pos: usize, align: Align) {
-        self.render.move_to(pos, align);
+        self.rendering.move_to(pos, align);
         self.align_syntax();
     }
 
@@ -591,7 +592,7 @@ impl Editor {
     /// `try_rows` while preserving the cursor position, which also means the cursor
     /// moves _up_ as the contents scroll.
     pub fn scroll_up(&mut self, try_rows: u32) {
-        if self.render.scroll_up(try_rows) > 0 {
+        if self.rendering.scroll_up(try_rows) > 0 {
             self.align_syntax();
         }
     }
@@ -600,7 +601,7 @@ impl Editor {
     /// `try_rows` while preserving the cursor position, which also means the cursor
     /// moves _down_ as the contents scroll.
     pub fn scroll_down(&mut self, try_rows: u32) {
-        if self.render.scroll_down(try_rows) > 0 {
+        if self.rendering.scroll_down(try_rows) > 0 {
             self.align_syntax();
         }
     }
@@ -676,7 +677,7 @@ impl Editor {
 
     /// Returns the text of the line on which the current buffer position rests.
     pub fn copy_line(&self) -> Vec<char> {
-        let (start_pos, end_pos) = self.render.line();
+        let (start_pos, end_pos) = self.rendering.line();
         self.copy(start_pos, end_pos)
     }
 
@@ -778,7 +779,7 @@ impl Editor {
             .unwrap_or(0..0);
 
         // Render text.
-        self.render
+        self.rendering
             .render(&self.tokenizer.borrow(), self.syntax_cursor, select_span);
 
         // Renders additional information.
@@ -861,7 +862,7 @@ impl Editor {
     /// Removes and returns the text of the line on which the current buffer position
     /// rests.
     pub fn remove_line(&mut self) -> Vec<char> {
-        let (start_pos, end_pos) = self.render.line();
+        let (start_pos, end_pos) = self.rendering.line();
         self.move_to(start_pos, Align::Auto);
         self.remove(end_pos)
     }
@@ -869,7 +870,7 @@ impl Editor {
     /// Removes and returns the text between the start of the current line and the
     /// current buffer position.
     pub fn remove_start(&mut self) -> Vec<char> {
-        let (start_pos, _) = self.render.line();
+        let (start_pos, _) = self.rendering.line();
         if self.pos() == start_pos {
             self.remove_before()
         } else {
@@ -880,7 +881,7 @@ impl Editor {
     /// Removes and returns the text between the current buffer position and the end
     /// of the current line.
     pub fn remove_end(&mut self) -> Vec<char> {
-        let (_, end_pos) = self.render.line();
+        let (_, end_pos) = self.rendering.line();
         self.remove(end_pos)
     }
 
@@ -912,7 +913,7 @@ impl Editor {
 
     /// Aligns the syntax cursor with the top line.
     fn align_syntax(&mut self) {
-        let (start_pos, _) = self.render.top();
+        let (start_pos, _) = self.rendering.top();
         self.syntax_cursor = self.tokenizer.borrow().find(self.syntax_cursor, start_pos);
     }
 
@@ -988,7 +989,7 @@ impl Editor {
             };
 
             // Inform renderer that text has been inserted,
-            self.render.insert(text.len());
+            self.rendering.insert(text.len());
             self.possibly_tokenize(false);
         }
     }
@@ -1010,7 +1011,7 @@ impl Editor {
                 // since it appears before current buffer position. This happens to be
                 // precondition for calling rendering remove function, which assumes
                 // range of removed text starts at current buffer position.
-                self.render.move_to(pos, Align::Auto);
+                self.rendering.move_to(pos, Align::Auto);
                 (pos, cur_pos - pos)
             } else {
                 (cur_pos, pos - cur_pos)
@@ -1054,7 +1055,7 @@ impl Editor {
             };
 
             // Inform renderer that text has been been removed.
-            self.render.remove();
+            self.rendering.remove();
             self.possibly_tokenize(false);
             text
         }
