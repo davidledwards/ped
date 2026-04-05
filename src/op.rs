@@ -1032,7 +1032,7 @@ pub fn set_focus(env: &mut Environment, p: Point) {
         env.set_active(Focus::To(view_id));
         let mut editor = env.get_active_editor().borrow_mut();
         editor.clear_soft_mark();
-        editor.set_focus(cursor);
+        editor.focus_cursor(cursor);
         editor.render();
     }
 }

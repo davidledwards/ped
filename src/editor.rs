@@ -5,10 +5,9 @@
 //! is focused on display rendering.
 
 use crate::buffer::{Buffer, BufferRef};
-use crate::color::Color;
 use crate::config::ConfigurationRef;
-use crate::grid::Cell;
 use crate::nav::{self, Location};
+use crate::render::Renderer;
 use crate::search::Pattern;
 use crate::size::{Point, Size};
 use crate::source::Source;
@@ -20,7 +19,6 @@ use std::cmp;
 use std::ops::Range;
 use std::rc::Rc;
 use std::time::Instant;
-use std::u32;
 
 /// An editing session with an underlying [`Buffer`] and an attachable [`Window`].
 pub struct Editor {
@@ -32,6 +30,9 @@ pub struct Editor {
 
     /// Buffer containing the contents of this editor.
     buffer: BufferRef,
+
+    /// A renderer for display text in buffer.
+    render: Renderer,
 
     /// A value of `true` implies that _mutable_ operations are not allowed, though
     /// the notion of mutability is context-dependent and must be enforced by the
@@ -65,42 +66,11 @@ pub struct Editor {
     /// The value of `clock` when the buffer was most recently committed to storage.
     commit_clock: u64,
 
-    /// Buffer position corresponding to the cursor.
-    cur_pos: usize,
-
-    /// Line on the display representing the top row.
-    top_line: Line,
-
-    /// Line on the display representing the cursor row.
-    cur_line: Line,
-
-    /// An offset from the buffer position corresponding to the first character of any
-    /// given line, which corresponds to the left-most column of the display.
-    ///
-    /// In effect, column `0` starts at `line_pos + line_ofs`.
-    line_ofs: usize,
-
-    /// An optional column to which the cursor should _snap_ when moving up and down.
-    /// now (line_ofs, col)
-    snap_col: Option<(usize, u32)>,
-
-    /// Position of the cursor in the window.
-    cursor: Point,
-
     /// An optional mark used when selecting text.
     mark: Option<Mark>,
 
     /// The window attached to this editor.
     window: WindowRef,
-
-    /// Number of rows available for text.
-    rows: u32,
-
-    /// Number of columns available for text.
-    cols: u32,
-
-    /// Indicates when left margin is enabled.
-    margin_enabled: bool,
 
     /// Indicates whether _hard_ or _soft_ tabs are inserted.
     tab_hard: bool,
@@ -177,27 +147,6 @@ enum Log {
     Selection(bool),
 }
 
-/// Represents contextual information for a line on the display.
-///
-/// A _line_ in this context should not be confused with the characterization of
-/// a line in [Buffer], which could conceivably span more than one line on the
-/// display.
-#[derive(Clone)]
-struct Line {
-    /// Buffer position corresponding to the first character of the buffer line,
-    /// which is always less than or equal to `row_pos`.
-    line_pos: usize,
-
-    /// Length of the buffer line, including the `\n` if one exists.
-    line_len: usize,
-
-    /// The `0`-based number of the buffer line.
-    line: u32,
-
-    /// Indicates that the buffer line is the bottom-most line in the buffer.
-    line_bottom: bool,
-}
-
 /// Cursor alignment directives.
 pub enum Align {
     /// Try aligning the cursor based on its contextual use.
@@ -229,43 +178,6 @@ pub struct Capture {
     pub pos: usize,
     pub cursor: Point,
     pub mark: Option<Mark>,
-}
-
-/// A drawing context provided to rendering functions.
-struct Draw {
-    /// Configuration that dictates colors and behaviors.
-    config: ConfigurationRef,
-
-    /// Color of margin.
-    margin_color: Color,
-
-    /// Color of current line in margin.
-    line_color: Color,
-
-    /// Color of text with no special treatment.
-    text_color: Color,
-
-    /// Current cursor position.
-    cursor: Point,
-
-    /// Current line number.
-    line: u32,
-
-    /// Range in the buffer containing selected text, if applicable, otherwise this
-    /// span is assumed to be `0`..`0`.
-    select_span: Range<usize>,
-}
-
-/// A rendering context that captures state information for rendering functions.
-struct Render {
-    line_ofs: usize,
-    pos: usize,
-    start_pos: usize,
-    row: u32,
-    col: u32,
-    line: u32,
-    tokenizer: TokenizerRef,
-    syntax_cursor: Cursor,
 }
 
 impl Change {
@@ -307,257 +219,6 @@ impl Change {
     }
 }
 
-impl Line {
-    /// Returns `true` if this line points to the top of the buffer.
-    #[inline]
-    fn is_top(&self) -> bool {
-        self.line_pos == 0
-    }
-
-    /// Returns `true` if the row of this line points to the bottom of the buffer.
-    fn is_bottom(&self) -> bool {
-        self.line_bottom
-    }
-
-    /// Returns a possibly smaller value of `col` if it extends beyond the end of
-    /// the row, where `cols` is the width of the display.
-    ///
-    /// In most cases, the right-most column aligns to the last character of the row,
-    /// which is usually `\n` but may also be any other character if the row wraps.
-    /// However, if this is the bottom-most row in the buffer, there is no terminating
-    /// `\n`, and thus the right-most column is right of the last character.
-    fn snap_col(&self, line_ofs: usize, col: u32, cols: u32) -> (usize, u32) {
-        // adding line_ofs to col gives us actual offset into line, and
-        // min of that and line_len is used for snapped col
-
-        let len = if self.is_bottom() {
-            self.line_len
-        } else {
-            self.line_len - 1
-        };
-
-        let col_ofs = cmp::min(line_ofs + col as usize, len);
-
-        if col_ofs < line_ofs {
-            // implies that snapped col is left of margin. this can only happen
-            // if line_ofs > 0 since type is u32. need to adjust line_ofs and
-            // snap col to left-most edge
-            (len, 0)
-        } else if col_ofs < line_ofs + cols as usize {
-            // implies that snapped col is visible on current display whose
-            // left margin is line_ofs, so it does not need to change.
-            (line_ofs, (col_ofs - line_ofs) as u32)
-        } else {
-            // implies that snapped col is right of margin, so we need to
-            // adjust line_ofs and snap col to right-most edge
-            (col_ofs - cols as usize + 1, cols - 1)
-        }
-    }
-
-    /// Returns the buffer position of `col` relative to the starting position of
-    /// the row.
-    #[inline]
-    fn pos_of(&self, line_ofs: usize, col: u32) -> usize {
-        self.line_pos + line_ofs + col as usize
-    }
-
-    /// Returns the column number of `pos` relative to the starting position of the
-    /// row, though be advised that the resulting column may extend beyond the end
-    /// of the row.
-    #[inline]
-    fn col_of(&self, line_ofs: usize, pos: usize, cols: u32) -> (usize, u32) {
-        let line_ofs = cmp::min(pos, self.line_pos + line_ofs) - self.line_pos;
-        let col = (pos - (self.line_pos + line_ofs)) as u32;
-        self.snap_col(line_ofs, col, cols)
-    }
-
-    /// Returns the buffer position at the end of the row.
-    #[inline]
-    fn end_pos(&self) -> usize {
-        self.line_pos + self.line_len
-    }
-
-    fn line_range(&self) -> Range<usize> {
-        self.line_pos..(self.line_pos + self.line_len)
-    }
-}
-
-#[allow(clippy::derivable_impls, reason = "retain expressiveness")]
-impl Default for Line {
-    fn default() -> Line {
-        Line {
-            line_pos: 0,
-            line_len: 0,
-            line: 0,
-            line_bottom: false,
-        }
-    }
-}
-
-impl Draw {
-    // Special character shown for \n (newline) when visible.
-    const EOL_CHAR: char = '\u{21b2}';
-
-    // Special character shown for \t (tab).
-    const TAB_CHAR: char = '\u{2192}';
-
-    // Special character shown for all other ASCII control characters.
-    const CTRL_CHAR: char = '\u{00bf}';
-
-    fn new(editor: &Editor) -> Draw {
-        let config = editor.config.clone();
-        let margin_color = Color::new(config.theme.margin_fg, config.theme.margin_bg);
-        let line_color = Color::new(config.theme.line_fg, config.theme.margin_bg);
-        let text_color = Color::new(config.theme.text_fg, config.theme.text_bg);
-
-        let select_span = editor
-            .mark
-            .map(|Mark(mark_pos, _)| {
-                if mark_pos < editor.cur_pos {
-                    mark_pos..editor.cur_pos
-                } else {
-                    editor.cur_pos..mark_pos
-                }
-            })
-            .unwrap_or(0..0);
-
-        Draw {
-            config,
-            margin_color,
-            line_color,
-            text_color,
-            cursor: editor.cursor(),
-            line: editor.cur_line.line + 1,
-            select_span,
-        }
-    }
-
-    /// Formats `c` using the margin color.
-    #[inline]
-    fn as_margin(&self, c: char) -> Cell {
-        Cell::new(c, self.margin_color)
-    }
-
-    /// Formats `c` using the line color if `line` is the current line, otherwise the
-    /// margin color is applied.
-    #[inline]
-    fn as_line(&self, c: char, line: u32) -> Cell {
-        Cell::new(
-            c,
-            if line == self.line {
-                self.line_color
-            } else {
-                self.margin_color
-            },
-        )
-    }
-
-    /// Formats ` ` (space) using the text color.
-    #[inline]
-    fn as_blank(&self) -> Cell {
-        Cell::new(' ', self.text_color)
-    }
-
-    /// Formats `c` using a color depending on the current rendering context.
-    fn as_text(&self, c: char, render: &Render) -> Cell {
-        let fg = if (c == '\n' && self.config.settings.eol) || c.is_control() {
-            self.config.theme.whitespace_fg
-        } else if let Some(fg) = render.syntax_cursor.color() {
-            fg
-        } else {
-            self.config.theme.text_fg
-        };
-
-        let bg = if self.select_span.contains(&render.pos) {
-            self.config.theme.select_bg
-        } else if self.config.settings.spotlight && render.row == self.cursor.row {
-            self.config.theme.spotlight_bg
-        } else {
-            self.config.theme.text_bg
-        };
-
-        Cell::new(self.convert_char(c), Color::new(fg, bg))
-    }
-
-    /// Possibly converts `c` to an alternate display character.
-    #[inline]
-    fn convert_char(&self, c: char) -> char {
-        match c {
-            '\n' => {
-                if self.config.settings.eol {
-                    Self::EOL_CHAR
-                } else {
-                    ' '
-                }
-            }
-            '\t' => Self::TAB_CHAR,
-            c if c.is_control() => Self::CTRL_CHAR,
-            c => c,
-        }
-    }
-}
-
-impl Render {
-    /// Creates an initial rendering context from `editor`.
-    fn new(editor: &Editor) -> Render {
-        let line_ofs = editor.line_ofs;
-        let pos = editor.top_line.line_pos;
-        // this tells us when to start displaying text
-        let start_pos = pos + line_ofs;
-
-        Render {
-            line_ofs,
-            pos,
-            start_pos,
-            row: 0,
-            col: 0,
-            line: editor.top_line.line + 1,
-            tokenizer: editor.tokenizer.clone(),
-            syntax_cursor: editor.syntax_cursor,
-        }
-    }
-
-    /// Returns a new rendering context representing a transition to the next column.
-    fn next_col(self) -> Render {
-        let pos = self.pos + 1;
-        let col = if pos > self.start_pos {
-            self.col + 1
-        } else {
-            0
-        };
-        Render {
-            pos,
-            col,
-            syntax_cursor: self.syntax_forward(1),
-            ..self
-        }
-    }
-
-    /// Returns a new rendering context representing a transition to the next line,
-    /// which is also the next row.
-    fn next_line(self) -> Render {
-        // this is a shortcut that allows us to skip the buffer scan pos already
-        // points to `\n`, skipping one character forward.
-        let pos = self.pos + 1;
-        let start_pos = pos + self.line_ofs;
-
-        Render {
-            pos,
-            start_pos,
-            row: self.row + 1,
-            col: 0,
-            line: self.line + 1,
-            syntax_cursor: self.syntax_forward(1),
-            ..self
-        }
-    }
-
-    /// Returns a new syntax cursor moved forward by `n` characters.
-    fn syntax_forward(&self, n: usize) -> Cursor {
-        self.tokenizer.borrow().forward(self.syntax_cursor, n)
-    }
-}
-
 impl EditorBuilder {
     pub fn new(config: ConfigurationRef) -> EditorBuilder {
         EditorBuilder {
@@ -589,20 +250,6 @@ impl EditorBuilder {
 }
 
 impl Editor {
-    /// Number of columns allocated to the margin.
-    const MARGIN_COLS: u32 = 6;
-
-    /// Upper bound (exclusive) on line numbers that can be displayed in the margin.
-    const LINE_LIMIT: u32 = 10_u32.pow(Self::MARGIN_COLS - 1);
-
-    /// Number of columns used to display lower-order digits of line numbers that
-    /// must be clipped when larger than `LINE_LIMIT`.
-    const CLIP_LOWER_COLS: u32 = Self::MARGIN_COLS / 2;
-
-    /// Number of columns used to hide higher-order digits of line numbers that
-    /// must be clipped when larger than `LINE_LIMIT`.
-    const CLIP_UPPER_COLS: u32 = Self::MARGIN_COLS - Self::CLIP_LOWER_COLS - 1;
-
     /// An upper bound on the tolerable number of milliseconds to tokenize the
     /// buffer in real-time, otherwise the operation is deferred.
     const TOKENIZE_COST_LIMIT: u128 = 50;
@@ -615,8 +262,11 @@ impl Editor {
         buffer: Option<Buffer>,
         readonly: bool,
     ) -> Editor {
+        // Create emoty buffer if necessary.
         let buffer = buffer.unwrap_or_default().into_ref();
-        let cur_pos = buffer.borrow().get_pos();
+
+        // Create renderer with unattached window.
+        let render = Renderer::new(config.clone(), buffer.clone());
 
         // Constructs syntax configuration based on type of buffer and file extension,
         // if applicable.
@@ -651,6 +301,7 @@ impl Editor {
             config,
             source,
             buffer,
+            render,
             readonly,
             clock: 0,
             undo: Vec::new(),
@@ -660,17 +311,8 @@ impl Editor {
             tokenize_clock: 0,
             syntax_cursor,
             commit_clock: 0,
-            cur_pos,
-            top_line: Line::default(),
-            cur_line: Line::default(),
-            line_ofs: 0,
-            snap_col: None,
-            cursor: Point::ORIGIN,
             mark: None,
             window: Window::zombie().into_ref(),
-            rows: 0,
-            cols: 0,
-            margin_enabled: false,
             tab_hard,
             tab_cols,
             crlf,
@@ -706,10 +348,8 @@ impl Editor {
     /// being created.
     pub fn duplicate(&self, source: Source) -> Editor {
         let mut buffer = self.buffer().clone();
-        buffer.set_pos(self.cur_pos);
-        let mut editor = Self::new(self.config.clone(), source, Some(buffer), false);
-        editor.cursor = self.cursor;
-        editor
+        buffer.set_pos(self.pos());
+        Self::new(self.config.clone(), source, Some(buffer), false)
     }
 
     /// Returns a reference to the source.
@@ -723,7 +363,7 @@ impl Editor {
     }
 
     /// Returns a reference to the underlying buffer.
-    #[inline]
+    #[inline(always)]
     pub fn buffer(&self) -> Ref<'_, Buffer> {
         self.buffer.borrow()
     }
@@ -748,30 +388,32 @@ impl Editor {
     ///
     /// The _row_ and _column_ values are `0`-based and exclusively bounded by
     /// [`size()`](Self::size).
-    #[inline]
+    #[inline(always)]
     pub fn cursor(&self) -> Point {
-        self.cursor
+        self.render.cursor()
     }
 
     /// Returns the location of the cursor position in the buffer.
-    #[inline]
+    #[inline(always)]
     pub fn location(&self) -> Location {
-        Location::new(self.cur_line.line, self.line_ofs as u32 + self.cursor.col)
+        self.render.location()
     }
 
     /// Returns the number of rows available on the editor canvas.
+    #[inline(always)]
     pub fn rows(&self) -> u32 {
-        self.rows
+        self.render.rows()
     }
 
     /// Returns the size of the editor canvas.
     pub fn size(&self) -> Size {
-        Size::new(self.rows, self.cols)
+        self.render.size()
     }
 
     /// Returns the buffer position corresponding to the [`cursor`](Self::cursor).
+    #[inline(always)]
     pub fn pos(&self) -> usize {
-        self.cur_pos
+        self.render.pos()
     }
 
     /// Returns `true` if the tab mode is _hard_ and `false` if _soft_.
@@ -815,69 +457,32 @@ impl Editor {
     ///
     /// The coordinates in `cursor` are presumed to be relative to the origin of the
     /// editor canvas.
-    pub fn set_focus(&mut self, cursor: Point) {
-        // Ensure target cursor is bounded by effective area of canvas, which takes
-        // into account left margin if enabled.
-        let try_row = cmp::min(cursor.row, self.rows);
-        let try_col = if cursor.col < self.margin_cols() {
-            0
-        } else {
-            cmp::min(cursor.col - self.margin_cols(), self.cols)
-        };
-
-        // Find effective cursor location and buffer position by moving down from
-        // top line of display.
-        self.cur_line = self.top_line.clone();
-        let row = self.down_cur_line(try_row);
-        let (line_ofs, col) = self.cur_line.snap_col(self.line_ofs, try_col, self.cols);
-        self.line_ofs = line_ofs;
-        self.snap_col = Some((self.line_ofs, col));
-        self.cur_pos = self.cur_line.pos_of(self.line_ofs, col);
-        self.cursor = Point::new(row, col);
+    pub fn focus_cursor(&mut self, cursor: Point) {
+        self.render.focus_cursor(cursor);
     }
 
-    /// Attaches the `window` to this editor.
+    /// Attaches `window` to this editor and positions the cursor as instructed by
+    /// `align`.
     pub fn attach(&mut self, window: WindowRef, align: Align) {
-        // Allocate leftmost columns of window to line numbers, but only if enabled and
-        // total width of window is large enough to reasonably accommodate.
         self.window = window.clone();
-        let Size { rows, cols } = self.window.borrow().canvas.borrow().size();
-        self.margin_enabled = self.config.settings.lines && cols >= Self::MARGIN_COLS * 2;
-        self.rows = rows;
-        self.cols = cols - self.margin_cols();
+        self.render.attach(window);
 
-        if !self.window.borrow().is_zombie() {
-            self.align_cursor(align);
+        // Align cursor and draw contents only if window is not a zombie.
+        if self.render.is_attached() {
+            self.render.align_cursor(align);
             self.draw();
         }
     }
 
     /// Detaches the existing window from this editor.
     pub fn detach(&mut self) {
-        self.attach(Window::zombie().into_ref(), Align::Auto);
+        self.render.detach();
     }
 
     /// Sets the position of the cursor based on the alignment objective `align`.
     pub fn align_cursor(&mut self, align: Align) {
-        // Determine ideal row where cursor would like to be focused, though this should
-        // be considered a hint.
-        let try_row = match align {
-            Align::Auto => cmp::min(self.cursor.row, self.rows - 1),
-            Align::Center => self.rows / 2,
-            Align::Top => 0,
-            Align::Bottom => self.rows - 1,
-            Align::Row(row) => cmp::min(row, self.rows - 1),
-        };
-
-        // Tries to position cursor on target row, but no guarantee depending on proximity
-        // of row to top of buffer.
-        self.cur_line = self.find_line(self.cur_pos);
-        let row = self.set_top_line(try_row);
-        let (line_ofs, col) = self.cur_line.col_of(self.line_ofs, self.cur_pos, self.cols);
-        self.line_ofs = line_ofs;
-        self.snap_col = None;
+        self.render.align_cursor(align);
         self.align_syntax();
-        self.cursor = Point::new(row, col);
     }
 
     /// Draws the canvas and banner regardless of whether any updates have occurred.
@@ -889,19 +494,14 @@ impl Editor {
 
     /// Makes the cursor visible.
     pub fn show_cursor(&mut self) {
-        let cursor = if self.margin_enabled {
-            self.cursor + Size::cols(Self::MARGIN_COLS)
-        } else {
-            self.cursor
-        };
-        self.window.borrow().canvas.borrow_mut().set_cursor(cursor);
+        self.render.show_cursor();
     }
 
     /// Tries to move the cursor _backward_ from the current buffer position by `len`
     /// characters.
     pub fn move_backward(&mut self, len: usize) {
-        let pos = self.cur_pos - cmp::min(len, self.cur_pos);
-        if pos < self.cur_pos {
+        let pos = self.pos().saturating_sub(len);
+        if pos < self.pos() {
             self.move_to(pos, Align::Auto);
         }
     }
@@ -909,8 +509,9 @@ impl Editor {
     /// Tries to move the cursor _forward_ from the current buffer position by `len`
     /// characters.
     pub fn move_forward(&mut self, len: usize) {
-        let pos = cmp::min(self.cur_pos + len, self.buffer().size());
-        if pos > self.cur_pos {
+        let cur_pos = self.pos();
+        let pos = cmp::min(cur_pos + len, self.buffer().size());
+        if pos > cur_pos {
             self.move_to(pos, Align::Auto);
         }
     }
@@ -918,8 +519,8 @@ impl Editor {
     /// Tries to move the cursor _backward_ by one word from the current buffer
     /// position.
     pub fn move_backward_word(&mut self) {
-        let pos = self.find_word_before(self.cur_pos);
-        if pos < self.cur_pos {
+        let pos = self.find_word_before(self.pos());
+        if pos < self.pos() {
             self.move_to(pos, Align::Auto);
         }
     }
@@ -927,8 +528,8 @@ impl Editor {
     /// Tries to move the cursor _forward_ by one word from the current buffer
     /// position.
     pub fn move_forward_word(&mut self) {
-        let pos = self.find_word_after(self.cur_pos);
-        if pos > self.cur_pos {
+        let pos = self.find_word_after(self.pos());
+        if pos > self.pos() {
             self.move_to(pos, Align::Auto);
         }
     }
@@ -941,35 +542,8 @@ impl Editor {
     /// If `pin` is `false`, then the cursor will move up in tandem with `try_rows`,
     /// though not to extend beyond the top of the display.
     pub fn move_up(&mut self, try_rows: u32, pin: bool) {
-        let rows = self.up_cur_line(try_rows);
-        if rows > 0 {
-            let row = if pin {
-                if rows < try_rows {
-                    // Cursor reached top of buffer before advancing by desired number of
-                    // rows, so resulting row is always top of display.
-                    self.set_top_line(0)
-                } else {
-                    // Try finding new top line by stepping backwards by number of rows
-                    // equivalent to current row of cursor.
-                    self.set_top_line(self.cursor.row)
-                }
-            } else if rows > self.cursor.row {
-                // Cursor would have moved beyond top of display.
-                self.set_top_line(0)
-            } else {
-                // Cursor remains visible without changing top line.
-                self.cursor.row - rows
-            };
-            let (try_line_ofs, try_col) = self
-                .snap_col
-                .take()
-                .unwrap_or((self.line_ofs, self.cursor.col));
-            self.snap_col = Some((try_line_ofs, try_col));
-            let (line_ofs, col) = self.cur_line.snap_col(try_line_ofs, try_col, self.cols);
-            self.line_ofs = line_ofs;
-            self.cur_pos = self.cur_line.pos_of(self.line_ofs, col);
+        if self.render.move_up(try_rows, pin) > 0 {
             self.align_syntax();
-            self.cursor = Point::new(row, col);
         }
     }
 
@@ -981,63 +555,30 @@ impl Editor {
     /// If `pin` is `false`, then the cursor will move down in tandem with `try_rows`,
     /// though not to extend beyond the bottom of the display.
     pub fn move_down(&mut self, try_rows: u32, pin: bool) {
-        let rows = self.down_cur_line(try_rows);
-        if rows > 0 {
-            let row = if pin {
-                // Keeping cursor on current row is guaranteed, because top line can
-                // always move down without reaching bottom of buffer.
-                self.down_top_line(rows);
-                self.cursor.row
-            } else if self.cursor.row + rows < self.rows {
-                // Cursor remains visible without changing top line.
-                self.cursor.row + rows
-            } else {
-                // Cursor would have moved beyond bottom of display.
-                self.set_top_line(self.rows - 1)
-            };
-            let (try_line_ofs, try_col) = self
-                .snap_col
-                .take()
-                .unwrap_or((self.line_ofs, self.cursor.col));
-            self.snap_col = Some((try_line_ofs, try_col));
-            let (line_ofs, col) = self.cur_line.snap_col(try_line_ofs, try_col, self.cols);
-            self.line_ofs = line_ofs;
-            self.cur_pos = self.cur_line.pos_of(self.line_ofs, col);
+        if self.render.move_down(try_rows, pin) > 0 {
             self.align_syntax();
-            self.cursor = Point::new(row, col);
         }
     }
 
     /// Moves the cursor to the _start_ of the current row.
     pub fn move_start(&mut self) {
-        // cursor can be at col 0 but there may be text to left of margin
-        if self.cursor.col > 0 || self.line_ofs > 0 {
-            self.cur_pos = self.cur_line.line_pos;
-            self.line_ofs = 0;
-            self.cursor.col = 0;
-        }
-        self.snap_col = None;
+        self.render.move_start();
     }
 
     /// Moves the cursor to the _end_ of the current row.
     pub fn move_end(&mut self) {
-        // force snap to EOL by specifying large column value
-        let (line_ofs, col) = self.cur_line.snap_col(self.line_ofs, u32::MAX, self.cols);
-        self.line_ofs = line_ofs;
-        self.cur_pos = self.cur_line.pos_of(self.line_ofs, col);
-        self.cursor.col = col;
-        self.snap_col = None;
+        self.render.move_end();
     }
 
     /// Moves the cursor to the _top_ of the buffer.
     pub fn move_top(&mut self) {
-        self.move_to(0, Align::Top);
+        self.render.move_to(0, Align::Top);
     }
 
     /// Moves the cursor to the _bottom_ of the buffer.
     pub fn move_bottom(&mut self) {
         let pos = self.buffer().size();
-        self.move_to(pos, Align::Bottom);
+        self.render.move_to(pos, Align::Bottom);
     }
 
     /// Moves the buffer position to the location `loc`, and places the cursor on
@@ -1060,86 +601,16 @@ impl Editor {
     /// - _when `pos` is beyond the current line_: aligns the cursor on the target
     ///   row below the current line, though not to extend beyond the borrom row
     pub fn move_to(&mut self, pos: usize, align: Align) {
-        let row = if pos < self.top_line.line_pos {
-            self.find_up_cur_line(pos);
-            let rows = match align {
-                Align::Top | Align::Auto => 0,
-                Align::Center => self.rows / 2,
-                Align::Bottom => self.rows - 1,
-                Align::Row(row) => cmp::min(row, self.rows - 1),
-            };
-            self.set_top_line(rows)
-        } else if pos < self.cur_line.line_pos {
-            let row = self.cursor.row - self.find_up_cur_line(pos);
-            let maybe_rows = match align {
-                Align::Auto => None,
-                Align::Top => Some(0),
-                Align::Center => Some(self.rows / 2),
-                Align::Bottom => Some(self.rows - 1),
-                Align::Row(row) => Some(cmp::min(row, self.rows - 1)),
-            };
-            if let Some(rows) = maybe_rows {
-                self.set_top_line(rows)
-            } else {
-                row
-            }
-        } else if pos < self.cur_line.end_pos() {
-            let maybe_rows = match align {
-                Align::Auto => None,
-                Align::Top => Some(0),
-                Align::Center => Some(self.rows / 2),
-                Align::Bottom => Some(self.rows - 1),
-                Align::Row(row) => Some(cmp::min(row, self.rows - 1)),
-            };
-            if let Some(rows) = maybe_rows {
-                self.set_top_line(rows)
-            } else {
-                self.cursor.row
-            }
-        } else {
-            let rows = self.find_down_cur_line(pos);
-            let row = match align {
-                Align::Auto => cmp::min(self.cursor.row + rows, self.rows - 1),
-                Align::Top => 0,
-                Align::Center => self.rows / 2,
-                Align::Bottom => self.rows - 1,
-                Align::Row(row) => cmp::min(row, self.rows - 1),
-            };
-            self.set_top_line(row)
-        };
-        self.cur_pos = pos;
-        let (line_ofs, col) = self.cur_line.col_of(self.line_ofs, self.cur_pos, self.cols);
-        self.line_ofs = line_ofs;
-        self.snap_col = None;
+        self.render.move_to(pos, align);
         self.align_syntax();
-        self.cursor = Point::new(row, col);
     }
 
     /// Tries scrolling _up_ the contents of the display by the specified number of
     /// `try_rows` while preserving the cursor position, which also means the cursor
     /// moves _up_ as the contents scroll.
     pub fn scroll_up(&mut self, try_rows: u32) {
-        let rows = self.down_top_line(try_rows);
-        if rows > 0 {
-            let (row, col) = if rows > self.cursor.row {
-                // Cursor would have moved beyond top of display, which means current
-                // buffer position changes accordingly.
-                self.cur_line = self.top_line.clone();
-                let (try_line_ofs, try_col) = self
-                    .snap_col
-                    .take()
-                    .unwrap_or((self.line_ofs, self.cursor.col));
-                self.snap_col = Some((try_line_ofs, try_col));
-                let (line_ofs, col) = self.cur_line.snap_col(try_line_ofs, try_col, self.cols);
-                self.line_ofs = line_ofs;
-                self.cur_pos = self.cur_line.pos_of(line_ofs, col);
-                (0, col)
-            } else {
-                // Cursor still visible on display.
-                (self.cursor.row - rows, self.cursor.col)
-            };
+        if self.render.scroll_up(try_rows) > 0 {
             self.align_syntax();
-            self.cursor = Point::new(row, col);
         }
     }
 
@@ -1147,35 +618,15 @@ impl Editor {
     /// `try_rows` while preserving the cursor position, which also means the cursor
     /// moves _down_ as the contents scroll.
     pub fn scroll_down(&mut self, try_rows: u32) {
-        let rows = self.up_top_line(try_rows);
-        if rows > 0 {
-            let row = self.cursor.row + rows;
-            let (row, col) = if row < self.rows {
-                // Cursor still visible on display.
-                (row, self.cursor.col)
-            } else {
-                // Cursor would have moved beyond bottom of display, which means current
-                // buffer position changes accordingly.
-                self.up_cur_line(row - self.rows + 1);
-                let (try_line_ofs, try_col) = self
-                    .snap_col
-                    .take()
-                    .unwrap_or((self.line_ofs, self.cursor.col));
-                self.snap_col = Some((try_line_ofs, try_col));
-                let (line_ofs, col) = self.cur_line.snap_col(try_line_ofs, try_col, self.cols);
-                self.line_ofs = line_ofs;
-                self.cur_pos = self.cur_line.pos_of(self.line_ofs, col);
-                (self.rows - 1_u32, col)
-            };
+        if self.render.scroll_down(try_rows) > 0 {
             self.align_syntax();
-            self.cursor = Point::new(row, col);
         }
     }
 
     /// Sets a _hard_ mark at the current buffer position and returns the previous
     /// mark if set.
     pub fn set_hard_mark(&mut self) -> Option<Mark> {
-        self.mark.replace(Mark(self.cur_pos, false))
+        self.mark.replace(Mark(self.pos(), false))
     }
 
     /// Sets a _soft_ mark at the current buffer position unless a _soft_ mark was
@@ -1190,11 +641,11 @@ impl Editor {
             if soft {
                 None
             } else {
-                self.mark = Some(Mark(self.cur_pos, true));
+                self.mark = Some(Mark(self.pos(), true));
                 Some(mark)
             }
         } else {
-            self.mark = Some(Mark(self.cur_pos, true));
+            self.mark = Some(Mark(self.pos(), true));
             None
         }
     }
@@ -1243,8 +694,8 @@ impl Editor {
 
     /// Returns the text of the line on which the current buffer position rests.
     pub fn copy_line(&self) -> Vec<char> {
-        let Range { start, end } = self.cur_line.line_range();
-        self.copy(start, end)
+        let (start_pos, end_pos) = self.render.line();
+        self.copy(start_pos, end_pos)
     }
 
     /// Returns the text between `from_pos` and `end_pos`.
@@ -1299,8 +750,8 @@ impl Editor {
     /// Returned the captured state of the editor.
     pub fn capture(&self) -> Capture {
         Capture {
-            pos: self.cur_pos,
-            cursor: self.cursor,
+            pos: self.pos(),
+            cursor: self.cursor(),
             mark: self.mark,
         }
     }
@@ -1332,22 +783,25 @@ impl Editor {
 
     /// Renders the contents of the editor.
     pub fn render(&mut self) {
-        // Renders visible buffer content.
-        let draw = Draw::new(self);
-        let render = Render::new(self);
-        let rest = self
-            .buffer
-            .borrow()
-            .forward(render.pos)
-            .try_fold(render, |render, c| self.render_cell(&draw, render, c));
-        if let Some(render) = rest {
-            self.render_rest(&draw, render);
-        }
-        let window = self.window.borrow();
-        window.canvas.borrow_mut().draw();
+        // Construct range for possibly selected text.
+        let select_span = self
+            .mark
+            .map(|Mark(mark_pos, _)| {
+                if mark_pos < self.pos() {
+                    mark_pos..self.pos()
+                } else {
+                    self.pos()..mark_pos
+                }
+            })
+            .unwrap_or(0..0);
+
+        // Render text.
+        self.render
+            .render(&self.tokenizer.borrow(), self.syntax_cursor, select_span);
 
         // Renders additional information.
-        window
+        self.window
+            .borrow()
             .banner
             .borrow_mut()
             .set_dirty(self.is_dirty())
@@ -1397,8 +851,8 @@ impl Editor {
     /// An empty vector is returned if the current position is already at the top
     /// of the buffer.
     pub fn remove_before(&mut self) -> Vec<char> {
-        if self.cur_pos > 0 {
-            self.remove(self.cur_pos - 1)
+        if self.pos() > 0 {
+            self.remove(self.pos() - 1)
         } else {
             vec![]
         }
@@ -1409,8 +863,8 @@ impl Editor {
     /// An empty vector is returned if the current position is already at the
     /// bottom of the buffer.
     pub fn remove_after(&mut self) -> Vec<char> {
-        if self.cur_pos < self.buffer().size() {
-            self.remove(self.cur_pos + 1)
+        if self.pos() < self.buffer().size() {
+            self.remove(self.pos() + 1)
         } else {
             vec![]
         }
@@ -1425,25 +879,27 @@ impl Editor {
     /// Removes and returns the text of the line on which the current buffer position
     /// rests.
     pub fn remove_line(&mut self) -> Vec<char> {
-        let Range { start, end } = self.cur_line.line_range();
-        self.move_to(start, Align::Auto);
-        self.remove(end)
+        let (start_pos, end_pos) = self.render.line();
+        self.move_to(start_pos, Align::Auto);
+        self.remove(end_pos)
     }
 
     /// Removes and returns the text between the start of the current line and the
     /// current buffer position.
     pub fn remove_start(&mut self) -> Vec<char> {
-        if self.cur_pos == self.cur_line.line_pos {
+        let (start_pos, _) = self.render.line();
+        if self.pos() == start_pos {
             self.remove_before()
         } else {
-            self.remove(self.cur_line.line_pos)
+            self.remove(start_pos)
         }
     }
 
     /// Removes and returns the text between the current buffer position and the end
     /// of the current line.
     pub fn remove_end(&mut self) -> Vec<char> {
-        self.remove(self.cur_line.line_pos + self.cur_line.line_len)
+        let (_, end_pos) = self.render.line();
+        self.remove(end_pos)
     }
 
     /// Removes and returns the text between the current buffer position and `pos`.
@@ -1474,10 +930,8 @@ impl Editor {
 
     /// Aligns the syntax cursor with the top line.
     fn align_syntax(&mut self) {
-        self.syntax_cursor = self
-            .tokenizer
-            .borrow()
-            .find(self.syntax_cursor, self.top_line.line_pos);
+        let (start_pos, _) = self.render.top();
+        self.syntax_cursor = self.tokenizer.borrow().find(self.syntax_cursor, start_pos);
     }
 
     /// Sets the values of all banner attributes and draws it.
@@ -1531,45 +985,28 @@ impl Editor {
         if text.len() > 0 {
             // Most common use case is single-character insertions, so favor use of
             // more efficient buffer insertion in that case.
-            self.buffer_mut().set_pos(self.cur_pos);
-            let cur_pos = if text.len() == 1 {
-                self.buffer_mut().insert_char(text[0])
+            self.buffer_mut().set_pos(self.pos());
+            if text.len() == 1 {
+                self.buffer_mut().insert_char(text[0]);
             } else {
-                self.buffer_mut().insert(text)
-            };
+                self.buffer_mut().insert(text);
+            }
 
             // Log change to buffer.
             if log.is_some() {
-                self.log(Change::Insert(self.cur_pos, text.to_vec()));
+                self.log(Change::Insert(self.pos(), text.to_vec()));
                 self.clock = cmp::max(self.clock, self.commit_clock) + 1;
             }
 
             // Update tokenizer with insertion range.
             self.syntax_cursor = {
                 let mut tokenizer = self.tokenizer_mut();
-                let cursor = tokenizer.find(self.syntax_cursor, self.cur_pos);
+                let cursor = tokenizer.find(self.syntax_cursor, self.pos());
                 tokenizer.insert(cursor, text.len())
             };
 
-            // Update current line since insertion will have changed critical
-            // information for navigation. New cursor location follows inserted text,
-            // so need to find new current line. Top line must also be updated even if
-            // new cursor location is still visible because insertion may have changed
-            // its attributes as well.
-            self.cur_line = self.update_line(&self.cur_line);
-            let rows = self.find_down_cur_line(cur_pos);
-            let row = self.cursor.row + rows;
-            let row = if row < self.rows {
-                self.top_line = self.update_line(&self.top_line);
-                row
-            } else {
-                self.set_top_line(self.rows - 1)
-            };
-            self.cur_pos = cur_pos;
-            let (line_ofs, col) = self.cur_line.col_of(self.line_ofs, self.cur_pos, self.cols);
-            self.line_ofs = line_ofs;
-            self.snap_col = None;
-            self.cursor = Point::new(row, col);
+            // Inform renderer that text has been inserted,
+            self.render.insert(text.len());
             self.possibly_tokenize(false);
         }
     }
@@ -1579,37 +1016,26 @@ impl Editor {
     /// A `log` value of `None` indicates that the change is not recorded in the undo
     /// stack.
     fn remove_internal(&mut self, pos: usize, log: Option<Log>) -> Vec<char> {
-        if pos == self.cur_pos {
+        if pos == self.pos() {
             vec![]
         } else {
             // Form range depending on location of `pos` relative to current buffer
             // position.
+            let cur_pos = self.pos();
             let pos = cmp::min(pos, self.buffer().size());
-            let (from_pos, len) = if pos < self.cur_pos {
-                (pos, self.cur_pos - pos)
+            let (from_pos, len) = if pos < cur_pos {
+                // Prior to removing text, move cursor and buffer position to `pos`
+                // since it appears before current buffer position. This happens to be
+                // precondition for calling rendering remove function, which assumes
+                // range of removed text starts at current buffer position.
+                self.render.move_to(pos, Align::Auto);
+                (pos, cur_pos - pos)
             } else {
-                (self.cur_pos, pos - self.cur_pos)
+                (cur_pos, pos - cur_pos)
             };
 
-            // Find new current line which depends on location of `pos` relative to
-            // current buffer position. If prior to current position, this requires
-            // backtracking since intuition is that resulting cursor would be placed
-            // at that lower bound position. Conversely, if following current position,
-            // resulting cursor would stay on existing row.
-            let row = if from_pos < self.cur_pos {
-                let rows = self.find_up_cur_line(from_pos);
-                if rows > self.cursor.row {
-                    self.set_top_line(0)
-                } else {
-                    self.cursor.row - rows
-                }
-            } else {
-                self.cursor.row
-            };
-
-            // Note that buffer modification comes after finding new current line, and
-            // that common use case of single-character removal allows more efficient
-            // buffer function to be used.
+            // Common use case of single-character removal allows more efficient buffer
+            // function to be used.
             self.buffer_mut().set_pos(from_pos);
             let text = if len == 1 {
                 vec![self.buffer_mut().remove_char().unwrap()]
@@ -1621,17 +1047,17 @@ impl Editor {
             if let Some(log) = log {
                 match log {
                     Log::Normal => {
-                        self.log(if pos < self.cur_pos {
-                            Change::RemoveBefore(self.cur_pos, text.clone())
+                        self.log(if pos < cur_pos {
+                            Change::RemoveBefore(cur_pos, text.clone())
                         } else {
-                            Change::RemoveAfter(self.cur_pos, text.clone())
+                            Change::RemoveAfter(cur_pos, text.clone())
                         });
                     }
                     Log::Selection(soft) => {
-                        self.log(if pos < self.cur_pos {
-                            Change::RemoveSelectionBefore(self.cur_pos, text.clone(), soft)
+                        self.log(if pos < cur_pos {
+                            Change::RemoveSelectionBefore(cur_pos, text.clone(), soft)
                         } else {
-                            Change::RemoveSelectionAfter(self.cur_pos, text.clone(), soft)
+                            Change::RemoveSelectionAfter(cur_pos, text.clone(), soft)
                         });
                     }
                 }
@@ -1645,15 +1071,8 @@ impl Editor {
                 tokenizer.remove(cursor, text.len())
             };
 
-            // Removal of text requires current and top lines to be updated since may
-            // have changed.
-            self.cur_line = self.update_line(&self.cur_line);
-            self.top_line = self.update_line(&self.top_line);
-            self.cur_pos = from_pos;
-            let (line_ofs, col) = self.cur_line.col_of(self.line_ofs, self.cur_pos, self.cols);
-            self.line_ofs = line_ofs;
-            self.snap_col = None;
-            self.cursor = Point::new(row, col);
+            // Inform renderer that text has been been removed.
+            self.render.remove();
             self.possibly_tokenize(false);
             text
         }
@@ -1676,10 +1095,10 @@ impl Editor {
 
     fn get_mark_range(&self, mark: Mark) -> Range<usize> {
         let Mark(pos, _) = mark;
-        if pos < self.cur_pos {
-            pos..self.cur_pos
+        if pos < self.pos() {
+            pos..self.pos()
         } else {
-            self.cur_pos..pos
+            self.pos()..pos
         }
     }
 
@@ -1782,286 +1201,6 @@ impl Editor {
         if self.undo.len() > UNDO_HARD_LIMIT {
             let n = self.undo.len() - UNDO_SOFT_LIMIT;
             self.undo.drain(0..n);
-        }
-    }
-
-    /// Sets `top_line` to `try_rows` before `cur_line` or possibly fewer if the top of
-    /// the buffer is reached, returning the actual number of rows moved.
-    fn set_top_line(&mut self, try_rows: u32) -> u32 {
-        self.top_line = self.cur_line.clone();
-        self.up_top_line(try_rows)
-    }
-
-    /// Moves `top_line` _up_ by `try_rows` or possibly fewer if the top of the buffer
-    /// is reached, returning the actual number of rows moved.
-    fn up_top_line(&mut self, try_rows: u32) -> u32 {
-        for rows in 0..try_rows {
-            if let Some(line) = self.prev_line(&self.top_line) {
-                self.top_line = line;
-            } else {
-                return rows;
-            }
-        }
-        try_rows
-    }
-
-    /// Moves `top_line` _down_ by `try_rows` or possibly fewer if the bottom of the
-    /// buffer is reached, returning the actual number of rows moved.
-    fn down_top_line(&mut self, try_rows: u32) -> u32 {
-        for rows in 0..try_rows {
-            if let Some(line) = self.next_line(&self.top_line) {
-                self.top_line = line;
-            } else {
-                return rows;
-            }
-        }
-        try_rows
-    }
-
-    /// Moves `cur_line` _up_ until the resulting line contains `pos`, returning the
-    /// total number of rows moved.
-    fn find_up_cur_line(&mut self, pos: usize) -> u32 {
-        let mut rows = 0;
-        while pos < self.cur_line.line_pos {
-            self.cur_line = self.prev_line_unchecked(&self.cur_line);
-            rows += 1;
-        }
-        rows
-    }
-
-    /// Moves `cur_line` _up_ by `try_rows` or possibly fewer if the top of the buffer
-    /// is reached, returning the actual number of rows moved.
-    fn up_cur_line(&mut self, try_rows: u32) -> u32 {
-        for rows in 0..try_rows {
-            if let Some(line) = self.prev_line(&self.cur_line) {
-                self.cur_line = line;
-            } else {
-                return rows;
-            }
-        }
-        try_rows
-    }
-
-    /// Moves `cur_line` _down_ by `try_rows` or possibly fewer if the bottom of the
-    /// buffer is reached, returning the actual number of rows moved.
-    fn down_cur_line(&mut self, try_rows: u32) -> u32 {
-        for rows in 0..try_rows {
-            if let Some(line) = self.next_line(&self.cur_line) {
-                self.cur_line = line;
-            } else {
-                return rows;
-            }
-        }
-        try_rows
-    }
-
-    /// Moves `cur_line` _down_ until the resulting line contains `pos`, returning the
-    /// total number of rows moved.
-    fn find_down_cur_line(&mut self, pos: usize) -> u32 {
-        let mut rows = 0;
-        while pos >= self.cur_line.end_pos() && !self.cur_line.is_bottom() {
-            self.cur_line = self.next_line_unchecked(&self.cur_line);
-            rows += 1;
-        }
-        rows
-    }
-
-    /// Finds and returns the display line corresponding to `pos`.
-    ///
-    /// This function is expensive because it must calculate the line number corresponding
-    /// to `pos` by performing a linear scan from the beginning of the buffer.
-    fn find_line(&self, pos: usize) -> Line {
-        let (line_pos, next_pos, line_bottom) = self.find_line_bounds(pos);
-        let line_len = next_pos - line_pos;
-        Line {
-            line_pos,
-            line_len,
-            line: nav::find_location(&self.buffer(), line_pos).line,
-            line_bottom,
-        }
-    }
-
-    /// Returns an updated `line` based on the assumption of underlying changes to
-    /// the buffer.
-    ///
-    /// Note that none of `line_pos` and `line` are modified as part of this update,
-    /// as those are presumed to have not changed.
-    ///
-    /// The rationale for this function is that an insertion or deletion of text is
-    /// always relative to the current line, and that such a change would never
-    /// alter the values noted above.
-    fn update_line(&self, line: &Line) -> Line {
-        let (next_pos, line_bottom) = nav::find_next_line(&self.buffer(), line.line_pos);
-        let line_len = next_pos - line.line_pos;
-        Line {
-            line_len,
-            line_bottom,
-            ..*line
-        }
-    }
-
-    /// Returns the line preceding `line`, or `None` if `line` is already at the
-    /// top of the buffer.
-    fn prev_line(&self, line: &Line) -> Option<Line> {
-        if line.is_top() {
-            None
-        } else {
-            let pos = line.line_pos - 1;
-            let (line_pos, next_pos, line_bottom) = self.find_line_bounds(pos);
-            let line_len = next_pos - line_pos;
-            let l = Line {
-                line_pos,
-                line_len,
-                line: line.line - 1,
-                line_bottom,
-            };
-            Some(l)
-        }
-    }
-
-    /// An unchecked version of [prev_line](Editor::prev_line) that assumes `line`
-    /// is not at the top of the buffer.
-    fn prev_line_unchecked(&self, line: &Line) -> Line {
-        self.prev_line(line)
-            .unwrap_or_else(|| panic!("line already at top of buffer"))
-    }
-
-    /// Returns the line following `line`, or `None` if `line` is already at the
-    /// bottom of the buffer.
-    fn next_line(&self, line: &Line) -> Option<Line> {
-        if line.is_bottom() {
-            None
-        } else {
-            let line_pos = line.line_pos + line.line_len;
-            let (next_pos, line_bottom) = nav::find_next_line(&self.buffer(), line_pos);
-            let line_len = next_pos - line_pos;
-            let l = Line {
-                line_pos,
-                line_len,
-                line: line.line + 1,
-                line_bottom,
-            };
-            Some(l)
-        }
-    }
-
-    /// An unchecked version of [next_line](Editor::next_line) that assumes `line`
-    /// is not at the bottom of the buffer.
-    fn next_line_unchecked(&self, line: &Line) -> Line {
-        self.next_line(line)
-            .unwrap_or_else(|| panic!("line already at bottom of buffer"))
-    }
-
-    /// Returns a tuple, relative to the buffer line corresponding to `pos`, containing
-    /// the position of the first character on that line, the position of the first
-    /// character of the next line, and a boolean value indicating if the end of buffer
-    /// has been reached.
-    fn find_line_bounds(&self, pos: usize) -> (usize, usize, bool) {
-        let buffer = self.buffer.borrow();
-        let line_pos = nav::find_start_line(&buffer, pos);
-        let (next_pos, line_bottom) = nav::find_next_line(&buffer, pos);
-        (line_pos, next_pos, line_bottom)
-    }
-
-    /// Renders an individual cell for the character `c`, returning the next rendering
-    /// context or `None` if rendering has finished.
-    fn render_cell(&self, draw: &Draw, render: Render, c: char) -> Option<Render> {
-        self.render_margin(draw, &render);
-        let window = self.window.borrow();
-        // we should borrow only once
-        let mut canvas = window.canvas.borrow_mut();
-        let (row, col) = (render.row, render.col + self.margin_cols());
-        let render = if c == '\n' {
-            if render.col < self.cols {
-                // only render if text is still visible
-                canvas.set_cell(row, col, draw.as_text(c, &render));
-                canvas.fill_cell_from(row, col + 1, draw.as_text(' ', &render));
-            } else {
-                // do nothing
-            }
-            render.next_line()
-        } else {
-            if render.pos >= render.start_pos && render.col < self.cols {
-                // only render if text is visible
-                canvas.set_cell(row, col, draw.as_text(c, &render));
-            } else {
-                // do nothing
-            }
-            render.next_col()
-        };
-        if render.row < self.rows {
-            Some(render)
-        } else {
-            None
-        }
-    }
-
-    /// Renders the remainder of the displayable area which is considered empty space.
-    ///
-    /// This function gets invoked when the end of buffer is reached before the entire
-    /// canvas is rendered.
-    fn render_rest(&self, draw: &Draw, render: Render) {
-        self.render_margin(draw, &render);
-        let window = self.window.borrow();
-        let mut canvas = window.canvas.borrow_mut();
-
-        // Blank out rest of existing row.
-        let (row, col) = (render.row, render.col + self.margin_cols());
-        canvas.fill_cell_from(row, col, draw.as_text(' ', &render));
-
-        // Blank out remaining rows.
-        for row in (render.row + 1)..self.rows {
-            if self.margin_enabled {
-                canvas.fill_cell(row, 0..Self::MARGIN_COLS, draw.as_margin(' '));
-            }
-            canvas.fill_cell_from(row, Self::MARGIN_COLS, draw.as_blank());
-        }
-    }
-
-    /// Renders the margin if line numbering is enabled and the rendering context is
-    /// on the first column of any row.
-    fn render_margin(&self, draw: &Draw, render: &Render) {
-        if render.col == 0 && self.margin_enabled {
-            let window = self.window.borrow();
-            let mut canvas = window.canvas.borrow_mut();
-            if render.line < Self::LINE_LIMIT {
-                let s = format!(
-                    "{:>cols$} ",
-                    render.line,
-                    cols = Self::MARGIN_COLS as usize - 1
-                );
-                for (col, c) in s.char_indices() {
-                    canvas.set_cell(render.row, col as u32, draw.as_line(c, render.line));
-                }
-            } else {
-                canvas.fill_cell(
-                    render.row,
-                    0..Self::CLIP_UPPER_COLS,
-                    draw.as_line('-', render.line),
-                );
-                let s = format!(
-                    "{:0>cols$}",
-                    render.line % 10_u32.pow(Self::CLIP_LOWER_COLS),
-                    cols = Self::CLIP_LOWER_COLS as usize,
-                );
-                for (col, c) in s.char_indices() {
-                    canvas.set_cell(
-                        render.row,
-                        col as u32 + Self::CLIP_UPPER_COLS,
-                        draw.as_line(c, render.line),
-                    );
-                }
-                canvas.set_cell(render.row, Self::MARGIN_COLS, draw.as_margin(' '));
-            }
-        }
-    }
-
-    #[inline]
-    fn margin_cols(&self) -> u32 {
-        if self.margin_enabled {
-            Self::MARGIN_COLS
-        } else {
-            0
         }
     }
 }
