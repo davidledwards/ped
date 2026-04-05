@@ -7,7 +7,7 @@
 use crate::buffer::{Buffer, BufferRef};
 use crate::config::ConfigurationRef;
 use crate::nav::{self, Location};
-use crate::render::Renderer;
+use crate::render::{Align, Renderer};
 use crate::search::Pattern;
 use crate::size::{Point, Size};
 use crate::source::Source;
@@ -145,24 +145,6 @@ enum Log {
     /// Indicates that a selection was active when the change was made, where the
     /// value is `true` if it was a _soft_ mark and `false` if a _hard_ mark.
     Selection(bool),
-}
-
-/// Cursor alignment directives.
-pub enum Align {
-    /// Try aligning the cursor based on its contextual use.
-    Auto,
-
-    /// Try aligning the cursor in the center of the window.
-    Center,
-
-    /// Try aligning the cursor at the top of the window.
-    Top,
-
-    /// Try aligning the cursor at the bottom of the window.
-    Bottom,
-
-    /// Try aligning the cursot at the specified row.
-    Row(u32),
 }
 
 /// Marks the starting point of a selection in the buffer.

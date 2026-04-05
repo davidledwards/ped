@@ -12,12 +12,13 @@
 use crate::clip::Scope;
 use crate::config::ConfigurationRef;
 use crate::ed;
-use crate::editor::{Align, EditorRef};
+use crate::editor::EditorRef;
 use crate::env::{Environment, Focus};
 use crate::help;
 use crate::nav;
 use crate::operation::{Action, Operation};
 use crate::question;
+use crate::render::Align;
 use crate::search::Match;
 use crate::size::{Point, Size};
 use crate::source::Source;

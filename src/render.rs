@@ -5,7 +5,6 @@
 use crate::buffer::{Buffer, BufferRef};
 use crate::canvas::Canvas;
 use crate::config::ConfigurationRef;
-use crate::editor::Align;
 use crate::nav::{self, Location};
 use crate::size::{Point, Size};
 use crate::style::{Pen, Styler};
@@ -59,6 +58,24 @@ pub struct Renderer {
 
     /// Position of the cursor on the display.
     cursor: Point,
+}
+
+/// Cursor alignment directives.
+pub enum Align {
+    /// Try aligning the cursor based on its contextual use.
+    Auto,
+
+    /// Try aligning the cursor in the center of the window.
+    Center,
+
+    /// Try aligning the cursor at the top of the window.
+    Top,
+
+    /// Try aligning the cursor at the bottom of the window.
+    Bottom,
+
+    /// Try aligning the cursot at the specified row.
+    Row(u32),
 }
 
 /// A _row_ on the display that corresponds to a _line_ in the buffer.

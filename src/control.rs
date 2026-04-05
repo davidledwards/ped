@@ -10,7 +10,6 @@
 use crate::config::ConfigurationRef;
 use crate::echo::Echo;
 use crate::ed;
-use crate::editor::Align;
 use crate::env::{Environment, Focus};
 use crate::error::Result;
 use crate::etc::{PACKAGE_NAME, PACKAGE_VERSION};
@@ -19,6 +18,7 @@ use crate::key::{self, CTRL_G, Key, Keyboard, Shift};
 use crate::op;
 use crate::operation::Action;
 use crate::opt::File;
+use crate::render::Align;
 use crate::size::Point;
 use crate::sys::{self, AsString};
 use crate::term;

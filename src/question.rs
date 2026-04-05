@@ -2,11 +2,12 @@
 
 use crate::config::ConfigurationRef;
 use crate::ed;
-use crate::editor::{Align, Capture, EditorRef};
+use crate::editor::{Capture, EditorRef};
 use crate::env::{Environment, Focus};
 use crate::key::{Key, SHIFT_TAB, TAB};
 use crate::nav::Location;
 use crate::operation::Action;
+use crate::render::Align;
 use crate::search::{self, Match, Pattern};
 use crate::source::Source;
 use crate::sys;

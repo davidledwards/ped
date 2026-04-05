@@ -5,7 +5,8 @@
 //! not only to simplify operations, but more importantly, to enforce certain invariants.
 
 use crate::clip::Clipboard;
-use crate::editor::{Align, EditorBuilder, EditorRef};
+use crate::editor::{EditorBuilder, EditorRef};
+use crate::render::Align;
 use crate::source::Source;
 use crate::window::{BannerRef, WindowRef};
 use crate::workspace::{Placement, WorkspaceRef};
