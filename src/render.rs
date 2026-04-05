@@ -1,6 +1,4 @@
-//! Text rendering strategies.
-//!
-//! Provides _wrapping_ and _scrolling_ implementations.
+//! Provides text rendering engines.
 
 use crate::buffer::BufferRef;
 use crate::config::ConfigurationRef;
@@ -10,36 +8,133 @@ use crate::token::{Cursor, Tokenizer};
 use crate::window::WindowRef;
 use std::ops::Range;
 
+/// A trait that all rendering engines are required to implement.
 pub trait Renderer {
+    /// Returns the kind of renderer.
     fn kind(&self) -> Rendering;
+
+    /// Attaches `window` to this renderer.
     fn attach(&mut self, window: WindowRef);
+
+    /// Detaches the existing window from this renderer, replacing it with a _zombie_
+    /// window.
     fn detach(&mut self);
+
+    /// Returns `true` if a normal window is attached or `false` if the attached window
+    /// is a _zombie_.
     fn is_attached(&self) -> bool;
+
+    /// Returns the number of rows on the display.
     fn rows(&self) -> u32;
+
+    /// Returns the size of the display.
     fn size(&self) -> Size;
+
+    /// Returns the buffer position corresponding to the [`cursor`](Self::cursor).
     fn pos(&self) -> usize;
+
+    /// Returns the cursor position on the display in terms of _row_ and _column_.
+    ///
+    /// The _row_ and _column_ values are `0`-based and exclusively bounded by
+    /// [`size()`](Self::size).
     fn cursor(&self) -> Point;
+
+    /// Returns the location of the cursor position in the buffer.
     fn location(&self) -> Location;
+
+    /// Returns the starting (_inclusive_) and ending (_exclusive_) buffer positions
+    /// of the line occupied by the cursor.
     fn line(&self) -> (usize, usize);
+
+    /// Returns the starting (_inclusive_) and ending (_exclusive_) buffer positions
+    /// of the line at the top of the display.
     fn top(&self) -> (usize, usize);
+
+    /// Sets the cursor location and corresponding buffer position to `cursor`, though
+    /// the final cursor location is constrained by end-of-line and end-of-buffer
+    /// boundaries.
+    ///
+    /// This function was designed for responding to _mouse click_ events where the
+    /// position of the click is captured in `cursor`.
+    ///
+    /// The coordinates in `cursor` are presumed to be relative to the origin of the
+    /// editor canvas.
     fn focus_cursor(&mut self, cursor: Point);
+
+    /// Sets the position of the cursor based on the alignment objective `align`.
     fn align_cursor(&mut self, align: Align);
+
+    /// Makes the cursor visible on display.
     fn show_cursor(&mut self);
+
+    /// Tries to move the cursor _up_ by the specified number of `try_rows`,
+    /// returning the actual number of rows moved.
+    ///
+    /// If `pin` is `true`, then the cursor will remain on the current row if the
+    /// resulting display makes it possible. Pinning is useful when _paging up_.
+    ///
+    /// If `pin` is `false`, then the cursor will move up in tandem with `try_rows`,
+    /// though not to extend beyond the top of the display.
     fn move_up(&mut self, try_rows: u32, pin: bool) -> u32;
+
+    /// Tries to move the cursor _down_ by the specified number of `try_rows`,
+    /// returning the actual number of rows moved.
+    ///
+    /// If `pin` is `true`, then the cursor will remain on the current row. Pinning is
+    /// useful when _paging down_.
+    ///
+    /// If `pin` is `false`, then the cursor will move down in tandem with `try_rows`,
+    /// though not to extend beyond the bottom of the display.
     fn move_down(&mut self, try_rows: u32, pin: bool) -> u32;
+
+    /// Moves the cursor to the _start_ of the current row.
     fn move_start(&mut self);
+
+    /// Moves the cursor to the _end_ of the current row.
     fn move_end(&mut self);
+
+    /// Moves the current buffer position to `pos` and places the cursor on the
+    /// display according to the `align` objective.
+    ///
+    /// When [`Align::Auto`] is specified, the placement of the cursor depends on
+    /// the target `pos` relative to the current buffer position. Specifically, it
+    /// behaves as follows:
+    /// - _when `pos` is above the current row but still visible on the display_:
+    ///   aligns the cursor on the target row above the current row, though not to
+    ///   extend beyond the top row
+    /// - _when `pos` is on the current row_: aligns the cursor on the current row
+    /// - _when `pos` is beyond the current row_: aligns the cursor on the target
+    ///   row below the current row, though not to extend beyond the bottom row
     fn move_to(&mut self, pos: usize, align: Align);
+
+    /// Tries scrolling _up_ the contents of the display by the specified number of
+    /// `try_rows` while preserving the cursor position, which also means the cursor
+    /// moves _up_ as the contents scroll, returning the actual number of rows
+    /// scrolled.
     fn scroll_up(&mut self, try_rows: u32) -> u32;
+
+    /// Tries scrolling _down_ the contents of the display by the specified number of
+    /// `try_rows` while preserving the cursor position, which also means the cursor
+    /// moves _down_ as the contents scroll, returning the actual number of rows
+    /// scrolled.
     fn scroll_down(&mut self, try_rows: u32) -> u32;
+
+    /// Moves the current buffer position and cursor location to reflect the insertion
+    /// of `len` characters at the current buffer position.
+    ///
+    /// This function assumes that the text has already been inserted into the buffer as
+    /// a precondition.
     fn insert(&mut self, len: usize);
+
+    /// Moves the cursor location to reflect the removal of characters at the current
+    /// buffer position.
+    ///
+    /// This function assumes that the text has already been removed from the buffer as
+    /// a precondition.
     fn remove(&mut self);
-    fn render(
-        &mut self,
-        tokenizer: &Tokenizer,
-        syntax_cursor: Cursor,
-        selected: Option<Range<usize>>,
-    );
+
+    /// Renders the display.
+    fn render(&mut self, tok: &Tokenizer, syn: Cursor, selected: Option<Range<usize>>);
 }
 
 /// The types of rendering engines.
@@ -71,6 +166,7 @@ pub enum Align {
 }
 
 impl Rendering {
+    /// Create a new rendering engine.
     pub fn new(&self, config: ConfigurationRef, buffer: BufferRef) -> Box<dyn Renderer> {
         match self {
             Self::Wrapping => Box::new(wrapping::Engine::new(config, buffer)),
@@ -93,6 +189,7 @@ const CLIP_LOWER_COLS: u32 = MARGIN_COLS / 2;
 /// must be clipped when larger than `LINE_LIMIT`.
 const CLIP_UPPER_COLS: u32 = MARGIN_COLS - CLIP_LOWER_COLS - 1;
 
+/// This module implements the [wrapping](Rendering::Wrapping) engine.
 mod wrapping {
     use super::*;
     use crate::buffer::Buffer;
@@ -191,10 +288,10 @@ mod wrapping {
         /// Reference to the tokenizer used for syntax coloring.
         ///
         /// This value does not change during the rendering process.
-        tokenizer: &'a Tokenizer,
+        tok: &'a Tokenizer,
 
         /// Current rendering syntax cursor.
-        syntax_cursor: Cursor,
+        syn: Cursor,
     }
 
     impl Row {
@@ -467,22 +564,22 @@ mod wrapping {
 
     impl<'a> Spot<'a> {
         /// Creates a spot representing the top-left position on the display.
-        fn new(engine: &Engine, tokenizer: &'a Tokenizer, syntax_cursor: Cursor) -> Spot<'a> {
+        fn new(engine: &Engine, tok: &'a Tokenizer, syn: Cursor) -> Spot<'a> {
             Spot {
                 pos: engine.top_row.row_pos,
                 row: 0,
                 col: 0,
                 line: engine.top_row.line + 1,
                 line_wrapped: false,
-                tokenizer,
-                syntax_cursor,
+                tok,
+                syn,
             }
         }
 
         fn next_col(mut self) -> Spot<'a> {
             self.pos += 1;
             self.col += 1;
-            self.syntax_cursor = self.tokenizer.forward(self.syntax_cursor, 1);
+            self.syn = self.tok.forward(self.syn, 1);
             self
         }
 
@@ -491,7 +588,7 @@ mod wrapping {
             self.row += 1;
             self.col = 0;
             self.line_wrapped = true;
-            self.syntax_cursor = self.tokenizer.forward(self.syntax_cursor, 1);
+            self.syn = self.tok.forward(self.syn, 1);
             self
         }
 
@@ -501,7 +598,7 @@ mod wrapping {
             self.col = 0;
             self.line += 1;
             self.line_wrapped = false;
-            self.syntax_cursor = self.tokenizer.forward(self.syntax_cursor, 1);
+            self.syn = self.tok.forward(self.syn, 1);
             self
         }
     }
@@ -540,7 +637,7 @@ mod wrapping {
         ) -> Option<Spot<'a>> {
             self.render_margin(pen, &spot, canvas);
             let (row, col) = (spot.row, spot.col + self.margin_cols());
-            let color = spot.syntax_cursor.color();
+            let color = spot.syn.color();
             let spot = if c == '\n' {
                 canvas.set_cell(row, col, pen.as_text(c, spot.pos, row, color));
                 canvas.fill_cell_from(row, col + 1, pen.as_text(' ', spot.pos, row, color));
@@ -569,7 +666,7 @@ mod wrapping {
 
             // Blank out rest of existing row.
             let (row, col) = (spot.row, spot.col + self.margin_cols());
-            let color = spot.syntax_cursor.color();
+            let color = spot.syn.color();
             canvas.fill_cell_from(row, col, pen.as_text(' ', spot.pos, spot.row, color));
 
             // Blank out remaining rows.
@@ -1001,20 +1098,16 @@ mod wrapping {
             self.cursor.col = col;
         }
 
-        fn render(
-            &mut self,
-            tokenizer: &Tokenizer,
-            syntax_cursor: Cursor,
-            selected: Option<Range<usize>>,
-        ) {
+        fn render(&mut self, tok: &Tokenizer, syn: Cursor, selected: Option<Range<usize>>) {
             // Create pen to format characters.
             let pen = self
                 .styler
                 .pen(self.cursor, self.top_row.line + 1, selected);
 
             // Initialize spot representing top-left cell.
-            let spot = Spot::new(self, tokenizer, syntax_cursor);
+            let spot = Spot::new(self, tok, syn);
 
+            // Borrow canvas once and pass to rendering functions to optimize.
             let window = self.window.borrow();
             let mut canvas = window.canvas.borrow_mut();
 
@@ -1034,6 +1127,7 @@ mod wrapping {
     }
 }
 
+/// This module implements the [scrolling](Rendering::Scrolling) engine.
 mod scrolling {
     use super::*;
     use crate::buffer::Buffer;
@@ -1132,10 +1226,10 @@ mod scrolling {
         /// Reference to the tokenizer used for syntax coloring.
         ///
         /// This value does not change during the rendering process.
-        tokenizer: &'a Tokenizer,
+        tok: &'a Tokenizer,
 
         /// Current rendering syntax cursor.
-        syntax_cursor: Cursor,
+        syn: Cursor,
     }
 
     impl Row {
@@ -1373,7 +1467,7 @@ mod scrolling {
 
     impl<'a> Spot<'a> {
         /// Creates a spot representing the top-left position on the display.
-        fn new(engine: &Engine, tokenizer: &'a Tokenizer, syntax_cursor: Cursor) -> Spot<'a> {
+        fn new(engine: &Engine, tok: &'a Tokenizer, syn: Cursor) -> Spot<'a> {
             let offset = engine.offset;
             let pos = engine.top_row.line_pos;
             Spot {
@@ -1383,8 +1477,8 @@ mod scrolling {
                 row: 0,
                 col: 0,
                 line: engine.top_row.line + 1,
-                tokenizer,
-                syntax_cursor,
+                tok,
+                syn,
             }
         }
 
@@ -1395,7 +1489,7 @@ mod scrolling {
             } else {
                 0
             };
-            self.syntax_cursor = self.tokenizer.forward(self.syntax_cursor, 1);
+            self.syn = self.tok.forward(self.syn, 1);
             self
         }
 
@@ -1405,7 +1499,7 @@ mod scrolling {
             self.row += 1;
             self.col = 0;
             self.line += 1;
-            self.syntax_cursor = self.tokenizer.forward(self.syntax_cursor, 1);
+            self.syn = self.tok.forward(self.syn, 1);
             self
         }
     }
@@ -1445,7 +1539,7 @@ mod scrolling {
         ) -> Option<Spot<'a>> {
             self.render_margin(pen, &spot, canvas);
             let (row, col) = (spot.row, spot.col + self.margin_cols());
-            let color = spot.syntax_cursor.color();
+            let color = spot.syn.color();
             let spot = if c == '\n' {
                 if spot.pos < spot.start_pos {
                     // Character is left of left margin, hnece not visible, so just
@@ -1482,7 +1576,7 @@ mod scrolling {
 
             // Blank out rest of existing row.
             let (row, col) = (spot.row, spot.col + self.margin_cols());
-            let color = spot.syntax_cursor.color();
+            let color = spot.syn.color();
             canvas.fill_cell_from(row, col, pen.as_text(' ', spot.pos, spot.row, color));
 
             // Blank out remaining rows.
@@ -1606,7 +1700,6 @@ mod scrolling {
             Rendering::Scrolling
         }
 
-        /// Attaches `window` to this renderer.
         fn attach(&mut self, window: WindowRef) {
             // Allocate leftmost columns of window to line numbers, but only if enabled and
             // total width of window is large enough to reasonably accommodate.
@@ -1617,14 +1710,10 @@ mod scrolling {
             self.cols = cols - self.margin_cols();
         }
 
-        /// Detaches the existing window from this renderer, replacing it with a _zombie_
-        /// window.
         fn detach(&mut self) {
             self.attach(Window::zombie().into_ref());
         }
 
-        /// Returns `true` if a normal window is attached or `false` if the attached window
-        /// is a _zombie_.
         fn is_attached(&self) -> bool {
             !self.window.borrow().is_zombie()
         }
@@ -1634,34 +1723,25 @@ mod scrolling {
             self.rows
         }
 
-        /// Returns the size of the display.
         fn size(&self) -> Size {
             Size::new(self.rows, self.cols)
         }
 
-        /// Returns the buffer position corresponding to the [`cursor`](Self::cursor).
         #[inline(always)]
         fn pos(&self) -> usize {
             self.pos
         }
 
-        /// Returns the cursor position on the display in terms of _row_ and _column_.
-        ///
-        /// The _row_ and _column_ values are `0`-based and exclusively bounded by
-        /// [`size()`](Self::size).
         #[inline(always)]
         fn cursor(&self) -> Point {
             self.cursor
         }
 
-        /// Returns the location of the cursor position in the buffer.
         #[inline(always)]
         fn location(&self) -> Location {
             Location::new(self.cur_row.line, (self.offset as u32) + self.cursor.col)
         }
 
-        /// Returns the starting (_inclusive_) and ending (_exclusive_) buffer positions
-        /// of the line occupied by the cursor.
         #[inline]
         fn line(&self) -> (usize, usize) {
             (
@@ -1670,8 +1750,6 @@ mod scrolling {
             )
         }
 
-        /// Returns the starting (_inclusive_) and ending (_exclusive_) buffer positions
-        /// of the line at the top of the display.
         #[inline]
         fn top(&self) -> (usize, usize) {
             (
@@ -1680,15 +1758,6 @@ mod scrolling {
             )
         }
 
-        /// Sets the cursor location and corresponding buffer position to `cursor`, though
-        /// the final cursor location is constrained by end-of-line and end-of-buffer
-        /// boundaries.
-        ///
-        /// This function was designed for responding to _mouse click_ events where the
-        /// position of the click is captured in `cursor`.
-        ///
-        /// The coordinates in `cursor` are presumed to be relative to the origin of the
-        /// editor canvas.
         fn focus_cursor(&mut self, cursor: Point) {
             // Ensure target cursor is bounded by effective area of canvas, which takes
             // into account left margin if enabled.
@@ -1710,7 +1779,6 @@ mod scrolling {
             self.cursor = Point::new(row, col);
         }
 
-        /// Sets the position of the cursor based on the alignment objective `align`.
         fn align_cursor(&mut self, align: Align) {
             // Determine ideal row where cursor would like to be focused, though this should
             // be considered a hint.
@@ -1734,7 +1802,6 @@ mod scrolling {
             self.cursor = Point::new(row, col);
         }
 
-        /// Makes the cursor visible on display.
         fn show_cursor(&mut self) {
             let cursor = if self.margin_enabled {
                 self.cursor + Size::cols(MARGIN_COLS)
@@ -1744,14 +1811,6 @@ mod scrolling {
             self.window.borrow().canvas.borrow_mut().set_cursor(cursor);
         }
 
-        /// Tries to move the cursor _up_ by the specified number of `try_rows`,
-        /// returning the actual number of rows moved.
-        ///
-        /// If `pin` is `true`, then the cursor will remain on the current row if the
-        /// resulting display makes it possible. Pinning is useful when _paging up_.
-        ///
-        /// If `pin` is `false`, then the cursor will move up in tandem with `try_rows`,
-        /// though not to extend beyond the top of the display.
         fn move_up(&mut self, try_rows: u32, pin: bool) -> u32 {
             let rows = self.up_cur_row(try_rows);
             if rows > 0 {
@@ -1783,14 +1842,6 @@ mod scrolling {
             rows
         }
 
-        /// Tries to move the cursor _down_ by the specified number of `try_rows`,
-        /// returning the actual number of rows moved.
-        ///
-        /// If `pin` is `true`, then the cursor will remain on the current row. Pinning is
-        /// useful when _paging down_.
-        ///
-        /// If `pin` is `false`, then the cursor will move down in tandem with `try_rows`,
-        /// though not to extend beyond the bottom of the display.
         fn move_down(&mut self, try_rows: u32, pin: bool) -> u32 {
             let rows = self.down_cur_row(try_rows);
             if rows > 0 {
@@ -1817,28 +1868,14 @@ mod scrolling {
             rows
         }
 
-        /// Moves the cursor to the _start_ of the current row.
         fn move_start(&mut self) {
             self.move_to(self.cur_row.line_pos, Align::Row(self.cursor.row));
         }
 
-        /// Moves the cursor to the _end_ of the current row.
         fn move_end(&mut self) {
             self.move_to(self.cur_row.end_col_pos(), Align::Row(self.cursor.row));
         }
 
-        /// Moves the current buffer position to `pos` and places the cursor on the
-        /// display according to the `align` objective.
-        ///
-        /// When [`Align::Auto`] is specified, the placement of the cursor depends on
-        /// the target `pos` relative to the current buffer position. Specifically, it
-        /// behaves as follows:
-        /// - _when `pos` is above the current row but still visible on the display_:
-        ///   aligns the cursor on the target row above the current row, though not to
-        ///   extend beyond the top row
-        /// - _when `pos` is on the current row_: aligns the cursor on the current row
-        /// - _when `pos` is beyond the current row_: aligns the cursor on the target
-        ///   row below the current row, though not to extend beyond the bottom row
         fn move_to(&mut self, pos: usize, align: Align) {
             let row = if pos < self.top_row.line_pos {
                 let _ = self.find_up_cur_row(pos);
@@ -1894,10 +1931,6 @@ mod scrolling {
             self.cursor = Point::new(row, col);
         }
 
-        /// Tries scrolling _up_ the contents of the display by the specified number of
-        /// `try_rows` while preserving the cursor position, which also means the cursor
-        /// moves _up_ as the contents scroll, returning the actual number of rows
-        /// scrolled.
         fn scroll_up(&mut self, try_rows: u32) -> u32 {
             let rows = self.down_top_row(try_rows);
             if rows > 0 {
@@ -1921,10 +1954,6 @@ mod scrolling {
             rows
         }
 
-        /// Tries scrolling _down_ the contents of the display by the specified number of
-        /// `try_rows` while preserving the cursor position, which also means the cursor
-        /// moves _down_ as the contents scroll, returning the actual number of rows
-        /// scrolled.
         fn scroll_down(&mut self, try_rows: u32) -> u32 {
             let rows = self.up_top_row(try_rows);
             if rows > 0 {
@@ -1949,11 +1978,6 @@ mod scrolling {
             rows
         }
 
-        /// Moves the current buffer position and cursor location to reflect the insertion
-        /// of `len` characters at the current buffer position.
-        ///
-        /// This function assumes that the text has already been inserted into the buffer as
-        /// a precondition.
         fn insert(&mut self, len: usize) {
             if len > 0 {
                 // Buffer position moves forward.
@@ -1981,11 +2005,6 @@ mod scrolling {
             }
         }
 
-        /// Moves the cursor location to reflect the removal of characters at the current
-        /// buffer position.
-        ///
-        /// This function assumes that the text has already been removed from the buffer as
-        /// a precondition.
         fn remove(&mut self) {
             // Removal of text requires both current row and top row to be updated since
             // boundaries may have changed.
@@ -1997,21 +2016,16 @@ mod scrolling {
             self.cursor.col = col;
         }
 
-        /// Renders the display.
-        fn render(
-            &mut self,
-            tokenizer: &Tokenizer,
-            syntax_cursor: Cursor,
-            selected: Option<Range<usize>>,
-        ) {
+        fn render(&mut self, tok: &Tokenizer, syn: Cursor, selected: Option<Range<usize>>) {
             // Create pen to format characters.
             let pen = self
                 .styler
                 .pen(self.cursor, self.top_row.line + 1, selected);
 
             // Initialize spot representing top-left cell.
-            let spot = Spot::new(self, tokenizer, syntax_cursor);
+            let spot = Spot::new(self, tok, syn);
 
+            // Borrow canvas once and pass to rendering functions to optimize.
             let window = self.window.borrow();
             let mut canvas = window.canvas.borrow_mut();
 
