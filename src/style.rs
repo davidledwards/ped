@@ -58,8 +58,8 @@ impl Styler {
     /// State provided by caller:
     /// - `cursor`: current cursor position on display
     /// - `line`: current `1`-based line number in buffer
-    /// - `selected`: region of text if selected, otherwise assumed to `0`..`0`
-    pub fn pen(&self, cursor: Point, line: u32, selected: Range<usize>) -> Pen<'_> {
+    /// - `selected`: an optional region of selected text
+    pub fn pen(&self, cursor: Point, line: u32, selected: Option<Range<usize>>) -> Pen<'_> {
         Pen::new(self, cursor, line, selected)
     }
 }
@@ -74,12 +74,17 @@ impl<'a> Pen<'a> {
     /// Special character shown for all other ASCII control characters.
     const CTRL_CHAR: char = '\u{00bf}';
 
-    fn new(styler: &'a Styler, cursor: Point, line: u32, selected: Range<usize>) -> Pen<'a> {
+    fn new(
+        styler: &'a Styler,
+        cursor: Point,
+        line: u32,
+        selected: Option<Range<usize>>,
+    ) -> Pen<'a> {
         Pen {
             styler,
             cursor,
             line,
-            selected,
+            selected: selected.unwrap_or(0..0),
         }
     }
 

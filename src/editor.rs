@@ -1,13 +1,12 @@
 //! Provides a core set of editing functions over a buffer and an attachable window.
 //!
 //! An editor coordinates changes to and movement within a buffer and renders those
-//! effects on the display of an attached window. A majority of the work in this module
-//! is focused on display rendering.
+//! effects on the display of an attached window.
 
 use crate::buffer::{Buffer, BufferRef};
 use crate::config::ConfigurationRef;
 use crate::nav::{self, Location};
-use crate::render::{self, Align, Renderer};
+use crate::render::{Align, Renderer, Rendering};
 use crate::search::Pattern;
 use crate::size::{Point, Size};
 use crate::source::Source;
@@ -31,7 +30,7 @@ pub struct Editor {
     /// Buffer containing the contents of this editor.
     buffer: BufferRef,
 
-    /// The rendering engine.
+    /// An instance of the rendering engine.
     rendering: Box<dyn Renderer>,
 
     /// A value of `true` implies that _mutable_ operations are not allowed, though
@@ -101,6 +100,9 @@ pub struct EditorBuilder {
 
     /// Defaults to `false`.
     readonly: bool,
+
+    /// Defaults to `Rendering::Wrapping`.
+    rendering: Rendering,
 }
 
 /// The distinct types of changes to a buffer recorded in the _undo_ and _redo_ stacks.
@@ -208,6 +210,7 @@ impl EditorBuilder {
             source: Source::Null,
             buffer: None,
             readonly: false,
+            rendering: Rendering::Wrapping,
         }
     }
 
@@ -226,8 +229,19 @@ impl EditorBuilder {
         self
     }
 
+    pub fn rendering(mut self, rendering: Rendering) -> EditorBuilder {
+        self.rendering = rendering;
+        self
+    }
+
     pub fn build(self) -> Editor {
-        Editor::new(self.config, self.source, self.buffer, self.readonly)
+        Editor::new(
+            self.config,
+            self.source,
+            self.buffer,
+            self.readonly,
+            self.rendering,
+        )
     }
 }
 
@@ -236,20 +250,21 @@ impl Editor {
     /// buffer in real-time, otherwise the operation is deferred.
     const TOKENIZE_COST_LIMIT: u128 = 50;
 
-    /// Creates a new, possibly `readonly`, editor using `source` and an optional `buffer`,
-    /// which if `None` automatically creates an empty buffer.
+    /// Creates a new, possibly `readonly` editor using `source`, an optional `buffer`
+    /// which if `None` automatically creates an empty buffer, and the specified
+    /// `rendering` engine.
     fn new(
         config: ConfigurationRef,
         source: Source,
         buffer: Option<Buffer>,
         readonly: bool,
+        rendering: Rendering,
     ) -> Editor {
         // Create emoty buffer if necessary.
         let buffer = buffer.unwrap_or_default().into_ref();
 
         // Create renderer with unattached window.
-        let rendering = render::scrolling(config.clone(), buffer.clone());
-        // let rendering = render::wrapping(config.clone(), buffer.clone());
+        let rendering = rendering.new(config.clone(), buffer.clone());
 
         // Constructs syntax configuration based on type of buffer and file extension,
         // if applicable.
@@ -321,6 +336,7 @@ impl Editor {
             self.source.clone(),
             None,
             self.readonly,
+            self.rendering.kind(),
         );
     }
 
@@ -332,10 +348,17 @@ impl Editor {
     pub fn duplicate(&self, source: Source) -> Editor {
         let mut buffer = self.buffer().clone();
         buffer.set_pos(self.pos());
-        Self::new(self.config.clone(), source, Some(buffer), false)
+        Self::new(
+            self.config.clone(),
+            source,
+            Some(buffer),
+            false,
+            self.rendering.kind(),
+        )
     }
 
     /// Returns a reference to the source.
+    #[inline]
     pub fn source(&self) -> &Source {
         &self.source
     }
@@ -346,12 +369,13 @@ impl Editor {
     }
 
     /// Returns a reference to the underlying buffer.
-    #[inline(always)]
+    #[inline]
     pub fn buffer(&self) -> Ref<'_, Buffer> {
         self.buffer.borrow()
     }
 
     /// Returns `true` if the buffer has changed.
+    #[inline]
     pub fn is_dirty(&self) -> bool {
         // It might seem reasonable to expect `clock > commit_clock` is more correct
         // when determining dirtiness of buffer since it would not make sense that
@@ -371,30 +395,31 @@ impl Editor {
     ///
     /// The _row_ and _column_ values are `0`-based and exclusively bounded by
     /// [`size()`](Self::size).
-    #[inline(always)]
+    #[inline]
     pub fn cursor(&self) -> Point {
         self.rendering.cursor()
     }
 
     /// Returns the location of the cursor position in the buffer.
-    #[inline(always)]
+    #[inline]
     pub fn location(&self) -> Location {
         self.rendering.location()
     }
 
     /// Returns the number of rows available on the editor canvas.
-    #[inline(always)]
+    #[inline]
     pub fn rows(&self) -> u32 {
         self.rendering.rows()
     }
 
     /// Returns the size of the editor canvas.
+    #[inline]
     pub fn size(&self) -> Size {
         self.rendering.size()
     }
 
     /// Returns the buffer position corresponding to the [`cursor`](Self::cursor).
-    #[inline(always)]
+    #[inline]
     pub fn pos(&self) -> usize {
         self.rendering.pos()
     }
@@ -431,19 +456,6 @@ impl Editor {
             .draw();
     }
 
-    /// Sets the cursor location and corresponding buffer position to `cursor`, though
-    /// the final cursor location is constrained by end-of-line and end-of-buffer
-    /// boundaries.
-    ///
-    /// This function was designed for responding to _mouse click_ events where the
-    /// position of the click is captured in `cursor`.
-    ///
-    /// The coordinates in `cursor` are presumed to be relative to the origin of the
-    /// editor canvas.
-    pub fn focus_cursor(&mut self, cursor: Point) {
-        self.rendering.focus_cursor(cursor);
-    }
-
     /// Attaches `window` to this editor and positions the cursor as instructed by
     /// `align`.
     pub fn attach(&mut self, window: WindowRef, align: Align) {
@@ -460,6 +472,19 @@ impl Editor {
     /// Detaches the existing window from this editor.
     pub fn detach(&mut self) {
         self.rendering.detach();
+    }
+
+    /// Sets the cursor location and corresponding buffer position to `cursor`, though
+    /// the final cursor location is constrained by end-of-line and end-of-buffer
+    /// boundaries.
+    ///
+    /// This function was designed for responding to _mouse click_ events where the
+    /// position of the click is captured in `cursor`.
+    ///
+    /// The coordinates in `cursor` are presumed to be relative to the origin of the
+    /// editor canvas.
+    pub fn focus_cursor(&mut self, cursor: Point) {
+        self.rendering.focus_cursor(cursor);
     }
 
     /// Sets the position of the cursor based on the alignment objective `align`.
@@ -767,20 +792,17 @@ impl Editor {
     /// Renders the contents of the editor.
     pub fn render(&mut self) {
         // Construct range for possibly selected text.
-        let select_span = self
-            .mark
-            .map(|Mark(mark_pos, _)| {
-                if mark_pos < self.pos() {
-                    mark_pos..self.pos()
-                } else {
-                    self.pos()..mark_pos
-                }
-            })
-            .unwrap_or(0..0);
+        let selected = self.mark.map(|Mark(mark_pos, _)| {
+            if mark_pos < self.pos() {
+                mark_pos..self.pos()
+            } else {
+                self.pos()..mark_pos
+            }
+        });
 
         // Render text.
         self.rendering
-            .render(&self.tokenizer.borrow(), self.syntax_cursor, select_span);
+            .render(&self.tokenizer.borrow(), self.syntax_cursor, selected);
 
         // Renders additional information.
         self.window
@@ -894,21 +916,6 @@ impl Editor {
     /// This function will return an empty vector if `pos` is equal to `cur_pos`.
     pub fn remove(&mut self, pos: usize) -> Vec<char> {
         self.remove_internal(pos, Some(Log::Normal))
-    }
-
-    #[inline]
-    fn buffer_mut(&self) -> RefMut<'_, Buffer> {
-        self.buffer.borrow_mut()
-    }
-
-    #[inline]
-    fn tokenizer(&self) -> Ref<'_, Tokenizer> {
-        self.tokenizer.borrow()
-    }
-
-    #[inline]
-    fn tokenizer_mut(&self) -> RefMut<'_, Tokenizer> {
-        self.tokenizer.borrow_mut()
     }
 
     /// Aligns the syntax cursor with the top line.
@@ -1076,6 +1083,7 @@ impl Editor {
         self.align_syntax();
     }
 
+    /// Returns buffer position range in `mark`.
     fn get_mark_range(&self, mark: Mark) -> Range<usize> {
         let Mark(pos, _) = mark;
         if pos < self.pos() {
@@ -1185,5 +1193,20 @@ impl Editor {
             let n = self.undo.len() - UNDO_SOFT_LIMIT;
             self.undo.drain(0..n);
         }
+    }
+
+    #[inline]
+    fn buffer_mut(&self) -> RefMut<'_, Buffer> {
+        self.buffer.borrow_mut()
+    }
+
+    #[inline]
+    fn tokenizer(&self) -> Ref<'_, Tokenizer> {
+        self.tokenizer.borrow()
+    }
+
+    #[inline]
+    fn tokenizer_mut(&self) -> RefMut<'_, Tokenizer> {
+        self.tokenizer.borrow_mut()
     }
 }

@@ -11,6 +11,7 @@ use crate::window::WindowRef;
 use std::ops::Range;
 
 pub trait Renderer {
+    fn kind(&self) -> Rendering;
     fn attach(&mut self, window: WindowRef);
     fn detach(&mut self);
     fn is_attached(&self) -> bool;
@@ -33,7 +34,22 @@ pub trait Renderer {
     fn scroll_down(&mut self, try_rows: u32) -> u32;
     fn insert(&mut self, len: usize);
     fn remove(&mut self);
-    fn render(&mut self, tokenizer: &Tokenizer, syntax_cursor: Cursor, selected: Range<usize>);
+    fn render(
+        &mut self,
+        tokenizer: &Tokenizer,
+        syntax_cursor: Cursor,
+        selected: Option<Range<usize>>,
+    );
+}
+
+/// The types of rendering engines.
+pub enum Rendering {
+    /// A rendering engine that wraps lines exceeding the width of the display.
+    Wrapping,
+
+    /// A rendering engine the scrolls text horizontally for lines exceeding the width of
+    /// the display.
+    Scrolling,
 }
 
 /// Cursor alignment directives.
@@ -54,12 +70,13 @@ pub enum Align {
     Row(u32),
 }
 
-pub fn wrapping(config: ConfigurationRef, buffer: BufferRef) -> Box<dyn Renderer> {
-    Box::new(wrapping::Rendering::new(config, buffer))
-}
-
-pub fn scrolling(config: ConfigurationRef, buffer: BufferRef) -> Box<dyn Renderer> {
-    Box::new(scrolling::Rendering::new(config, buffer))
+impl Rendering {
+    pub fn new(&self, config: ConfigurationRef, buffer: BufferRef) -> Box<dyn Renderer> {
+        match self {
+            Self::Wrapping => Box::new(wrapping::Engine::new(config, buffer)),
+            Self::Scrolling => Box::new(scrolling::Engine::new(config, buffer)),
+        }
+    }
 }
 
 /// Number of columns allocated to the margin.
@@ -86,7 +103,7 @@ mod wrapping {
     use std::cell::Ref;
     use std::cmp;
 
-    pub struct Rendering {
+    pub struct Engine {
         /// Global configuration.
         config: ConfigurationRef,
 
@@ -450,12 +467,12 @@ mod wrapping {
 
     impl<'a> Spot<'a> {
         /// Creates a spot representing the top-left position on the display.
-        fn new(rendering: &Rendering, tokenizer: &'a Tokenizer, syntax_cursor: Cursor) -> Spot<'a> {
+        fn new(engine: &Engine, tokenizer: &'a Tokenizer, syntax_cursor: Cursor) -> Spot<'a> {
             Spot {
-                pos: rendering.top_row.row_pos,
+                pos: engine.top_row.row_pos,
                 row: 0,
                 col: 0,
-                line: rendering.top_row.line + 1,
+                line: engine.top_row.line + 1,
                 line_wrapped: false,
                 tokenizer,
                 syntax_cursor,
@@ -489,13 +506,14 @@ mod wrapping {
         }
     }
 
-    impl Rendering {
-        /// Creates a new renderer with an unattached window using `config` and `buffer`.
-        pub fn new(config: ConfigurationRef, buffer: BufferRef) -> Rendering {
+    impl Engine {
+        /// Creates a new rendering engine with an unattached window using `config`
+        /// and `buffer`.
+        pub fn new(config: ConfigurationRef, buffer: BufferRef) -> Engine {
             let pos = buffer.borrow().get_pos();
             let styler = Styler::new(config.clone());
 
-            Rendering {
+            Engine {
                 config,
                 buffer,
                 pos,
@@ -672,7 +690,11 @@ mod wrapping {
         }
     }
 
-    impl Renderer for Rendering {
+    impl Renderer for Engine {
+        fn kind(&self) -> Rendering {
+            Rendering::Wrapping
+        }
+
         fn attach(&mut self, window: WindowRef) {
             // Allocate leftmost columns of window to line numbers, but only if enabled and
             // total width of window is large enough to reasonably accommodate.
@@ -979,7 +1001,12 @@ mod wrapping {
             self.cursor.col = col;
         }
 
-        fn render(&mut self, tokenizer: &Tokenizer, syntax_cursor: Cursor, selected: Range<usize>) {
+        fn render(
+            &mut self,
+            tokenizer: &Tokenizer,
+            syntax_cursor: Cursor,
+            selected: Option<Range<usize>>,
+        ) {
             // Create pen to format characters.
             let pen = self
                 .styler
@@ -1017,7 +1044,7 @@ mod scrolling {
     use std::cell::Ref;
     use std::cmp;
 
-    pub struct Rendering {
+    pub struct Engine {
         /// Global configuration.
         config: ConfigurationRef,
 
@@ -1346,16 +1373,16 @@ mod scrolling {
 
     impl<'a> Spot<'a> {
         /// Creates a spot representing the top-left position on the display.
-        fn new(rendering: &Rendering, tokenizer: &'a Tokenizer, syntax_cursor: Cursor) -> Spot<'a> {
-            let offset = rendering.offset;
-            let pos = rendering.top_row.line_pos;
+        fn new(engine: &Engine, tokenizer: &'a Tokenizer, syntax_cursor: Cursor) -> Spot<'a> {
+            let offset = engine.offset;
+            let pos = engine.top_row.line_pos;
             Spot {
                 offset,
                 pos,
                 start_pos: pos + offset,
                 row: 0,
                 col: 0,
-                line: rendering.top_row.line + 1,
+                line: engine.top_row.line + 1,
                 tokenizer,
                 syntax_cursor,
             }
@@ -1383,13 +1410,14 @@ mod scrolling {
         }
     }
 
-    impl Rendering {
-        /// Creates a new renderer with an unattached window using `config` and `buffer`.
-        pub fn new(config: ConfigurationRef, buffer: BufferRef) -> Rendering {
+    impl Engine {
+        /// Creates a new rendering engine with an unattached window using `config`
+        /// and `buffer`.
+        pub fn new(config: ConfigurationRef, buffer: BufferRef) -> Engine {
             let pos = buffer.borrow().get_pos();
             let styler = Styler::new(config.clone());
 
-            Rendering {
+            Engine {
                 config,
                 buffer,
                 pos,
@@ -1573,7 +1601,11 @@ mod scrolling {
         }
     }
 
-    impl Renderer for Rendering {
+    impl Renderer for Engine {
+        fn kind(&self) -> Rendering {
+            Rendering::Scrolling
+        }
+
         /// Attaches `window` to this renderer.
         fn attach(&mut self, window: WindowRef) {
             // Allocate leftmost columns of window to line numbers, but only if enabled and
@@ -1966,7 +1998,12 @@ mod scrolling {
         }
 
         /// Renders the display.
-        fn render(&mut self, tokenizer: &Tokenizer, syntax_cursor: Cursor, selected: Range<usize>) {
+        fn render(
+            &mut self,
+            tokenizer: &Tokenizer,
+            syntax_cursor: Cursor,
+            selected: Option<Range<usize>>,
+        ) {
             // Create pen to format characters.
             let pen = self
                 .styler
