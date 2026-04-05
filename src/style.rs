@@ -21,7 +21,8 @@ pub struct Styler {
     text_color: Color,
 }
 
-/// A _pen_ is used to format [cells](Cell) during the rendering process.
+/// A _pen_ captures state information that is used to format [cells](Cell) during the
+/// rendering process.
 pub struct Pen<'a> {
     /// A reference to the styler that created this pen.
     styler: &'a Styler,
@@ -53,19 +54,24 @@ impl Styler {
     }
 
     /// Creates a pen.
+    ///
+    /// State provided by caller:
+    /// - `cursor`: current cursor position on display
+    /// - `line`: current `1`-based line number in buffer
+    /// - `selected`: region of text if selected, otherwise assumed to `0`..`0`
     pub fn pen(&self, cursor: Point, line: u32, selected: Range<usize>) -> Pen<'_> {
         Pen::new(self, cursor, line, selected)
     }
 }
 
 impl<'a> Pen<'a> {
-    // Special character shown for \n (newline) when visible.
+    /// Special character shown for `\n` (newline) when visible.
     const EOL_CHAR: char = '\u{21b2}';
 
-    // Special character shown for \t (tab).
+    /// Special character shown for `\t` (tab).
     const TAB_CHAR: char = '\u{2192}';
 
-    // Special character shown for all other ASCII control characters.
+    /// Special character shown for all other ASCII control characters.
     const CTRL_CHAR: char = '\u{00bf}';
 
     fn new(styler: &'a Styler, cursor: Point, line: u32, selected: Range<usize>) -> Pen<'a> {
@@ -87,14 +93,12 @@ impl<'a> Pen<'a> {
     /// margin color is applied.
     #[inline]
     pub fn as_line(&self, c: char, line: u32) -> Cell {
-        Cell::new(
-            c,
-            if line == self.line {
-                self.styler.line_color
-            } else {
-                self.styler.margin_color
-            },
-        )
+        let color = if line == self.line {
+            self.styler.line_color
+        } else {
+            self.styler.margin_color
+        };
+        Cell::new(c, color)
     }
 
     /// Formats ` ` (space) using the text color.
@@ -106,6 +110,7 @@ impl<'a> Pen<'a> {
     /// Formats `c` using a color depending on the current rendering context.
     pub fn as_text(&self, c: char, pos: usize, row: u32, syntax_color: Option<u8>) -> Cell {
         let config = &self.styler.config;
+
         let fg = if (c == '\n' && config.settings.eol) || c.is_control() {
             config.theme.whitespace_fg
         } else if let Some(fg) = syntax_color {
