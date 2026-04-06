@@ -12,6 +12,8 @@ Behavior
   --no-lines
   --eol              : show \n as special character (default: off)
   --no-eol
+  --wrap             : wrap long lines (default: wrap)
+  --no-wrap
   --tab-hard         : insert tabs as \t
   --tab-soft         : insert tabs as spaces (default)
   --tab-size, -t N   : tab stop size when --tab-soft (default: 4)

@@ -101,7 +101,7 @@ pub struct EditorBuilder {
     /// Defaults to `false`.
     readonly: bool,
 
-    /// Defaults to `Rendering::Wrapping`.
+    /// Defaults to the setting in `config`.
     rendering: Rendering,
 }
 
@@ -205,12 +205,17 @@ impl Change {
 
 impl EditorBuilder {
     pub fn new(config: ConfigurationRef) -> EditorBuilder {
+        let rendering = if config.settings.wrap {
+            Rendering::Wrapping
+        } else {
+            Rendering::Scrolling
+        };
         EditorBuilder {
             config,
             source: Source::Null,
             buffer: None,
             readonly: false,
-            rendering: Rendering::Wrapping,
+            rendering,
         }
     }
 
@@ -226,11 +231,6 @@ impl EditorBuilder {
 
     pub fn readonly(mut self) -> EditorBuilder {
         self.readonly = true;
-        self
-    }
-
-    pub fn rendering(mut self, rendering: Rendering) -> EditorBuilder {
-        self.rendering = rendering;
         self
     }
 

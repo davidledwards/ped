@@ -56,6 +56,7 @@ pub struct Settings {
     pub spotlight: bool,
     pub lines: bool,
     pub eol: bool,
+    pub wrap: bool,
     pub tab_hard: bool,
     pub tab_size: u32,
     pub crlf: bool,
@@ -95,6 +96,7 @@ struct ExternalSettings {
     spotlight: Option<bool>,
     lines: Option<bool>,
     eol: Option<bool>,
+    wrap: Option<bool>,
     crlf: Option<bool>,
 
     #[serde(rename = "tab-hard")]
@@ -163,6 +165,7 @@ impl Settings {
             self.spotlight = ext.spotlight.unwrap_or(self.spotlight);
             self.lines = ext.lines.unwrap_or(self.lines);
             self.eol = ext.eol.unwrap_or(self.eol);
+            self.wrap = ext.wrap.unwrap_or(self.wrap);
             self.tab_hard = ext.tab_hard.unwrap_or(self.tab_hard);
             self.tab_size = ext.tab_size.unwrap_or(self.tab_size);
             self.crlf = ext.crlf.unwrap_or(self.crlf);
@@ -175,6 +178,7 @@ impl Settings {
         self.spotlight = opts.spotlight.unwrap_or(self.spotlight);
         self.lines = opts.lines.unwrap_or(self.lines);
         self.eol = opts.eol.unwrap_or(self.eol);
+        self.wrap = opts.wrap.unwrap_or(self.wrap);
         self.tab_hard = opts.tab_hard.unwrap_or(self.tab_hard);
         self.tab_size = opts.tab_size.unwrap_or(self.tab_size);
         self.crlf = opts.crlf.unwrap_or(self.crlf);
@@ -188,6 +192,7 @@ impl Default for Settings {
             spotlight: true,
             lines: true,
             eol: false,
+            wrap: true,
             tab_hard: false,
             tab_size: 4,
             crlf: false,
