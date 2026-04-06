@@ -167,7 +167,7 @@ pub enum Align {
 
 impl Rendering {
     /// Create a new rendering engine.
-    pub fn new(&self, config: ConfigurationRef, buffer: BufferRef) -> Box<dyn Renderer> {
+    pub fn create(&self, config: ConfigurationRef, buffer: BufferRef) -> Box<dyn Renderer> {
         match self {
             Self::Wrapping => Box::new(wrapping::Engine::new(config, buffer)),
             Self::Scrolling => Box::new(scrolling::Engine::new(config, buffer)),
@@ -175,6 +175,7 @@ impl Rendering {
     }
 }
 
+/// Provides common functions across _row_ implementations.
 trait Rowable: Copy + Clone {
     /// Returns the buffer position at the start of the row.
     fn start_pos(&self) -> usize;
@@ -284,6 +285,16 @@ trait Rowable: Copy + Clone {
     }
 }
 
+/// Returns a tuple, relative to the line in `buffer` corresponding to `pos`,
+/// containing the position of the first character on that line, the position of
+/// the first character of the next line, and a boolean value indicating if the
+/// end of buffer has been reached.
+fn find_line_bounds(buffer: &Buffer, pos: usize) -> (usize, usize, bool) {
+    let line_pos = nav::find_start_line(buffer, pos);
+    let (next_pos, is_bottom) = nav::find_next_line(buffer, pos);
+    (line_pos, next_pos, is_bottom)
+}
+
 /// Number of columns allocated to the margin.
 const MARGIN_COLS: u32 = 6;
 
@@ -298,7 +309,26 @@ const CLIP_LOWER_COLS: u32 = MARGIN_COLS / 2;
 /// must be clipped when larger than `LINE_LIMIT`.
 const CLIP_UPPER_COLS: u32 = MARGIN_COLS - CLIP_LOWER_COLS - 1;
 
-/// This module implements the [wrapping](Rendering::Wrapping) engine.
+/// Returns `line` formatted for display in the margin.
+///
+/// If `line` is small enough to fit within the margin, the formatted value will be
+/// left-justified with leading spaces.
+///
+/// If `line` is too large to fit within the margin, the formatted value will only
+/// contain the lower-order digits.
+fn format_line(line: u32) -> String {
+    if line < LINE_LIMIT {
+        format!("{:>cols$} ", line, cols = MARGIN_COLS as usize - 1)
+    } else {
+        format!(
+            "{:0>cols$}",
+            line % 10_u32.pow(CLIP_LOWER_COLS),
+            cols = CLIP_LOWER_COLS as usize,
+        )
+    }
+}
+
+/// This module implements the [wrapping](Rendering::Wrapping) rendering engine.
 mod wrapping {
     use super::*;
     use crate::buffer::Buffer;
@@ -392,7 +422,7 @@ mod wrapping {
         line: u32,
 
         /// Indicates that the buffer line has wrapped.
-        line_wrapped: bool,
+        wrapped: bool,
 
         /// Reference to the tokenizer used for syntax coloring.
         ///
@@ -601,7 +631,7 @@ mod wrapping {
                 row: 0,
                 col: 0,
                 line: engine.top_row.line + 1,
-                line_wrapped: false,
+                wrapped: false,
                 tok,
                 syn,
             }
@@ -618,7 +648,7 @@ mod wrapping {
             self.pos += 1;
             self.row += 1;
             self.col = 0;
-            self.line_wrapped = true;
+            self.wrapped = true;
             self.syn = self.tok.forward(self.syn, 1);
             self
         }
@@ -628,7 +658,7 @@ mod wrapping {
             self.row += 1;
             self.col = 0;
             self.line += 1;
-            self.line_wrapped = false;
+            self.wrapped = false;
             self.syn = self.tok.forward(self.syn, 1);
             self
         }
@@ -667,13 +697,18 @@ mod wrapping {
             canvas: &mut Canvas,
         ) -> Option<Spot<'a>> {
             self.render_margin(pen, &spot, canvas);
+
+            // Bind these locally for readability.
             let (row, col) = (spot.row, spot.col + self.margin_cols());
             let color = spot.syn.color();
+
             let spot = if c == '\n' {
+                // Render character and fill remaining line with blanks.
                 canvas.set_cell(row, col, pen.as_text(c, spot.pos, row, color));
                 canvas.fill_cell_from(row, col + 1, pen.as_text(' ', spot.pos, row, color));
                 spot.next_line()
             } else {
+                // Render character, advancing to next column or next row.
                 canvas.set_cell(row, col, pen.as_text(c, spot.pos, row, color));
                 if spot.col + 1 < self.cols {
                     spot.next_col()
@@ -713,20 +748,16 @@ mod wrapping {
         /// on the first column of any row.
         fn render_margin(&self, pen: &Pen, spot: &Spot, canvas: &mut Canvas) {
             if spot.col == 0 && self.margin_enabled {
-                if spot.line_wrapped {
+                if spot.wrapped {
                     canvas.fill_cell(spot.row, 0..MARGIN_COLS, pen.as_margin(' '));
                 } else if spot.line < LINE_LIMIT {
-                    let s = format!("{:>cols$} ", spot.line, cols = MARGIN_COLS as usize - 1);
+                    let s = format_line(spot.line);
                     for (col, c) in s.char_indices() {
                         canvas.set_cell(spot.row, col as u32, pen.as_line(c, spot.line));
                     }
                 } else {
                     canvas.fill_cell(spot.row, 0..CLIP_UPPER_COLS, pen.as_line('-', spot.line));
-                    let s = format!(
-                        "{:0>cols$}",
-                        spot.line % 10_u32.pow(CLIP_LOWER_COLS),
-                        cols = CLIP_LOWER_COLS as usize,
-                    );
+                    let s = format_line(spot.line);
                     for (col, c) in s.char_indices() {
                         canvas.set_cell(
                             spot.row,
@@ -841,26 +872,27 @@ mod wrapping {
             !self.window.borrow().is_zombie()
         }
 
-        #[inline(always)]
+        #[inline]
         fn rows(&self) -> u32 {
             self.rows
         }
 
+        #[inline]
         fn size(&self) -> Size {
             Size::new(self.rows, self.cols)
         }
 
-        #[inline(always)]
+        #[inline]
         fn pos(&self) -> usize {
             self.pos
         }
 
-        #[inline(always)]
+        #[inline]
         fn cursor(&self) -> Point {
             self.cursor
         }
 
-        #[inline(always)]
+        #[inline]
         fn location(&self) -> Location {
             Location::new(
                 self.cur_row.line,
@@ -905,8 +937,8 @@ mod wrapping {
         }
 
         fn align_cursor(&mut self, align: Align) {
-            // Determine ideal row where cursor would like to be focused, though this should
-            // be considered a hint.
+            // Determine ideal row where cursor would like to be focused, though this
+            // should be considered a hint.
             let try_row = match align {
                 Align::Auto => cmp::min(self.cursor.row, self.rows - 1),
                 Align::Center => self.rows / 2,
@@ -915,8 +947,8 @@ mod wrapping {
                 Align::Row(row) => cmp::min(row, self.rows - 1),
             };
 
-            // Tries to position cursor on target row, but no guarantee depending on proximity
-            // of row to top of buffer.
+            // Tries to position cursor on target row, but no guarantee depending on
+            // proximity of row to top of buffer.
             let cur_row = Row::find_row(&self.buffer(), self.pos, self.cols);
             self.cur_row = cur_row;
             let (top_row, row) = self.cur_row.up(&self.buffer(), try_row);
@@ -940,8 +972,8 @@ mod wrapping {
             if rows > 0 {
                 let row = if pin {
                     if rows < try_rows {
-                        // Cursor reached top of buffer before advancing by desired number of
-                        // rows, so resulting row is always top of display.
+                        // Cursor reached top of buffer before advancing by desired number
+                        // of rows, so resulting row is always top of display.
                         self.set_top_row(0)
                     } else {
                         // Try finding new top line by stepping backwards by number of rows
@@ -1054,8 +1086,8 @@ mod wrapping {
             let rows = self.down_top_row(try_rows);
             if rows > 0 {
                 let (row, col) = if rows > self.cursor.row {
-                    // Cursor would have moved beyond top of display, which means current
-                    // buffer position changes accordingly.
+                    // Cursor would have moved beyond top of display, which means
+                    // current buffer position changes accordingly.
                     self.cur_row = self.top_row;
                     let try_col = self.snap.take().unwrap_or(self.cursor.col);
                     self.snap = Some(try_col);
@@ -1079,8 +1111,8 @@ mod wrapping {
                     // Cursor still visible on display.
                     (row, self.cursor.col)
                 } else {
-                    // Cursor would have moved beyond bottom of display, which means current
-                    // buffer position changes accordingly.
+                    // Cursor would have moved beyond bottom of display, which means
+                    // current buffer position changes accordingly.
                     let _ = self.up_cur_row(row - self.rows + 1);
                     let try_col = self.snap.take().unwrap_or(self.cursor.col);
                     self.snap = Some(try_col);
@@ -1158,7 +1190,7 @@ mod wrapping {
     }
 }
 
-/// This module implements the [scrolling](Rendering::Scrolling) engine.
+/// This module implements the [scrolling](Rendering::Scrolling) rendering engine.
 mod scrolling {
     use super::*;
     use crate::buffer::Buffer;
@@ -1229,6 +1261,9 @@ mod scrolling {
 
         /// Indicates that the buffer line is the bottom-most line in the buffer.
         is_bottom: bool,
+
+        /// Width of display.
+        cols: u32,
     }
 
     // Represents a point on the display and additional state used during the rendering
@@ -1269,7 +1304,7 @@ mod scrolling {
         /// This function is expensive because it must calculate the line number
         /// corresponding to `pos` by performing a linear scan from the beginning of the
         /// buffer.
-        fn find_row(buffer: &Buffer, pos: usize) -> Row {
+        fn find_row(buffer: &Buffer, pos: usize, cols: u32) -> Row {
             let (line_pos, next_pos, is_bottom) = find_line_bounds(buffer, pos);
             let line_len = next_pos - line_pos;
             Row {
@@ -1277,6 +1312,7 @@ mod scrolling {
                 line_len,
                 line: nav::find_location(buffer, line_pos).line,
                 is_bottom,
+                cols,
             }
         }
 
@@ -1289,14 +1325,14 @@ mod scrolling {
 
         /// Returns the offset and column number of `pos` relative to the starting position
         /// of this row and the specified `offset`.
-        fn col_of(&self, offset: usize, pos: usize, cols: u32) -> (usize, u32) {
+        fn col_of(&self, offset: usize, pos: usize) -> (usize, u32) {
             // Adjust line offset if given `pos` would result in a column number left of
             // left margin.
             let offset = cmp::min(pos, self.line_pos + offset) - self.line_pos;
             let col = (pos - (self.line_pos + offset)) as u32;
 
             // Snap computed column since it may extend beyond rightmost edge,
-            self.snap(offset, col, cols)
+            self.snap(offset, col)
         }
 
         /// Returns the buffer position of the right-most column number of this row.
@@ -1312,9 +1348,8 @@ mod scrolling {
 
         /// Returns possibly different values of `offset` and `col` if `col` extends
         /// beyond the end of the row or the combination of both would result in a column
-        /// that extends beyond either edge of the display, the width of which is specified
-        /// in `cols`.
-        fn snap(&self, offset: usize, col: u32, cols: u32) -> (usize, u32) {
+        /// that extends beyond either edge of the display.
+        fn snap(&self, offset: usize, col: u32) -> (usize, u32) {
             // Calculate length of line exclusive of `\n`. Note that all rows except
             // the bottom row have line lengths > 0 because such rows always minimally
             // contain `\n`.
@@ -1332,14 +1367,14 @@ mod scrolling {
                 // line offset of this row is > 0. Adjust line offset such that snapped
                 // column aligns to leftmost edge.
                 (len, 0)
-            } else if ofs < offset + (cols as usize) {
+            } else if ofs < offset + (self.cols as usize) {
                 // Snapped column is visible on current display, so keep the current line
                 // offset to avoid jitter, and modify the snapped column accordingly.
                 (offset, (ofs - offset) as u32)
             } else {
                 // Snapped column is right of right margin, so adjust line offset and
                 // snapped column to align to rightmost edge.
-                (ofs - (cols as usize) + 1, cols - 1)
+                (ofs - (self.cols as usize) + 1, self.cols - 1)
             }
         }
 
@@ -1391,6 +1426,7 @@ mod scrolling {
                     line_len,
                     line: self.line - 1,
                     is_bottom,
+                    ..*self
                 };
                 Some(r)
             }
@@ -1408,6 +1444,7 @@ mod scrolling {
                     line_len,
                     line: self.line + 1,
                     is_bottom,
+                    ..*self
                 };
                 Some(r)
             }
@@ -1422,6 +1459,7 @@ mod scrolling {
                 line_len: 0,
                 line: 0,
                 is_bottom: false,
+                cols: 0,
             }
         }
     }
@@ -1499,11 +1537,14 @@ mod scrolling {
             canvas: &mut Canvas,
         ) -> Option<Spot<'a>> {
             self.render_margin(pen, &spot, canvas);
+
+            // Bind these locally for readability.
             let (row, col) = (spot.row, spot.col + self.margin_cols());
             let color = spot.syn.color();
+
             let spot = if c == '\n' {
                 if spot.pos < spot.start_pos {
-                    // Character is left of left margin, hnece not visible, so just
+                    // Character is left of left margin, hence not visible, so just
                     // fill entire line with blanks.
                     canvas.fill_cell_from(row, col, pen.as_text(' ', spot.pos, row, color));
                 } else if spot.col < self.cols {
@@ -1515,8 +1556,7 @@ mod scrolling {
                 spot.next_line()
             } else {
                 if spot.pos >= spot.start_pos && spot.col < self.cols {
-                    // Character is visible on display, so render it and fill remaining
-                    // line with blanks.
+                    // Character is visible on display, so render it.
                     canvas.set_cell(row, col, pen.as_text(c, spot.pos, row, color));
                 }
                 spot.next()
@@ -1554,17 +1594,13 @@ mod scrolling {
         fn render_margin(&self, pen: &Pen, spot: &Spot, canvas: &mut Canvas) {
             if spot.col == 0 && self.margin_enabled {
                 if spot.line < LINE_LIMIT {
-                    let s = format!("{:>cols$} ", spot.line, cols = MARGIN_COLS as usize - 1);
+                    let s = format_line(spot.line);
                     for (col, c) in s.char_indices() {
                         canvas.set_cell(spot.row, col as u32, pen.as_line(c, spot.line));
                     }
                 } else {
                     canvas.fill_cell(spot.row, 0..CLIP_UPPER_COLS, pen.as_line('-', spot.line));
-                    let s = format!(
-                        "{:0>cols$}",
-                        spot.line % 10_u32.pow(CLIP_LOWER_COLS),
-                        cols = CLIP_LOWER_COLS as usize,
-                    );
+                    let s = format_line(spot.line);
                     for (col, c) in s.char_indices() {
                         canvas.set_cell(
                             spot.row,
@@ -1679,26 +1715,27 @@ mod scrolling {
             !self.window.borrow().is_zombie()
         }
 
-        #[inline(always)]
+        #[inline]
         fn rows(&self) -> u32 {
             self.rows
         }
 
+        #[inline]
         fn size(&self) -> Size {
             Size::new(self.rows, self.cols)
         }
 
-        #[inline(always)]
+        #[inline]
         fn pos(&self) -> usize {
             self.pos
         }
 
-        #[inline(always)]
+        #[inline]
         fn cursor(&self) -> Point {
             self.cursor
         }
 
-        #[inline(always)]
+        #[inline]
         fn location(&self) -> Location {
             Location::new(self.cur_row.line, (self.offset as u32) + self.cursor.col)
         }
@@ -1733,7 +1770,7 @@ mod scrolling {
             // top row of display.
             let (cur_row, row) = self.top_row.down(&self.buffer(), try_row);
             self.cur_row = cur_row;
-            let (offset, col) = self.cur_row.snap(self.offset, try_col, self.cols);
+            let (offset, col) = self.cur_row.snap(self.offset, try_col);
             self.offset = offset;
             self.pos = self.cur_row.pos_of(self.offset, col);
             self.snap = Some((self.offset, col));
@@ -1741,8 +1778,8 @@ mod scrolling {
         }
 
         fn align_cursor(&mut self, align: Align) {
-            // Determine ideal row where cursor would like to be focused, though this should
-            // be considered a hint.
+            // Determine ideal row where cursor would like to be focused, though this
+            // should be considered a hint.
             let try_row = match align {
                 Align::Auto => cmp::min(self.cursor.row, self.rows - 1),
                 Align::Center => self.rows / 2,
@@ -1751,13 +1788,13 @@ mod scrolling {
                 Align::Row(row) => cmp::min(row, self.rows - 1),
             };
 
-            // Tries to position cursor on target row, but no guarantee depending on proximity
-            // of row to top of buffer.
-            let cur_row = Row::find_row(&self.buffer(), self.pos);
+            // Tries to position cursor on target row, but no guarantee depending on
+            // proximity of row to top of buffer.
+            let cur_row = Row::find_row(&self.buffer(), self.pos, self.cols);
             self.cur_row = cur_row;
             let (top_row, row) = self.cur_row.up(&self.buffer(), try_row);
             self.top_row = top_row;
-            let (offset, col) = self.cur_row.col_of(self.offset, self.pos, self.cols);
+            let (offset, col) = self.cur_row.col_of(self.offset, self.pos);
             self.snap = None;
             self.offset = offset;
             self.cursor = Point::new(row, col);
@@ -1777,8 +1814,8 @@ mod scrolling {
             if rows > 0 {
                 let row = if pin {
                     if rows < try_rows {
-                        // Cursor reached top of buffer before advancing by desired number of
-                        // rows, so resulting row is always top of display.
+                        // Cursor reached top of buffer before advancing by desired number
+                        // of rows, so resulting row is always top of display.
                         self.set_top_row(0)
                     } else {
                         // Try finding new top line by stepping backwards by number of rows
@@ -1794,7 +1831,7 @@ mod scrolling {
                 };
                 let (try_offset, try_col) =
                     self.snap.take().unwrap_or((self.offset, self.cursor.col));
-                let (offset, col) = self.cur_row.snap(try_offset, try_col, self.cols);
+                let (offset, col) = self.cur_row.snap(try_offset, try_col);
                 self.offset = offset;
                 self.pos = self.cur_row.pos_of(self.offset, col);
                 self.snap = Some((try_offset, try_col));
@@ -1820,7 +1857,7 @@ mod scrolling {
                 };
                 let (try_offset, try_col) =
                     self.snap.take().unwrap_or((self.offset, self.cursor.col));
-                let (offset, col) = self.cur_row.snap(try_offset, try_col, self.cols);
+                let (offset, col) = self.cur_row.snap(try_offset, try_col);
                 self.offset = offset;
                 self.pos = self.cur_row.pos_of(self.offset, col);
                 self.snap = Some((try_offset, try_col));
@@ -1886,7 +1923,7 @@ mod scrolling {
                 self.set_top_row(row)
             };
             self.pos = pos;
-            let (offset, col) = self.cur_row.col_of(self.offset, self.pos, self.cols);
+            let (offset, col) = self.cur_row.col_of(self.offset, self.pos);
             self.offset = offset;
             self.snap = None;
             self.cursor = Point::new(row, col);
@@ -1896,13 +1933,13 @@ mod scrolling {
             let rows = self.down_top_row(try_rows);
             if rows > 0 {
                 let (row, col) = if rows > self.cursor.row {
-                    // Cursor would have moved beyond top of display, which means current
-                    // buffer position changes accordingly.
+                    // Cursor would have moved beyond top of display, which means
+                    // current buffer position changes accordingly.
                     self.cur_row = self.top_row;
                     let (try_offset, try_col) =
                         self.snap.take().unwrap_or((self.offset, self.cursor.col));
                     self.snap = Some((try_offset, try_col));
-                    let (offset, col) = self.cur_row.snap(try_offset, try_col, self.cols);
+                    let (offset, col) = self.cur_row.snap(try_offset, try_col);
                     self.offset = offset;
                     self.pos = self.cur_row.pos_of(self.offset, col);
                     (0, col)
@@ -1923,13 +1960,13 @@ mod scrolling {
                     // Cursor still visible on display.
                     (row, self.cursor.col)
                 } else {
-                    // Cursor would have moved beyond bottom of display, which means current
-                    // buffer position changes accordingly.
+                    // Cursor would have moved beyond bottom of display, which means
+                    // current buffer position changes accordingly.
                     let _ = self.up_cur_row(row - self.rows + 1);
                     let (try_offset, try_col) =
                         self.snap.take().unwrap_or((self.offset, self.cursor.col));
                     self.snap = Some((try_offset, try_col));
-                    let (offset, col) = self.cur_row.snap(try_offset, try_col, self.cols);
+                    let (offset, col) = self.cur_row.snap(try_offset, try_col);
                     self.offset = offset;
                     self.pos = self.cur_row.pos_of(self.offset, col);
                     (self.rows - 1, col)
@@ -1959,7 +1996,7 @@ mod scrolling {
                 } else {
                     self.set_top_row(self.rows - 1)
                 };
-                let (offset, col) = self.cur_row.col_of(self.offset, self.pos, self.cols);
+                let (offset, col) = self.cur_row.col_of(self.offset, self.pos);
                 self.offset = offset;
                 self.snap = None;
                 self.cursor = Point::new(row, col);
@@ -1971,7 +2008,7 @@ mod scrolling {
             // boundaries may have changed.
             self.update_cur_row();
             self.update_top_row();
-            let (offset, col) = self.cur_row.col_of(self.offset, self.pos, self.cols);
+            let (offset, col) = self.cur_row.col_of(self.offset, self.pos);
             self.offset = offset;
             self.snap = None;
             self.cursor.col = col;
@@ -2004,14 +2041,4 @@ mod scrolling {
             canvas.draw();
         }
     }
-}
-
-/// Returns a tuple, relative to the line in `buffer` corresponding to `pos`,
-/// containing the position of the first character on that line, the position of
-/// the first character of the next line, and a boolean value indicating if the
-/// end of buffer has been reached.
-fn find_line_bounds(buffer: &Buffer, pos: usize) -> (usize, usize, bool) {
-    let line_pos = nav::find_start_line(buffer, pos);
-    let (next_pos, is_bottom) = nav::find_next_line(buffer, pos);
-    (line_pos, next_pos, is_bottom)
 }

@@ -264,7 +264,7 @@ impl Editor {
         let buffer = buffer.unwrap_or_default().into_ref();
 
         // Create renderer with unattached window.
-        let rendering = rendering.new(config.clone(), buffer.clone());
+        let rendering = rendering.create(config.clone(), buffer.clone());
 
         // Constructs syntax configuration based on type of buffer and file extension,
         // if applicable.
