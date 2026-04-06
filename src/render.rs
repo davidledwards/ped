@@ -1,8 +1,8 @@
 //! Provides text rendering engines.
 
-use crate::buffer::BufferRef;
+use crate::buffer::{Buffer, BufferRef};
 use crate::config::ConfigurationRef;
-use crate::nav::Location;
+use crate::nav::{self, Location};
 use crate::size::{Point, Size};
 use crate::token::{Cursor, Tokenizer};
 use crate::window::WindowRef;
@@ -175,6 +175,115 @@ impl Rendering {
     }
 }
 
+trait Rowable: Copy + Clone {
+    /// Returns the buffer position at the start of the row.
+    fn start_pos(&self) -> usize;
+
+    /// Returns the buffer position at the end of the row.
+    fn end_pos(&self) -> usize;
+
+    /// Returns `true` if the row is the bottom-most line in the buffer.
+    fn is_bottom(&self) -> bool;
+
+    /// Returns the row preceding this row, or `None` if this row is already at the
+    /// top of the buffer.
+    fn prev(&self, buffer: &Buffer) -> Option<Self>
+    where
+        Self: Sized;
+
+    /// Returns the row following this row, or `None` if this row is already at the
+    /// bottom of the buffer.
+    fn next(&self, buffer: &Buffer) -> Option<Self>
+    where
+        Self: Sized;
+
+    /// Moves _up_ by `try_rows` relative to this row, or possibly fewer rows if the
+    /// top of the buffer is reached, returning a pair containing the resulting row
+    /// and the actual number of rows moved.
+    fn up(&self, buffer: &Buffer, try_rows: u32) -> (Self, u32)
+    where
+        Self: Sized,
+    {
+        let mut row = *self;
+        for rows in 0..try_rows {
+            if let Some(r) = row.prev(buffer) {
+                row = r;
+            } else {
+                return (row, rows);
+            }
+        }
+        (row, try_rows)
+    }
+
+    /// Moves _down_ by `try_rows` relative to this row, or possibly fewer rows if the
+    /// bottom of the buffer is reached, returning a pair containing the resulting row
+    /// and the actual number of rows moved.
+    fn down(&self, buffer: &Buffer, try_rows: u32) -> (Self, u32)
+    where
+        Self: Sized,
+    {
+        let mut row = *self;
+        for rows in 0..try_rows {
+            if let Some(r) = row.next(buffer) {
+                row = r
+            } else {
+                return (row, rows);
+            }
+        }
+        (row, try_rows)
+    }
+
+    /// Finds the row _up_ from this row that contains `pos`, returning a pair
+    /// containing the resulting row and the total number of rows moved.
+    fn find_up(&self, buffer: &Buffer, pos: usize) -> (Self, u32)
+    where
+        Self: Sized,
+    {
+        let mut row = *self;
+        let mut rows = 0;
+        while pos < row.start_pos() {
+            row = row.prev_unchecked(buffer);
+            rows += 1;
+        }
+        (row, rows)
+    }
+
+    /// Finds the row _down_ from this row that contains `pos`, returning a pair
+    /// containing the resulting row and the total number of rows moved.
+    fn find_down(&self, buffer: &Buffer, pos: usize) -> (Self, u32)
+    where
+        Self: Sized,
+    {
+        let mut row = *self;
+        let mut rows = 0;
+        while pos >= row.end_pos() && !row.is_bottom() {
+            row = row.next_unchecked(buffer);
+            rows += 1;
+        }
+        (row, rows)
+    }
+
+    /// An unchecked version of [`prev`](Self::prev) that assumes this row is not at the
+    /// top of the buffer.
+    fn prev_unchecked(&self, buffer: &Buffer) -> Self
+    where
+        Self: Sized,
+    {
+        self.prev(buffer)
+            .unwrap_or_else(|| panic!("row already at top of buffer"))
+    }
+
+    /// An unchecked version of [`next`](Self::next) that assumes this row is not at the
+    /// top of the buffer.
+    fn next_unchecked(&self, buffer: &Buffer) -> Self
+    where
+        Self: Sized,
+    {
+        self.next(buffer)
+            .unwrap_or_else(|| panic!("row already at bottom of buffer"))
+    }
+}
+
 /// Number of columns allocated to the margin.
 const MARGIN_COLS: u32 = 6;
 
@@ -295,20 +404,24 @@ mod wrapping {
     }
 
     impl Row {
-        /// Returns a possibly smaller value of `col` if it extends beyond the end of
-        /// the row.
+        /// Finds and returns the row that contains `pos`.
         ///
-        /// In most cases, the right-most column aligns to the last character of the row,
-        /// which is usually `\n` but may also be any other character if the row wraps.
-        /// However, if this is the bottom-most row in the buffer, there is no terminating
-        /// `\n`, and thus the right-most column is right of the last character.
-        fn snap(&self, col: u32) -> u32 {
-            if self.row_len == 0 {
-                0
-            } else if self.is_bottom() {
-                cmp::min(col, self.row_len as u32)
-            } else {
-                cmp::min(col, self.row_len as u32 - 1)
+        /// This function is expensive because it must calculate the line number
+        /// corresponding to `pos` by performing a linear scan from the beginning of the
+        /// buffer.
+        fn find_row(buffer: &Buffer, pos: usize, cols: u32) -> Row {
+            let (line_pos, next_pos, is_bottom) = find_line_bounds(buffer, pos);
+            let line_len = next_pos - line_pos;
+            let row_pos = pos - ((pos - line_pos) % (cols as usize));
+            let row_len = cmp::min(line_len - (row_pos - line_pos), cols as usize);
+            Row {
+                row_pos,
+                row_len,
+                line_pos,
+                line_len,
+                line: nav::find_location(buffer, line_pos).line,
+                is_bottom,
+                cols,
             }
         }
 
@@ -337,19 +450,6 @@ mod wrapping {
                 }
         }
 
-        /// Returns the buffer position at the end of the row.
-        #[inline]
-        fn end_pos(&self) -> usize {
-            self.row_pos + self.row_len
-        }
-
-        /// Returns `true` if the line associated with this row points to the bottom of
-        /// the buffer.
-        #[inline]
-        fn is_bottom(&self) -> bool {
-            self.is_bottom && self.row_len < (self.cols as usize)
-        }
-
         /// Returns `true` if the row of this line wraps at least to the next row,
         /// indicating that the buffer line is longer than the width of the display.
         #[inline]
@@ -357,58 +457,21 @@ mod wrapping {
             self.row_pos + self.row_len < self.line_pos + self.line_len
         }
 
-        /// Moves _up_ by `try_rows` relative to this row, or possibly fewer rows if the
-        /// top of the buffer is reached, returning a pair containing the resulting row
-        /// and the actual number of rows moved.
-        fn up(&self, buffer: &Buffer, try_rows: u32) -> (Row, u32) {
-            let mut row = *self;
-            for rows in 0..try_rows {
-                if let Some(r) = row.prev(buffer) {
-                    row = r;
-                } else {
-                    return (row, rows);
-                }
+        /// Returns a possibly smaller value of `col` if it extends beyond the end of
+        /// the row.
+        ///
+        /// In most cases, the right-most column aligns to the last character of the row,
+        /// which is usually `\n` but may also be any other character if the row wraps.
+        /// However, if this is the bottom-most row in the buffer, there is no terminating
+        /// `\n`, and thus the right-most column is right of the last character.
+        fn snap(&self, col: u32) -> u32 {
+            if self.row_len == 0 {
+                0
+            } else if self.is_bottom() {
+                cmp::min(col, self.row_len as u32)
+            } else {
+                cmp::min(col, self.row_len as u32 - 1)
             }
-            (row, try_rows)
-        }
-
-        /// Moves _down_ by `try_rows` relative to this row, or possibly fewer rows if the
-        /// bottom of the buffer is reached, returning a pair containing the resulting row
-        /// and the actual number of rows moved.
-        fn down(&self, buffer: &Buffer, try_rows: u32) -> (Row, u32) {
-            let mut row = *self;
-            for rows in 0..try_rows {
-                if let Some(r) = row.next(buffer) {
-                    row = r
-                } else {
-                    return (row, rows);
-                }
-            }
-            (row, try_rows)
-        }
-
-        /// Finds the row _up_ from this row that contains `pos`, returning a pair
-        /// containing the resulting row and the total number of rows moved.
-        fn find_up(&self, buffer: &Buffer, pos: usize) -> (Row, u32) {
-            let mut row = *self;
-            let mut rows = 0;
-            while pos < row.row_pos {
-                row = row.prev_unchecked(buffer);
-                rows += 1;
-            }
-            (row, rows)
-        }
-
-        /// Finds the row _down_ from this row that contains `pos`, returning a pair
-        /// containing the resulting row and the total number of rows moved.
-        fn find_down(&self, buffer: &Buffer, pos: usize) -> (Row, u32) {
-            let mut row = *self;
-            let mut rows = 0;
-            while pos >= row.end_pos() && !row.is_bottom {
-                row = row.next_unchecked(buffer);
-                rows += 1;
-            }
-            (row, rows)
         }
 
         /// Returns an update version of this row based on the assumption of underlying
@@ -434,9 +497,24 @@ mod wrapping {
                 ..*self
             }
         }
+    }
 
-        /// Returns the row preceding this row, or `None` if this row is already at the
-        /// top of the buffer.
+    impl Rowable for Row {
+        #[inline]
+        fn start_pos(&self) -> usize {
+            self.row_pos
+        }
+
+        #[inline]
+        fn end_pos(&self) -> usize {
+            self.row_pos + self.row_len
+        }
+
+        #[inline]
+        fn is_bottom(&self) -> bool {
+            self.is_bottom && self.row_len < (self.cols as usize)
+        }
+
         fn prev(&self, buffer: &Buffer) -> Option<Row> {
             if self.row_pos == 0 {
                 None
@@ -449,7 +527,7 @@ mod wrapping {
                 Some(r)
             } else {
                 let pos = self.line_pos - 1;
-                let (line_pos, next_pos, is_bottom) = Self::find_row_bounds(buffer, pos);
+                let (line_pos, next_pos, is_bottom) = find_line_bounds(buffer, pos);
                 let line_len = next_pos - line_pos;
                 let row_pos = pos - ((pos - line_pos) % (self.cols as usize));
                 let row_len = cmp::min(line_len - (row_pos - line_pos), self.cols as usize);
@@ -466,15 +544,6 @@ mod wrapping {
             }
         }
 
-        /// An unchecked version of [`prev`](Self::prev) that assumes this row is not at the
-        /// top of the buffer.
-        fn prev_unchecked(&self, buffer: &Buffer) -> Row {
-            self.prev(buffer)
-                .unwrap_or_else(|| panic!("row already at top of buffer"))
-        }
-
-        /// Returns the row following this row, or `None` if this row is already at the
-        /// bottom of the buffer.
         fn next(&self, buffer: &Buffer) -> Option<Row> {
             if self.is_bottom() {
                 None
@@ -506,44 +575,6 @@ mod wrapping {
                 };
                 Some(r)
             }
-        }
-
-        /// An unchecked version of [`next`](Self::next) that assumes this row is not at
-        /// the top of the buffer.
-        fn next_unchecked(&self, buffer: &Buffer) -> Row {
-            self.next(buffer)
-                .unwrap_or_else(|| panic!("row already at bottom of buffer"))
-        }
-
-        /// Finds and returns the row that contains `pos`.
-        ///
-        /// This function is expensive because it must calculate the line number
-        /// corresponding to `pos` by performing a linear scan from the beginning of the
-        /// buffer.
-        fn find_row(buffer: &Buffer, pos: usize, cols: u32) -> Row {
-            let (line_pos, next_pos, is_bottom) = Self::find_row_bounds(buffer, pos);
-            let line_len = next_pos - line_pos;
-            let row_pos = pos - ((pos - line_pos) % (cols as usize));
-            let row_len = cmp::min(line_len - (row_pos - line_pos), cols as usize);
-            Row {
-                row_pos,
-                row_len,
-                line_pos,
-                line_len,
-                line: nav::find_location(buffer, line_pos).line,
-                is_bottom,
-                cols,
-            }
-        }
-
-        /// Returns a tuple, relative to the line in `buffer` corresponding to `pos`,
-        /// containing the position of the first character on that line, the position of
-        /// the first character of the next line, and a boolean value indicating if the
-        /// end of buffer has been reached.
-        fn find_row_bounds(buffer: &Buffer, pos: usize) -> (usize, usize, bool) {
-            let line_pos = nav::find_start_line(buffer, pos);
-            let (next_pos, is_bottom) = nav::find_next_line(buffer, pos);
-            (line_pos, next_pos, is_bottom)
         }
     }
 
@@ -1233,36 +1264,19 @@ mod scrolling {
     }
 
     impl Row {
-        /// Returns possibly different values of `offset` and `col` if `col` extends
-        /// beyond the end of the row or the combination of both would result in a column
-        /// that extends beyond either edge of the display, the width of which is specified
-        /// in `cols`.
-        fn snap(&self, offset: usize, col: u32, cols: u32) -> (usize, u32) {
-            // Calculate length of line exclusive of `\n`. Note that all rows except
-            // the bottom row have line lengths > 0 because such rows always minimally
-            // contain `\n`.
-            let len = if self.is_bottom {
-                self.line_len
-            } else {
-                self.line_len - 1
-            };
-
-            // Calculate offset of `col` from beginning of buffer line, but do not allow
-            // value to extend beyond end of line.
-            let ofs = cmp::min(offset + (col as usize), len);
-            if ofs < offset {
-                // Snapped column is left of left margin, which can only happen if
-                // line offset of this row is > 0. Adjust line offset such that snapped
-                // column aligns to leftmost edge.
-                (len, 0)
-            } else if ofs < offset + (cols as usize) {
-                // Snapped column is visible on current display, so keep the current line
-                // offset to avoid jitter, and modify the snapped column accordingly.
-                (offset, (ofs - offset) as u32)
-            } else {
-                // Snapped column is right of right margin, so adjust line offset and
-                // snapped column to align to rightmost edge.
-                (ofs - (cols as usize) + 1, cols - 1)
+        /// Finds and returns the row that contains `pos`.
+        ///
+        /// This function is expensive because it must calculate the line number
+        /// corresponding to `pos` by performing a linear scan from the beginning of the
+        /// buffer.
+        fn find_row(buffer: &Buffer, pos: usize) -> Row {
+            let (line_pos, next_pos, is_bottom) = find_line_bounds(buffer, pos);
+            let line_len = next_pos - line_pos;
+            Row {
+                line_pos,
+                line_len,
+                line: nav::find_location(buffer, line_pos).line,
+                is_bottom,
             }
         }
 
@@ -1296,64 +1310,37 @@ mod scrolling {
                 }
         }
 
-        /// Returns the buffer position at the end of the row.
-        #[inline]
-        fn end_pos(&self) -> usize {
-            self.line_pos + self.line_len
-        }
+        /// Returns possibly different values of `offset` and `col` if `col` extends
+        /// beyond the end of the row or the combination of both would result in a column
+        /// that extends beyond either edge of the display, the width of which is specified
+        /// in `cols`.
+        fn snap(&self, offset: usize, col: u32, cols: u32) -> (usize, u32) {
+            // Calculate length of line exclusive of `\n`. Note that all rows except
+            // the bottom row have line lengths > 0 because such rows always minimally
+            // contain `\n`.
+            let len = if self.is_bottom {
+                self.line_len
+            } else {
+                self.line_len - 1
+            };
 
-        /// Moves _up_ by `try_rows` relative to this row, or possibly fewer rows if the
-        /// top of the buffer is reached, returning a pair containing the resulting row
-        /// and the actual number of rows moved.
-        fn up(&self, buffer: &Buffer, try_rows: u32) -> (Row, u32) {
-            let mut row = *self;
-            for rows in 0..try_rows {
-                if let Some(r) = row.prev(buffer) {
-                    row = r;
-                } else {
-                    return (row, rows);
-                }
+            // Calculate offset of `col` from beginning of buffer line, but do not allow
+            // value to extend beyond end of line.
+            let ofs = cmp::min(offset + (col as usize), len);
+            if ofs < offset {
+                // Snapped column is left of left margin, which can only happen if
+                // line offset of this row is > 0. Adjust line offset such that snapped
+                // column aligns to leftmost edge.
+                (len, 0)
+            } else if ofs < offset + (cols as usize) {
+                // Snapped column is visible on current display, so keep the current line
+                // offset to avoid jitter, and modify the snapped column accordingly.
+                (offset, (ofs - offset) as u32)
+            } else {
+                // Snapped column is right of right margin, so adjust line offset and
+                // snapped column to align to rightmost edge.
+                (ofs - (cols as usize) + 1, cols - 1)
             }
-            (row, try_rows)
-        }
-
-        /// Moves _down_ by `try_rows` relative to this row, or possibly fewer rows if the
-        /// bottom of the buffer is reached, returning a pair containing the resulting row
-        /// and the actual number of rows moved.
-        fn down(&self, buffer: &Buffer, try_rows: u32) -> (Row, u32) {
-            let mut row = *self;
-            for rows in 0..try_rows {
-                if let Some(r) = row.next(buffer) {
-                    row = r
-                } else {
-                    return (row, rows);
-                }
-            }
-            (row, try_rows)
-        }
-
-        /// Finds the row _up_ from this row that contains `pos`, returning a pair
-        /// containing the resulting row and the total number of rows moved.
-        fn find_up(&self, buffer: &Buffer, pos: usize) -> (Row, u32) {
-            let mut row = *self;
-            let mut rows = 0;
-            while pos < row.line_pos {
-                row = row.prev_unchecked(buffer);
-                rows += 1;
-            }
-            (row, rows)
-        }
-
-        /// Finds the row _down_ from this row that contains `pos`, returning a pair
-        /// containing the resulting row and the total number of rows moved.
-        fn find_down(&self, buffer: &Buffer, pos: usize) -> (Row, u32) {
-            let mut row = *self;
-            let mut rows = 0;
-            while pos >= row.end_pos() && !row.is_bottom {
-                row = row.next_unchecked(buffer);
-                rows += 1;
-            }
-            (row, rows)
         }
 
         /// Returns an update version of this row based on the assumption of underlying
@@ -1374,15 +1361,30 @@ mod scrolling {
                 ..*self
             }
         }
+    }
 
-        /// Returns the row preceding this row, or `None` if this row is already at the
-        /// top of the buffer.
+    impl Rowable for Row {
+        #[inline]
+        fn start_pos(&self) -> usize {
+            self.line_pos
+        }
+
+        #[inline]
+        fn end_pos(&self) -> usize {
+            self.line_pos + self.line_len
+        }
+
+        #[inline]
+        fn is_bottom(&self) -> bool {
+            self.is_bottom
+        }
+
         fn prev(&self, buffer: &Buffer) -> Option<Row> {
             if self.line_pos == 0 {
                 None
             } else {
                 let pos = self.line_pos - 1;
-                let (line_pos, next_pos, is_bottom) = Self::find_row_bounds(buffer, pos);
+                let (line_pos, next_pos, is_bottom) = find_line_bounds(buffer, pos);
                 let line_len = next_pos - line_pos;
                 let r = Row {
                     line_pos,
@@ -1394,15 +1396,6 @@ mod scrolling {
             }
         }
 
-        /// An unchecked version of [`prev`](Self::prev) that assumes this row is not at the
-        /// top of the buffer.
-        fn prev_unchecked(&self, buffer: &Buffer) -> Row {
-            self.prev(buffer)
-                .unwrap_or_else(|| panic!("row already at top of buffer"))
-        }
-
-        /// Returns the row following this row, or `None` if this row is already at the
-        /// bottom of the buffer.
         fn next(&self, buffer: &Buffer) -> Option<Row> {
             if self.is_bottom {
                 None
@@ -1418,38 +1411,6 @@ mod scrolling {
                 };
                 Some(r)
             }
-        }
-
-        /// An unchecked version of [`next`](Self::next) that assumes this row is not at the
-        /// top of the buffer.
-        fn next_unchecked(&self, buffer: &Buffer) -> Row {
-            self.next(buffer)
-                .unwrap_or_else(|| panic!("row already at bottom of buffer"))
-        }
-
-        /// Finds and returns the row that contains `pos`.
-        ///
-        /// This function is expensive because it must calculate the line number corresponding
-        /// to `pos` by performing a linear scan from the beginning of the buffer.
-        fn find_row(buffer: &Buffer, pos: usize) -> Row {
-            let (line_pos, next_pos, is_bottom) = Self::find_row_bounds(buffer, pos);
-            let line_len = next_pos - line_pos;
-            Row {
-                line_pos,
-                line_len,
-                line: nav::find_location(buffer, line_pos).line,
-                is_bottom,
-            }
-        }
-
-        /// Returns a tuple, relative to the line in `buffer` corresponding to `pos`, containing
-        /// the position of the first character on that line, the position of the first
-        /// character of the next line, and a boolean value indicating if the end of buffer
-        /// has been reached.
-        fn find_row_bounds(buffer: &Buffer, pos: usize) -> (usize, usize, bool) {
-            let line_pos = nav::find_start_line(buffer, pos);
-            let (next_pos, is_bottom) = nav::find_next_line(buffer, pos);
-            (line_pos, next_pos, is_bottom)
         }
     }
 
@@ -2043,4 +2004,14 @@ mod scrolling {
             canvas.draw();
         }
     }
+}
+
+/// Returns a tuple, relative to the line in `buffer` corresponding to `pos`,
+/// containing the position of the first character on that line, the position of
+/// the first character of the next line, and a boolean value indicating if the
+/// end of buffer has been reached.
+fn find_line_bounds(buffer: &Buffer, pos: usize) -> (usize, usize, bool) {
+    let line_pos = nav::find_start_line(buffer, pos);
+    let (next_pos, is_bottom) = nav::find_next_line(buffer, pos);
+    (line_pos, next_pos, is_bottom)
 }
