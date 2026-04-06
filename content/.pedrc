@@ -16,6 +16,10 @@ lines = false
 # Default = false
 eol = true
 
+# Wraps lines if longer than the width of the display.
+# Default = true
+wrap = false
+
 # Insert tabs as \t instead of spaces.
 # Default = false
 tab-hard = true

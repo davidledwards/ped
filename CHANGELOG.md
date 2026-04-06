@@ -2,6 +2,13 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
+### [0.40.0](https://github.com/davidledwards/ped/tree/v0.40.0) | `2026-04-??`
+
+#### Added
+
+- CLI options `--wrap` (default) and `--no-wrap` that indicate whether long lines either wrap or scroll horizontally
+- Configuration option `wrap` to complement CLI options
+
 ### [0.39.0](https://github.com/davidledwards/ped/tree/v0.39.0) | `2026-03-07`
 
 #### Changed
