@@ -174,9 +174,11 @@ The banner bar for each open window shows the source of the content, which is us
 
 The source is followed by a syntax name enclosed in `(` and `)`. The name `Text` is used when no syntax definition exists. There is no highlighting for `Text` content.
 
-To the right of the syntax name is an area that shows certain editor settings surrounded by a single `-` on both edges. The first character indicates how _end-of-line_ characters are written to storage: `/` means that `\n` (LF) is written, and `\` means that `\r\n` (CRLF) is written. The second character indicates the _tab_ mode: `t` means _soft_ tabs are enabled, and `T` means _hard_ tabs. By default, these settings are `/` and `t`, but can be changed globally on the command line or via configuration, or changed on a per-buffer basis.
+To the right of the syntax name is an area justified towards the right margin that shows certain editor settings surrounded by a single `-` on both edges.
 
-To right of the editor settings in the area justified towards the right margin and surrounded by `-` is the hexidecimal value of the Unicode code point under the cursor. If the cursor is at EOF, then `000000` is displayed.
+- The first character indicates how _end-of-line_ characters are written to storage: `/` means that `\n` (LF) is written, and `\` means that `\r\n` (CRLF) is written.
+- The second character indicates the _tab_ mode: `t` means _soft_ tabs are enabled, and `T` means _hard_ tabs. By default, these settings are `/` and `t`, but can be changed globally on the command line or via configuration, or changed on a per-buffer basis.
+- Separated by `-` is the hexidecimal value of the Unicode code point under the cursor. If the cursor is at EOF, then `000000` is displayed.
 
 Finally, on the edge of the right margin is the line and column number under the cursor. If the line number or column number is larger than `9999999`, then all dashes are displayed, respectively.
 
@@ -187,6 +189,10 @@ The example below shows the file `~/repo/ped/src/buffer.rs` being edited with `R
 When a buffer has unsaved modifications, the color of the _source_ changes.
 
 ![](content/ped-banner-dirty.png)
+
+By default, `ped` will wrap long lines unless `--no-wrap` is specified or the setting `wrap = false` exists in the configuration file. When line wrapping is disabled, the text on the display will scroll left or right depending on the movement of the cursor. If text exists right of the right margin, then the gutter character `▶︎` is displayed. Likewise, if text exists left of the left margin, then the gutter character `◀︎` is shown.
+
+![](content/ped-no-wrap.png)
 
 ## Limitations
 

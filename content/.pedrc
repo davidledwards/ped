@@ -82,6 +82,7 @@ medium-gray = 237
 #   select-bg
 #   spotlight-bg
 #   whitespace-fg
+#   gutter-fg
 #   accent-fg
 #   echo-fg
 #   prompt-fg

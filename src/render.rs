@@ -1165,7 +1165,7 @@ mod wrapping {
             // Create pen to format characters.
             let pen = self
                 .styler
-                .pen(self.cursor, self.top_row.line + 1, selected);
+                .pen(self.cursor, self.cur_row.line + 1, selected);
 
             // Initialize spot representing top-left cell.
             let spot = Spot::new(self, tok, syn);
@@ -1504,6 +1504,12 @@ mod scrolling {
     }
 
     impl Engine {
+        /// Gutter character at left margin.
+        const GUTTER_LEFT: char = '\u{25c0}';
+
+        /// Gutter character at right margin.
+        const GUTTER_RIGHT: char = '\u{25b6}';
+
         /// Creates a new rendering engine with an unattached window using `config`
         /// and `buffer`.
         pub fn new(config: ConfigurationRef, buffer: BufferRef) -> Engine {
@@ -1543,21 +1549,32 @@ mod scrolling {
             let color = spot.syn.color();
 
             let spot = if c == '\n' {
-                if spot.pos < spot.start_pos {
-                    // Character is left of left margin, hence not visible, so just
-                    // fill entire line with blanks.
-                    canvas.fill_cell_from(row, col, pen.as_text(' ', spot.pos, row, color));
+                if spot.pos <= spot.start_pos && spot.offset > 0 {
+                    // `\n` is left of or at left margin, hence not visible, so display
+                    // left gutter and fill remaining line with blanks.
+                    canvas.set_cell(row, col, pen.as_gutter(Self::GUTTER_LEFT));
+                    canvas.fill_cell_from(row, col + 1, pen.as_text(' ', spot.pos, row, color));
                 } else if spot.col < self.cols {
-                    // Character is visible on display, so render it and fill remaining
-                    // line with blanks.
+                    // `\n` is visible on display, so render it and fill remaining line
+                    // with blanks.
                     canvas.set_cell(row, col, pen.as_text(c, spot.pos, row, color));
                     canvas.fill_cell_from(row, col + 1, pen.as_text(' ', spot.pos, row, color));
                 }
                 spot.next_line()
             } else {
-                if spot.pos >= spot.start_pos && spot.col < self.cols {
-                    // Character is visible on display, so render it.
-                    canvas.set_cell(row, col, pen.as_text(c, spot.pos, row, color));
+                if spot.pos == spot.start_pos && spot.offset > 0 {
+                    // Leftmost column implied since pos and start_pos are equal, and text
+                    // exists left of left margin, so display left gutter.
+                    canvas.set_cell(row, col, pen.as_gutter(Self::GUTTER_LEFT));
+                } else if spot.pos >= spot.start_pos {
+                    if spot.col == self.cols - 1 {
+                        // Character is at right margin, so minimally `\n` must follow, so
+                        // display right gutter.
+                        canvas.set_cell(row, col, pen.as_gutter(Self::GUTTER_RIGHT));
+                    } else if spot.col < self.cols {
+                        // Character is visible on display, so render it.
+                        canvas.set_cell(row, col, pen.as_text(c, spot.pos, row, color));
+                    }
                 }
                 spot.next()
             };
@@ -2018,7 +2035,7 @@ mod scrolling {
             // Create pen to format characters.
             let pen = self
                 .styler
-                .pen(self.cursor, self.top_row.line + 1, selected);
+                .pen(self.cursor, self.cur_row.line + 1, selected);
 
             // Initialize spot representing top-left cell.
             let spot = Spot::new(self, tok, syn);

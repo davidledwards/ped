@@ -19,6 +19,9 @@ pub struct Styler {
 
     /// Color of text with no special treatment.
     text_color: Color,
+
+    /// Color of text in margin gutters.
+    gutter_color: Color,
 }
 
 /// A _pen_ captures state information that is used to format [cells](Cell) during the
@@ -44,12 +47,14 @@ impl Styler {
         let margin_color = Color::new(config.theme.margin_fg, config.theme.margin_bg);
         let line_color = Color::new(config.theme.line_fg, config.theme.margin_bg);
         let text_color = Color::new(config.theme.text_fg, config.theme.text_bg);
+        let gutter_color = Color::new(config.theme.gutter_fg, config.theme.text_bg);
 
         Styler {
             config,
             margin_color,
             line_color,
             text_color,
+            gutter_color,
         }
     }
 
@@ -110,6 +115,12 @@ impl<'a> Pen<'a> {
     #[inline]
     pub fn as_blank(&self) -> Cell {
         Cell::new(' ', self.styler.text_color)
+    }
+
+    /// Formats `c` using the gutter color.
+    #[inline]
+    pub fn as_gutter(&self, c: char) -> Cell {
+        Cell::new(c, self.styler.gutter_color)
     }
 
     /// Formats `c` using a color depending on the current rendering context.

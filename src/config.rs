@@ -69,6 +69,7 @@ pub struct Theme {
     pub select_bg: u8,
     pub spotlight_bg: u8,
     pub whitespace_fg: u8,
+    pub gutter_fg: u8,
     pub accent_fg: u8,
     pub echo_fg: u8,
     pub prompt_fg: u8,
@@ -126,6 +127,9 @@ struct ExternalTheme {
 
     #[serde(rename = "whitespace-fg")]
     whitespace_fg: Option<ColorValue>,
+
+    #[serde(rename = "gutter-fg")]
+    gutter_fg: Option<ColorValue>,
 
     #[serde(rename = "accent-fg")]
     accent_fg: Option<ColorValue>,
@@ -207,6 +211,7 @@ impl Theme {
     const SELECT_BG: u8 = 88;
     const SPOTLIGHT_BG: u8 = 234;
     const WHITSPACE_FG: u8 = 243;
+    const GUTTER_FG: u8 = 208;
     const ACCENT_FG: u8 = 180;
     const ECHO_FG: u8 = 208;
     const PROMPT_FG: u8 = 102;
@@ -238,6 +243,7 @@ impl Theme {
             self.select_bg = resolve(self.select_bg, &ext.select_bg, colors)?;
             self.spotlight_bg = resolve(self.spotlight_bg, &ext.spotlight_bg, colors)?;
             self.whitespace_fg = resolve(self.whitespace_fg, &ext.whitespace_fg, colors)?;
+            self.gutter_fg = resolve(self.gutter_fg, &ext.gutter_fg, colors)?;
             self.accent_fg = resolve(self.accent_fg, &ext.accent_fg, colors)?;
             self.echo_fg = resolve(self.echo_fg, &ext.echo_fg, colors)?;
             self.prompt_fg = resolve(self.prompt_fg, &ext.prompt_fg, colors)?;
@@ -261,6 +267,7 @@ impl Default for Theme {
             select_bg: Self::SELECT_BG,
             spotlight_bg: Self::SPOTLIGHT_BG,
             whitespace_fg: Self::WHITSPACE_FG,
+            gutter_fg: Self::GUTTER_FG,
             accent_fg: Self::ACCENT_FG,
             echo_fg: Self::ECHO_FG,
             prompt_fg: Self::PROMPT_FG,

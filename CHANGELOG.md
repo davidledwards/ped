@@ -8,6 +8,7 @@ This file contains relevant information for each release. Please refer to the co
 
 - CLI options `--wrap` (default) and `--no-wrap` that indicate whether long lines either wrap or scroll horizontally
 - Configuration option `wrap` to complement CLI options
+- Configuration color `gutter-fg` used for margin gutters, which is only applicable when `--no-wrap` is specified
 
 ### [0.39.0](https://github.com/davidledwards/ped/tree/v0.39.0) | `2026-03-07`
 

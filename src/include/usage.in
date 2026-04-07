@@ -12,7 +12,7 @@ Behavior
   --no-lines
   --eol              : show \n as special character (default: off)
   --no-eol
-  --wrap             : wrap long lines (default: wrap)
+  --wrap             : wrap long lines (default: on)
   --no-wrap
   --tab-hard         : insert tabs as \t
   --tab-soft         : insert tabs as spaces (default)
