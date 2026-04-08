@@ -18,7 +18,7 @@ use crate::key::{self, CTRL_G, Key, Keyboard, Shift};
 use crate::op;
 use crate::operation::Action;
 use crate::opt::File;
-use crate::render::Align;
+use crate::render::{Align, Justify};
 use crate::size::Point;
 use crate::sys::{self, AsString};
 use crate::term;
@@ -110,7 +110,7 @@ impl Controller {
             }
             if let Some(loc) = file.loc {
                 let mut editor = editor.borrow_mut();
-                editor.move_location(loc, Align::Center);
+                editor.move_location(loc, Align::Center, Justify::Center);
                 editor.render();
             }
         }

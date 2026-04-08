@@ -61,8 +61,8 @@ pub trait Renderer {
     /// editor canvas.
     fn focus_cursor(&mut self, cursor: Point);
 
-    /// Sets the position of the cursor based on the alignment objective `align`.
-    fn align_cursor(&mut self, align: Align);
+    /// Sets the position of the cursor based on the `align` and `justify` objectives.
+    fn align_cursor(&mut self, align: Align, justify: Justify);
 
     /// Makes the cursor visible on display.
     fn show_cursor(&mut self);
@@ -94,7 +94,7 @@ pub trait Renderer {
     fn move_end(&mut self);
 
     /// Moves the current buffer position to `pos` and places the cursor on the
-    /// display according to the `align` objective.
+    /// display according to the `align` and `justify` objectives.
     ///
     /// When [`Align::Auto`] is specified, the placement of the cursor depends on
     /// the target `pos` relative to the current buffer position. Specifically, it
@@ -105,7 +105,7 @@ pub trait Renderer {
     /// - _when `pos` is on the current row_: aligns the cursor on the current row
     /// - _when `pos` is beyond the current row_: aligns the cursor on the target
     ///   row below the current row, though not to extend beyond the bottom row
-    fn move_to(&mut self, pos: usize, align: Align);
+    fn move_to(&mut self, pos: usize, align: Align, justify: Justify);
 
     /// Tries scrolling _up_ the contents of the display by the specified number of
     /// `try_rows` while preserving the cursor position, which also means the cursor
@@ -147,7 +147,7 @@ pub enum Rendering {
     Scrolling,
 }
 
-/// Cursor alignment directives.
+/// Cursor _row_ alignment directives.
 pub enum Align {
     /// Try aligning the cursor based on its contextual use.
     Auto,
@@ -163,6 +163,24 @@ pub enum Align {
 
     /// Try aligning the cursot at the specified row.
     Row(u32),
+}
+
+/// Cursor _column_ justification objective.
+pub enum Justify {
+    /// Try justifying the cursor based on its contextual use.
+    Auto,
+
+    /// Try justifying the cursor in the center of the row.
+    Center,
+
+    /// Try justifying the cursor at the left margin.
+    Left,
+
+    /// Try justifying the cursor at the right margin.
+    Right,
+
+    /// Try justifying the cursor at the specified column.
+    Col(u32),
 }
 
 impl Rendering {
@@ -936,7 +954,7 @@ mod wrapping {
             self.cursor = Point::new(row, col);
         }
 
-        fn align_cursor(&mut self, align: Align) {
+        fn align_cursor(&mut self, align: Align, _: Justify) {
             // Determine ideal row where cursor would like to be focused, though this
             // should be considered a hint.
             let try_row = match align {
@@ -1021,14 +1039,22 @@ mod wrapping {
         }
 
         fn move_start(&mut self) {
-            self.move_to(self.cur_row.row_pos, Align::Row(self.cursor.row));
+            self.move_to(
+                self.cur_row.row_pos,
+                Align::Row(self.cursor.row),
+                Justify::Auto,
+            );
         }
 
         fn move_end(&mut self) {
-            self.move_to(self.cur_row.end_col_pos(), Align::Row(self.cursor.row));
+            self.move_to(
+                self.cur_row.end_col_pos(),
+                Align::Row(self.cursor.row),
+                Justify::Auto,
+            );
         }
 
-        fn move_to(&mut self, pos: usize, align: Align) {
+        fn move_to(&mut self, pos: usize, align: Align, _: Justify) {
             let row = if pos < self.top_row.row_pos {
                 let _ = self.find_up_cur_row(pos);
                 let rows = match align {
@@ -1325,11 +1351,27 @@ mod scrolling {
 
         /// Returns the offset and column number of `pos` relative to the starting position
         /// of this row and the specified `offset`.
-        fn col_of(&self, offset: usize, pos: usize) -> (usize, u32) {
+        ///
+        /// If `try_col` is specified, then it tries to satisfy the request, which may also
+        /// adjust the resulting offset.
+        fn col_of(&self, offset: usize, pos: usize, try_col: Option<u32>) -> (usize, u32) {
             // Adjust line offset if given `pos` would result in a column number left of
             // left margin.
             let offset = cmp::min(pos, self.line_pos + offset) - self.line_pos;
             let col = (pos - (self.line_pos + offset)) as u32;
+            let (offset, col) = if let Some(try_col) = try_col {
+                if try_col <= col {
+                    // Request can always be satisfied by simply adjusting the offset.
+                    (offset + (col - try_col) as usize, try_col)
+                } else {
+                    // Request may be satisfied depending on the amount of available
+                    // offset.
+                    let n = cmp::min(offset, (try_col - col) as usize);
+                    (offset - n, col + n as u32)
+                }
+            } else {
+                (offset, col)
+            };
 
             // Snap computed column since it may extend beyond rightmost edge,
             self.snap(offset, col)
@@ -1794,15 +1836,22 @@ mod scrolling {
             self.cursor = Point::new(row, col);
         }
 
-        fn align_cursor(&mut self, align: Align) {
-            // Determine ideal row where cursor would like to be focused, though this
-            // should be considered a hint.
+        fn align_cursor(&mut self, align: Align, justify: Justify) {
+            // Determine ideal row and column where cursor would like to be focused,
+            // though these should be considered hints.
             let try_row = match align {
                 Align::Auto => cmp::min(self.cursor.row, self.rows - 1),
                 Align::Center => self.rows / 2,
                 Align::Top => 0,
                 Align::Bottom => self.rows - 1,
                 Align::Row(row) => cmp::min(row, self.rows - 1),
+            };
+            let try_col = match justify {
+                Justify::Auto => None,
+                Justify::Center => Some(self.cols / 2),
+                Justify::Left => Some(0),
+                Justify::Right => Some(self.cols - 1),
+                Justify::Col(col) => Some(col),
             };
 
             // Tries to position cursor on target row, but no guarantee depending on
@@ -1811,7 +1860,7 @@ mod scrolling {
             self.cur_row = cur_row;
             let (top_row, row) = self.cur_row.up(&self.buffer(), try_row);
             self.top_row = top_row;
-            let (offset, col) = self.cur_row.col_of(self.offset, self.pos);
+            let (offset, col) = self.cur_row.col_of(self.offset, self.pos, try_col);
             self.snap = None;
             self.offset = offset;
             self.cursor = Point::new(row, col);
@@ -1884,14 +1933,22 @@ mod scrolling {
         }
 
         fn move_start(&mut self) {
-            self.move_to(self.cur_row.line_pos, Align::Row(self.cursor.row));
+            self.move_to(
+                self.cur_row.line_pos,
+                Align::Row(self.cursor.row),
+                Justify::Auto,
+            );
         }
 
         fn move_end(&mut self) {
-            self.move_to(self.cur_row.end_col_pos(), Align::Row(self.cursor.row));
+            self.move_to(
+                self.cur_row.end_col_pos(),
+                Align::Row(self.cursor.row),
+                Justify::Auto,
+            );
         }
 
-        fn move_to(&mut self, pos: usize, align: Align) {
+        fn move_to(&mut self, pos: usize, align: Align, justify: Justify) {
             let row = if pos < self.top_row.line_pos {
                 let _ = self.find_up_cur_row(pos);
                 let rows = match align {
@@ -1939,8 +1996,15 @@ mod scrolling {
                 };
                 self.set_top_row(row)
             };
+            let try_col = match justify {
+                Justify::Auto => None,
+                Justify::Center => Some(self.cols / 2),
+                Justify::Left => Some(0),
+                Justify::Right => Some(self.cols - 1),
+                Justify::Col(col) => Some(col),
+            };
             self.pos = pos;
-            let (offset, col) = self.cur_row.col_of(self.offset, self.pos);
+            let (offset, col) = self.cur_row.col_of(self.offset, self.pos, try_col);
             self.offset = offset;
             self.snap = None;
             self.cursor = Point::new(row, col);
@@ -2013,7 +2077,7 @@ mod scrolling {
                 } else {
                     self.set_top_row(self.rows - 1)
                 };
-                let (offset, col) = self.cur_row.col_of(self.offset, self.pos);
+                let (offset, col) = self.cur_row.col_of(self.offset, self.pos, None);
                 self.offset = offset;
                 self.snap = None;
                 self.cursor = Point::new(row, col);
@@ -2025,7 +2089,7 @@ mod scrolling {
             // boundaries may have changed.
             self.update_cur_row();
             self.update_top_row();
-            let (offset, col) = self.cur_row.col_of(self.offset, self.pos);
+            let (offset, col) = self.cur_row.col_of(self.offset, self.pos, None);
             self.offset = offset;
             self.snap = None;
             self.cursor.col = col;

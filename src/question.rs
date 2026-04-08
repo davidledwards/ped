@@ -7,7 +7,7 @@ use crate::env::{Environment, Focus};
 use crate::key::{Key, SHIFT_TAB, TAB};
 use crate::nav::Location;
 use crate::operation::Action;
-use crate::render::Align;
+use crate::render::{Align, Justify};
 use crate::search::{self, Match, Pattern};
 use crate::source::Source;
 use crate::sys;
@@ -271,7 +271,7 @@ impl Question for GotoLine {
             match Location::parse(value) {
                 Ok(loc) => {
                     let mut editor = self.editor.borrow_mut();
-                    editor.move_location(loc, Align::Center);
+                    editor.move_location(loc, Align::Center, Justify::Center);
                     editor.render();
                     None
                 }
@@ -522,7 +522,7 @@ impl Search {
 
     fn highlight_match(&mut self, start_pos: usize, end_pos: usize) {
         let mut editor = self.editor.borrow_mut();
-        editor.move_to(start_pos, Align::Center);
+        editor.move_to(start_pos, Align::Center, Justify::Center);
         editor.clear_mark();
         editor.set_soft_mark_at(end_pos);
         editor.render();

@@ -18,7 +18,7 @@ use crate::help;
 use crate::nav;
 use crate::operation::{Action, Operation};
 use crate::question;
-use crate::render::Align;
+use crate::render::{Align, Justify};
 use crate::search::Match;
 use crate::size::{Point, Size};
 use crate::source::Source;
@@ -396,7 +396,7 @@ fn scroll_center(env: &mut Environment) -> Option<Action> {
     } else {
         Align::Center
     };
-    editor.align_cursor(align);
+    editor.align_cursor(align, Justify::Auto);
     editor.render();
     None
 }
@@ -676,7 +676,7 @@ fn search_next(env: &mut Environment) -> Option<Action> {
         let result = pattern.find(&editor.buffer(), pos);
         match result {
             Some(Match(start_pos, end_pos)) => {
-                editor.move_to(start_pos, Align::Center);
+                editor.move_to(start_pos, Align::Center, Justify::Center);
                 editor.clear_mark();
                 editor.set_soft_mark_at(end_pos);
                 editor.render();

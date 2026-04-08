@@ -6,7 +6,7 @@
 use crate::buffer::{Buffer, BufferRef};
 use crate::config::ConfigurationRef;
 use crate::nav::{self, Location};
-use crate::render::{Align, Renderer, Rendering};
+use crate::render::{Align, Justify, Renderer, Rendering};
 use crate::search::Pattern;
 use crate::size::{Point, Size};
 use crate::source::Source;
@@ -464,7 +464,7 @@ impl Editor {
 
         // Align cursor and draw contents only if window is not a zombie.
         if self.rendering.is_attached() {
-            self.rendering.align_cursor(align);
+            self.rendering.align_cursor(align, Justify::Auto);
             self.draw();
         }
     }
@@ -487,9 +487,9 @@ impl Editor {
         self.rendering.focus_cursor(cursor);
     }
 
-    /// Sets the position of the cursor based on the alignment objective `align`.
-    pub fn align_cursor(&mut self, align: Align) {
-        self.rendering.align_cursor(align);
+    /// Sets the position of the cursor based on the `align` and `justify` objectives.
+    pub fn align_cursor(&mut self, align: Align, justify: Justify) {
+        self.rendering.align_cursor(align, justify);
         self.align_syntax();
     }
 
@@ -510,7 +510,7 @@ impl Editor {
     pub fn move_backward(&mut self, len: usize) {
         let pos = self.pos().saturating_sub(len);
         if pos < self.pos() {
-            self.move_to(pos, Align::Auto);
+            self.move_to(pos, Align::Auto, Justify::Auto);
         }
     }
 
@@ -520,7 +520,7 @@ impl Editor {
         let cur_pos = self.pos();
         let pos = cmp::min(cur_pos + len, self.buffer().size());
         if pos > cur_pos {
-            self.move_to(pos, Align::Auto);
+            self.move_to(pos, Align::Auto, Justify::Auto);
         }
     }
 
@@ -529,7 +529,7 @@ impl Editor {
     pub fn move_backward_word(&mut self) {
         let pos = self.find_word_before(self.pos());
         if pos < self.pos() {
-            self.move_to(pos, Align::Auto);
+            self.move_to(pos, Align::Auto, Justify::Auto);
         }
     }
 
@@ -538,7 +538,7 @@ impl Editor {
     pub fn move_forward_word(&mut self) {
         let pos = self.find_word_after(self.pos());
         if pos > self.pos() {
-            self.move_to(pos, Align::Auto);
+            self.move_to(pos, Align::Auto, Justify::Auto);
         }
     }
 
@@ -580,24 +580,24 @@ impl Editor {
 
     /// Moves the cursor to the _top_ of the buffer.
     pub fn move_top(&mut self) {
-        self.rendering.move_to(0, Align::Top);
+        self.rendering.move_to(0, Align::Top, Justify::Auto);
     }
 
     /// Moves the cursor to the _bottom_ of the buffer.
     pub fn move_bottom(&mut self) {
         let pos = self.buffer().size();
-        self.rendering.move_to(pos, Align::Bottom);
+        self.rendering.move_to(pos, Align::Bottom, Justify::Auto);
     }
 
     /// Moves the buffer position to the location `loc`, and places the cursor on
-    /// the display according to the `align` objective.
-    pub fn move_location(&mut self, loc: Location, align: Align) {
+    /// the display according to the `align` and `justify` objectives.
+    pub fn move_location(&mut self, loc: Location, align: Align, justify: Justify) {
         let pos = nav::find_pos(&self.buffer(), loc);
-        self.move_to(pos, align);
+        self.move_to(pos, align, justify);
     }
 
     /// Moves the current buffer position to `pos` and places the cursor on the
-    /// display according to the `align` objective.
+    /// display according to the `align` and `justify` objectives.
     ///
     /// When [`Align::Auto`] is specified, the placement of the cursor depends on
     /// the target `pos` relative to the current buffer position. Specifically, it
@@ -608,8 +608,8 @@ impl Editor {
     /// - _when `pos` is on the current line_: aligns the cursor on the current row
     /// - _when `pos` is beyond the current line_: aligns the cursor on the target
     ///   row below the current line, though not to extend beyond the borrom row
-    pub fn move_to(&mut self, pos: usize, align: Align) {
-        self.rendering.move_to(pos, align);
+    pub fn move_to(&mut self, pos: usize, align: Align, justify: Justify) {
+        self.rendering.move_to(pos, align, justify);
         self.align_syntax();
     }
 
@@ -769,7 +769,11 @@ impl Editor {
     /// Note that if the editor changes after state has been captured, there is no
     /// guarantee that said state will be restored precisely as it was.
     pub fn restore(&mut self, capture: &Capture) {
-        self.move_to(capture.pos, Align::Row(capture.cursor.row));
+        self.move_to(
+            capture.pos,
+            Align::Row(capture.cursor.row),
+            Justify::Col(capture.cursor.col),
+        );
         if let Some(Mark(pos, soft)) = capture.mark {
             let pos = cmp::min(pos, self.buffer().size());
             self.mark = Some(Mark(pos, soft));
@@ -885,7 +889,7 @@ impl Editor {
     /// rests.
     pub fn remove_line(&mut self) -> Vec<char> {
         let (start_pos, end_pos) = self.rendering.line();
-        self.move_to(start_pos, Align::Auto);
+        self.move_to(start_pos, Align::Auto, Justify::Auto);
         self.remove(end_pos)
     }
 
@@ -1018,7 +1022,7 @@ impl Editor {
                 // since it appears before current buffer position. This happens to be
                 // precondition for calling rendering remove function, which assumes
                 // range of removed text starts at current buffer position.
-                self.rendering.move_to(pos, Align::Auto);
+                self.rendering.move_to(pos, Align::Auto, Justify::Auto);
                 (pos, cur_pos - pos)
             } else {
                 (cur_pos, pos - cur_pos)
@@ -1098,22 +1102,22 @@ impl Editor {
         match change {
             Change::Insert(pos, text) => {
                 self.clear_mark();
-                self.move_to(*pos, Align::Auto);
+                self.move_to(*pos, Align::Auto, Justify::Auto);
                 self.remove_internal(pos + text.len(), None);
             }
             Change::RemoveBefore(pos, text) => {
                 self.clear_mark();
-                self.move_to(pos - text.len(), Align::Auto);
+                self.move_to(pos - text.len(), Align::Auto, Justify::Auto);
                 self.insert_internal(text, None);
             }
             Change::RemoveAfter(pos, text) => {
                 self.clear_mark();
-                self.move_to(*pos, Align::Auto);
+                self.move_to(*pos, Align::Auto, Justify::Auto);
                 self.insert_internal(text, None);
-                self.move_to(*pos, Align::Auto);
+                self.move_to(*pos, Align::Auto, Justify::Auto);
             }
             Change::RemoveSelectionBefore(pos, text, soft) => {
-                self.move_to(pos - text.len(), Align::Auto);
+                self.move_to(pos - text.len(), Align::Auto, Justify::Auto);
                 if *soft {
                     self.set_soft_mark();
                 } else {
@@ -1122,14 +1126,14 @@ impl Editor {
                 self.insert_internal(text, None);
             }
             Change::RemoveSelectionAfter(pos, text, soft) => {
-                self.move_to(*pos, Align::Auto);
+                self.move_to(*pos, Align::Auto, Justify::Auto);
                 self.insert_internal(text, None);
                 if *soft {
                     self.set_soft_mark();
                 } else {
                     self.set_hard_mark();
                 }
-                self.move_to(*pos, Align::Auto);
+                self.move_to(*pos, Align::Auto, Justify::Auto);
             }
         }
     }
@@ -1139,27 +1143,27 @@ impl Editor {
         match change {
             Change::Insert(pos, text) => {
                 self.clear_mark();
-                self.move_to(*pos, Align::Auto);
+                self.move_to(*pos, Align::Auto, Justify::Auto);
                 self.insert_internal(text, None);
             }
             Change::RemoveBefore(pos, text) => {
                 self.clear_mark();
-                self.move_to(*pos, Align::Auto);
+                self.move_to(*pos, Align::Auto, Justify::Auto);
                 self.remove_internal(pos - text.len(), None);
             }
             Change::RemoveAfter(pos, text) => {
                 self.clear_mark();
-                self.move_to(*pos, Align::Auto);
+                self.move_to(*pos, Align::Auto, Justify::Auto);
                 self.remove_internal(pos + text.len(), None);
             }
             Change::RemoveSelectionBefore(pos, text, _) => {
                 self.clear_mark();
-                self.move_to(*pos, Align::Auto);
+                self.move_to(*pos, Align::Auto, Justify::Auto);
                 self.remove_internal(pos - text.len(), None);
             }
             Change::RemoveSelectionAfter(pos, text, _) => {
                 self.clear_mark();
-                self.move_to(*pos, Align::Auto);
+                self.move_to(*pos, Align::Auto, Justify::Auto);
                 self.remove_internal(pos + text.len(), None);
             }
         }
