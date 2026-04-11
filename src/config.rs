@@ -60,7 +60,6 @@ pub struct Settings {
     pub tab_hard: bool,
     pub tab_size: u32,
     pub crlf: bool,
-    pub track_lateral: bool,
 }
 
 pub struct Theme {
@@ -105,9 +104,6 @@ struct ExternalSettings {
 
     #[serde(rename = "tab-size")]
     tab_size: Option<u32>,
-
-    #[serde(rename = "track-lateral")]
-    track_lateral: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -173,7 +169,6 @@ impl Settings {
             self.tab_hard = ext.tab_hard.unwrap_or(self.tab_hard);
             self.tab_size = ext.tab_size.unwrap_or(self.tab_size);
             self.crlf = ext.crlf.unwrap_or(self.crlf);
-            self.track_lateral = ext.track_lateral.unwrap_or(self.track_lateral);
         }
     }
 
@@ -186,7 +181,6 @@ impl Settings {
         self.tab_hard = opts.tab_hard.unwrap_or(self.tab_hard);
         self.tab_size = opts.tab_size.unwrap_or(self.tab_size);
         self.crlf = opts.crlf.unwrap_or(self.crlf);
-        self.track_lateral = opts.track_lateral.unwrap_or(self.track_lateral);
     }
 }
 
@@ -200,7 +194,6 @@ impl Default for Settings {
             tab_hard: false,
             tab_size: 4,
             crlf: false,
-            track_lateral: false,
         }
     }
 }
@@ -397,17 +390,17 @@ impl Configuration {
         ("M-e", "move-bottom"),
         ("S-C-end", "move-bottom-select"),
         ("M-b", "move-backward-word"),
-        ("C-left", "move-backward-word"),
         ("M-B", "move-backward-word-select"),
-        ("S-C-left", "move-backward-word-select"),
         ("M-f", "move-forward-word"),
-        ("C-right", "move-forward-word"),
         ("M-F", "move-forward-word-select"),
-        ("S-C-right", "move-forward-word-select"),
-        ("C-up", "scroll-up"),
-        ("S-C-up", "scroll-up-select"),
-        ("C-down", "scroll-down"),
-        ("S-C-down", "scroll-down-select"),
+        ("C-up", "scroll-down"),
+        ("S-C-up", "scroll-down-select"),
+        ("C-down", "scroll-up"),
+        ("S-C-down", "scroll-up-select"),
+        ("C-left", "scroll-right"),
+        ("S-C-left", "scroll-right-select"),
+        ("C-right", "scroll-left"),
+        ("S-C-right", "scroll-left-select"),
         ("C-l", "scroll-center"),
         ("M-l", "redraw"),
         ("C-@", "set-mark"),

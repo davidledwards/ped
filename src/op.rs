@@ -377,6 +377,58 @@ fn scroll_down_select(env: &mut Environment) -> Option<Action> {
     None
 }
 
+/// Operation: `scroll-left`
+fn scroll_left(env: &mut Environment) -> Option<Action> {
+    let mut editor = env.get_active_editor().borrow_mut();
+
+    // Capture current buffer position before scrolling in case soft mark needs to
+    // be cleared.
+    let prior_pos = editor.pos();
+    editor.scroll_left(1);
+
+    // Clear soft mark if buffer position moved as a result of scrolling.
+    if editor.pos() != prior_pos {
+        editor.clear_soft_mark();
+    }
+    editor.render();
+    None
+}
+
+/// Operation: `scroll-left-select`
+fn scroll_left_select(env: &mut Environment) -> Option<Action> {
+    let mut editor = env.get_active_editor().borrow_mut();
+    editor.set_soft_mark();
+    editor.scroll_left(1);
+    editor.render();
+    None
+}
+
+/// Operation: `scroll-right`
+fn scroll_right(env: &mut Environment) -> Option<Action> {
+    let mut editor = env.get_active_editor().borrow_mut();
+
+    // Capture current buffer position before scrolling in case soft mark needs to
+    // be cleared.
+    let prior_pos = editor.pos();
+    editor.scroll_right(1);
+
+    // Clear soft mark if buffer position moved as a result of scrolling.
+    if editor.pos() != prior_pos {
+        editor.clear_soft_mark();
+    }
+    editor.render();
+    None
+}
+
+/// Operation: `scroll-right-select`
+fn scroll_right_select(env: &mut Environment) -> Option<Action> {
+    let mut editor = env.get_active_editor().borrow_mut();
+    editor.set_soft_mark();
+    editor.scroll_right(1);
+    editor.render();
+    None
+}
+
 /// Operation: `scroll-center`
 fn scroll_center(env: &mut Environment) -> Option<Action> {
     // Rotate through alignment based on current cursor position using following
@@ -931,37 +983,10 @@ fn eol_mode(env: &mut Environment) -> Option<Action> {
     }
 }
 
-/// Scrolls the display down for the editor associated with `p`, which represents a
-/// point whose origin is the top-left position of the terminal display.
+/// Scrolls the viewable area of the display in an _upward_ direction for the editor
+/// associated with `p`, which represents a point whose origin is the top-left position
+/// of the terminal display.
 pub fn track_up(env: &mut Environment, p: Point, select: bool) {
-    let view = env.workspace.borrow().locate_view(p);
-    if let Some((view_id, _)) = view {
-        let mut editor = env.get_view_editor(view_id).borrow_mut();
-
-        // Update soft mark if selection is active, otherwise capture current buffer
-        // position before scrolling in case soft mark needs to be cleared.
-        let prior_pos = if select {
-            editor.set_soft_mark();
-            None
-        } else {
-            Some(editor.pos())
-        };
-        editor.scroll_down(1);
-
-        // If selection is inactive and buffer position moved as a result of scrolling,
-        // then soft mark must be cleared.
-        if let Some(prior_pos) = prior_pos
-            && editor.pos() != prior_pos
-        {
-            editor.clear_soft_mark();
-        }
-        editor.render();
-    }
-}
-
-/// Scrolls the display up for the editor associated with `p`, which represents a
-/// point whose origin is the top-left position of the terminal display.
-pub fn track_down(env: &mut Environment, p: Point, select: bool) {
     let view = env.workspace.borrow().locate_view(p);
     if let Some((view_id, _)) = view {
         let mut editor = env.get_view_editor(view_id).borrow_mut();
@@ -987,41 +1012,66 @@ pub fn track_down(env: &mut Environment, p: Point, select: bool) {
     }
 }
 
-/// Moves the cursor backward for the editor associated with `p`, which represents a
-/// point whose origin is the top-left position of the terminal display.
-pub fn track_backward(env: &mut Environment, p: Point, select: bool) {
-    let ws = env.workspace.borrow();
-    if ws.config.settings.track_lateral {
-        let view = ws.locate_view(p);
-        if let Some((view_id, _)) = view {
-            let mut editor = env.get_view_editor(view_id).borrow_mut();
-            if select {
-                editor.set_soft_mark();
-            } else {
-                editor.clear_soft_mark();
-            }
-            editor.move_backward(1);
-            editor.render();
+/// Scrolls the viewable area of the display in a _downward_ direction for the editor
+/// associated with `p`, which represents a point whose origin is the top-left position
+/// of the terminal display.
+pub fn track_down(env: &mut Environment, p: Point, select: bool) {
+    let view = env.workspace.borrow().locate_view(p);
+    if let Some((view_id, _)) = view {
+        let mut editor = env.get_view_editor(view_id).borrow_mut();
+
+        // Update soft mark if selection is active, otherwise capture current buffer
+        // position before scrolling in case soft mark needs to be cleared.
+        let prior_pos = if select {
+            editor.set_soft_mark();
+            None
+        } else {
+            Some(editor.pos())
+        };
+        editor.scroll_down(1);
+
+        // If selection is inactive and buffer position moved as a result of scrolling,
+        // then soft mark must be cleared.
+        if let Some(prior_pos) = prior_pos
+            && editor.pos() != prior_pos
+        {
+            editor.clear_soft_mark();
         }
+        editor.render();
     }
 }
 
-/// Moves the cursor forward for the editor associated with `p`, which represents a
-/// point whose origin is the top-left position of the terminal display.
-pub fn track_forward(env: &mut Environment, p: Point, select: bool) {
-    let ws = env.workspace.borrow();
-    if ws.config.settings.track_lateral {
-        let view = ws.locate_view(p);
-        if let Some((view_id, _)) = view {
-            let mut editor = env.get_view_editor(view_id).borrow_mut();
-            if select {
-                editor.set_soft_mark();
-            } else {
-                editor.clear_soft_mark();
-            }
-            editor.move_forward(1);
-            editor.render();
+/// Scrolls the viewable area of the display in an _leftward_ direction for the editor
+/// associated with `p`, which represents a point whose origin is the top-left position
+/// of the terminal display.
+pub fn track_left(env: &mut Environment, p: Point, select: bool) {
+    let view = env.workspace.borrow().locate_view(p);
+    if let Some((view_id, _)) = view {
+        let mut editor = env.get_view_editor(view_id).borrow_mut();
+        if select {
+            editor.set_soft_mark();
+        } else {
+            editor.clear_soft_mark();
         }
+        editor.scroll_left(1);
+        editor.render();
+    }
+}
+
+/// Scrolls the viewable area of the display in an _rightward_ direction for the editor
+/// associated with `p`, which represents a point whose origin is the top-left position
+/// of the terminal display.
+pub fn track_right(env: &mut Environment, p: Point, select: bool) {
+    let view = env.workspace.borrow().locate_view(p);
+    if let Some((view_id, _)) = view {
+        let mut editor = env.get_view_editor(view_id).borrow_mut();
+        if select {
+            editor.set_soft_mark();
+        } else {
+            editor.clear_soft_mark();
+        }
+        editor.scroll_right(1);
+        editor.render();
     }
 }
 
@@ -1040,7 +1090,7 @@ pub fn set_focus(env: &mut Environment, p: Point) {
 
 /// Predefined mapping of editing operations to editing functions.
 #[rustfmt::skip]
-pub const OP_MAPPINGS: [(&str, Operation, &str); 85] = [
+pub const OP_MAPPINGS: [(&str, Operation, &str); 89] = [
     // --- exit and cancellation ---
     ("quit", quit,
         "ask to save dirty editors and quit"),
@@ -1113,13 +1163,21 @@ pub const OP_MAPPINGS: [(&str, Operation, &str); 85] = [
     ("move-bottom-select", move_bottom_select,
         "move cursor to bottom of buffer while selecting text"),
     ("scroll-up", scroll_up,
-        "scroll contents of window up one line"),
+        "scroll viewable area of buffer up by one line"),
     ("scroll-up-select", scroll_up_select,
-        "scroll contents of window up one line while selecting text"),
+        "scroll viewable area of buffer up by one line while selecting text"),
     ("scroll-down", scroll_down,
-        "scroll contents of window down one line"),
+        "scroll viewable area of buffer down by one line"),
     ("scroll-down-select", scroll_down_select,
-        "scroll contents of window down one line while selecting text"),
+        "scroll viewable area of buffer down by one line while selecting text"),
+    ("scroll-left", scroll_left,
+        "scroll viewable area of buffer left by one column"),
+    ("scroll-left-select", scroll_left_select,
+        "scroll viewable area of buffer left by one column while selecting text"),
+    ("scroll-right", scroll_right,
+        "scroll viewable area of buffer right by one column"),
+    ("scroll-right-select", scroll_right_select,
+        "scroll viewable area of buffer right by one column while selecting text"),
     ("scroll-center", scroll_center,
         "redraw window and align cursor to center, then bottom and top when repeated"),
     ("redraw", redraw,

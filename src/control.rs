@@ -327,10 +327,10 @@ impl Controller {
                 op::track_down(env, Point::new(*row, *col), *shift == Shift::On);
             })),
             Key::ScrollLeft(shift, row, col) => Some(Box::new(|env: &mut Environment| {
-                op::track_backward(env, Point::new(*row, *col), *shift == Shift::On);
+                op::track_left(env, Point::new(*row, *col), *shift == Shift::On);
             })),
             Key::ScrollRight(shift, row, col) => Some(Box::new(|env: &mut Environment| {
-                op::track_forward(env, Point::new(*row, *col), *shift == Shift::On);
+                op::track_right(env, Point::new(*row, *col), *shift == Shift::On);
             })),
             _ => None,
         }

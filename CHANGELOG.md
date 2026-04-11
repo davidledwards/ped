@@ -2,13 +2,25 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
-### [0.40.0](https://github.com/davidledwards/ped/tree/v0.40.0) | `2026-04-??`
+### [0.40.0](https://github.com/davidledwards/ped/tree/v0.40.0) | `2026-04-11`
 
 #### Added
 
 - CLI options `--wrap` (default) and `--no-wrap` that indicate whether long lines either wrap or scroll horizontally
 - Configuration option `wrap` to complement CLI options
 - Configuration color `gutter-fg` used for margin gutters, which is only applicable when `--no-wrap` is specified
+- Operations `scroll-left`, `scroll-right`, `scroll-left-select`, and `scroll-right-select` for scrolling text left and right when line wrapping is disabled
+- Mouse events tracking left and right movement are bound to `scroll-left` and `scroll-right`, respectively
+
+#### Changed
+
+- Removed `--track-lateral` and `--no-track-lateral` CLI options
+- Removed `track-lateral` configuration option
+- Several default key bindings have changed:
+  - `C-left` binds to `scroll-left`
+  - `C-right` binds to `scroll-right`
+  - `S-C-left` binds to `scroll-left-select`
+  - `S-C-right` binds to `scroll-right-select`
 
 ### [0.39.0](https://github.com/davidledwards/ped/tree/v0.39.0) | `2026-03-07`
 

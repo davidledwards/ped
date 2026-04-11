@@ -613,20 +613,50 @@ impl Editor {
         self.align_syntax();
     }
 
-    /// Tries scrolling _up_ the contents of the display by the specified number of
-    /// `try_rows` while preserving the cursor position, which also means the cursor
-    /// moves _up_ as the contents scroll.
+    /// Tries scrolling the contents of the display in an _upward_ direction by the
+    /// specified number of `try_rows` while also trying to preserve the cursor position,
+    /// returning the actual number of rows scrolled.
+    ///
+    /// Conceptually, this function moves the viewable area towards the top of the
+    /// buffer.
     pub fn scroll_up(&mut self, try_rows: u32) {
         if self.rendering.scroll_up(try_rows) > 0 {
             self.align_syntax();
         }
     }
 
-    /// Tries scrolling _down_ the contents of the display by the specified number of
-    /// `try_rows` while preserving the cursor position, which also means the cursor
-    /// moves _down_ as the contents scroll.
+    /// Tries scrolling the contents of the display in a _downward_ direction by the
+    /// specified number of `try_rows` while also trying to preserve the cursor position,
+    /// returning the actual number of rows scrolled.
+    ///
+    /// Conceptually, this function moves the viewable area towards the bottom of the
+    /// buffer.
     pub fn scroll_down(&mut self, try_rows: u32) {
         if self.rendering.scroll_down(try_rows) > 0 {
+            self.align_syntax();
+        }
+    }
+
+    /// Tries scrolling the contents of the display in a _leftward_ direction by the
+    /// specified number of `try_cols` while also trying to preserve the cursor position,
+    /// returning the actual number of columns scrolled.
+    ///
+    /// Conceptually, this function moves the viewable area towards the rightmost column
+    /// of the current row.
+    pub fn scroll_left(&mut self, try_cols: u32) {
+        if self.rendering.scroll_left(try_cols) > 0 {
+            self.align_syntax();
+        }
+    }
+
+    /// Tries scrolling the contents of the display in a _rightward_ direction by the
+    /// specified number of `try_cols` while also trying to preserve the cursor position,
+    /// returning the actual number of columns scrolled.
+    ///
+    /// Conceptually, this function moves the viewable area towards the leftmost column
+    /// of the current row.
+    pub fn scroll_right(&mut self, try_cols: u32) {
+        if self.rendering.scroll_right(try_cols) > 0 {
             self.align_syntax();
         }
     }
@@ -924,8 +954,10 @@ impl Editor {
 
     /// Aligns the syntax cursor with the top line.
     fn align_syntax(&mut self) {
-        let (start_pos, _) = self.rendering.top();
-        self.syntax_cursor = self.tokenizer.borrow().find(self.syntax_cursor, start_pos);
+        self.syntax_cursor = self
+            .tokenizer
+            .borrow()
+            .find(self.syntax_cursor, self.rendering.origin());
     }
 
     /// Sets the values of all banner attributes and draws it.

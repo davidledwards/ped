@@ -29,10 +29,6 @@ Interrogation
   --syntaxes         : print available syntaxes
   --describe OP      : print descripion of operation (--ops shows list)
 
-Mouse
-  --track-lateral    : track lateral mouse movement (default: off)
-  --no-track-lateral
-
 Configuration
   --config, -C FILE  : load configuration from FILE
   --syntax, -S DIR   : load syntax configurations from DIR
