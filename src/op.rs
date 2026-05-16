@@ -14,7 +14,6 @@ use crate::config::ConfigurationRef;
 use crate::ed;
 use crate::editor::EditorRef;
 use crate::env::{Environment, Focus};
-use crate::etc;
 use crate::help;
 use crate::nav;
 use crate::operation::{Action, Operation};
@@ -940,22 +939,10 @@ fn next_editor(env: &mut Environment) -> Option<Action> {
 fn describe_editor(env: &mut Environment) -> Option<Action> {
     let editor = env.get_active_editor().borrow();
     let buffer = editor.buffer();
-    let (c_char, c_code) = if let Some(c) = buffer.get_char(editor.pos()) {
-        let c_char = if etc::char_width(c) == 0 {
-            "".to_string()
-        } else {
-            format!("'{c}' ")
-        };
-        (c_char, format!("\\u{:04x}", c as u32))
-    } else {
-        ("EOF".to_string(), "".to_string())
-    };
-    let tab_mode = if editor.get_tab() { "hard" } else { "soft" };
-    let eol_mode = if editor.get_crlf() { "CRLF" } else { "LF" };
     let text = format!(
-        "lines: {} | chars: {} | cursor: {c_char}{c_code} | tabs: {tab_mode} | eol: {eol_mode}",
+        "{} lines, {} chars",
         nav::find_location(&buffer, usize::MAX).line + 1,
-        buffer.size(),
+        buffer.size()
     );
     Action::echo(&text)
 }

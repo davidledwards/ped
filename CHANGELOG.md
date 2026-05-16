@@ -2,11 +2,16 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
-### [0.41.0](https://github.com/davidledwards/ped/tree/v0.41.0) | `2026-05-??`
+### [0.41.0](https://github.com/davidledwards/ped/tree/v0.41.0) | `2026-05-16`
+
+#### Changed
+
+- `describe-editor` now only displays number of lines and characters, removing cursor, tab, and EOL information since this is always present on the banner bar
 
 #### Fixed
 
-- Rendering of zero-width Unicode characters causing display problems, which now displays the special character `¿`
+- Printing zero-width Unicode characters was causing rendering problems, so they are now displayed as the special character `¿`
+- Bug realigning syntax coloring for the `move-top` and `move-bottom` operations
 
 ### [0.40.0](https://github.com/davidledwards/ped/tree/v0.40.0) | `2026-04-11`
 

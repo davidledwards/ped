@@ -580,13 +580,13 @@ impl Editor {
 
     /// Moves the cursor to the _top_ of the buffer.
     pub fn move_top(&mut self) {
-        self.rendering.move_to(0, Align::Top, Justify::Auto);
+        self.move_to(0, Align::Top, Justify::Auto);
     }
 
     /// Moves the cursor to the _bottom_ of the buffer.
     pub fn move_bottom(&mut self) {
         let pos = self.buffer().size();
-        self.rendering.move_to(pos, Align::Bottom, Justify::Auto);
+        self.move_to(pos, Align::Bottom, Justify::Auto);
     }
 
     /// Moves the buffer position to the location `loc`, and places the cursor on
