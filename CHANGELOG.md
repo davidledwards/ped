@@ -2,6 +2,12 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
+### [0.41.0](https://github.com/davidledwards/ped/tree/v0.41.0) | `2026-05-??`
+
+#### Fixed
+
+- Rendering of zero-width Unicode characters causing display problems, which now displays the special character `¿`
+
 ### [0.40.0](https://github.com/davidledwards/ped/tree/v0.40.0) | `2026-04-11`
 
 #### Added

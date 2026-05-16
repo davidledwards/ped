@@ -1,6 +1,7 @@
 //! Useful functions.
 
 use std::ops::ControlFlow;
+use unicode_width::UnicodeWidthChar;
 
 pub const PACKAGE_NAME: &str = env!("CARGO_PKG_NAME");
 pub const PACKAGE_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -17,6 +18,13 @@ pub fn version() -> String {
         &BUILD_HASH[0..7],
         BUILD_DATE,
     )
+}
+
+/// Returns the width of `c` in terms of the displayable number of characters on the
+/// terminal.
+#[inline(always)]
+pub fn char_width(c: char) -> usize {
+    c.width().unwrap_or(0)
 }
 
 /// Returns the byte offset in `buf` corresponding to the `pos`-th character, which is

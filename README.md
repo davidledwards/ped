@@ -190,7 +190,7 @@ When a buffer has unsaved modifications, the color of the _source_ changes.
 
 ![](content/ped-banner-dirty.png)
 
-By default, `ped` will wrap long lines unless `--no-wrap` is specified or the setting `wrap = false` exists in the configuration file. When line wrapping is disabled, the text on the display will scroll left or right depending on the movement of the cursor. If text exists right of the right margin, then the gutter character `▶︎` is displayed. Likewise, if text exists left of the left margin, then the gutter character `◀︎` is shown.
+By default, `ped` will wrap long lines unless `--no-wrap` is specified or the setting `wrap = false` exists in the configuration file. When line wrapping is disabled, the text on the display will scroll left or right depending on the movement of the cursor. If text exists right of the right margin, then the gutter character `▶` is displayed. Likewise, if text exists left of the left margin, then the gutter character `◀` is shown.
 
 ![](content/ped-no-wrap.png)
 
@@ -201,6 +201,7 @@ By default, `ped` will wrap long lines unless `--no-wrap` is specified or the se
 - An auto-save feature has not been implemented, so remember to save frequently.
 - TAB characters `\t` are not indented as one might expect, but rather shown as the special character `→`.
 - Control characters other than `\t` and `\n` are shown as `¿`, though one can place the cursor under such characters and press `C-t` to see the Unicode code point.
+- Unicode characters with display widths > 1 are rendered but cause subtle display problems.
 - A target binary does not exist for Windows.
 
 ## Contributing

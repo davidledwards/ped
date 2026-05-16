@@ -2,6 +2,7 @@
 
 use crate::color::Color;
 use crate::config::ConfigurationRef;
+use crate::etc;
 use crate::grid::Cell;
 use crate::size::Point;
 use std::ops::Range;
@@ -127,7 +128,7 @@ impl<'a> Pen<'a> {
     pub fn as_text(&self, c: char, pos: usize, row: u32, syntax_color: Option<u8>) -> Cell {
         let config = &self.styler.config;
 
-        let fg = if (c == '\n' && config.settings.eol) || c.is_control() {
+        let fg = if (c == '\n' && config.settings.eol) || etc::char_width(c) == 0 {
             config.theme.whitespace_fg
         } else if let Some(fg) = syntax_color {
             fg
@@ -158,7 +159,7 @@ impl<'a> Pen<'a> {
                 }
             }
             '\t' => Self::TAB_CHAR,
-            c if c.is_control() => Self::CTRL_CHAR,
+            c if etc::char_width(c) == 0 => Self::CTRL_CHAR,
             c => c,
         }
     }

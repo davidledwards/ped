@@ -4,6 +4,7 @@ use crate::config::ConfigurationRef;
 use crate::ed;
 use crate::editor::{Capture, EditorRef};
 use crate::env::{Environment, Focus};
+use crate::etc;
 use crate::key::{Key, SHIFT_TAB, TAB};
 use crate::nav::Location;
 use crate::operation::Action;
@@ -324,7 +325,7 @@ impl Question for InsertUnicode {
         let value = value.trim();
         if value.len() > 0 {
             if let Some(c) = self.parse(value) {
-                if c.is_control() {
+                if etc::char_width(c) == 0 {
                     None
                 } else {
                     Some(format!(" '{c}'"))
@@ -412,7 +413,7 @@ impl Search {
                 .mark
                 .map(|mark| editor.borrow().copy_mark(mark))
                 .and_then(|text| {
-                    if text.iter().any(|c| c.is_control()) {
+                    if text.iter().any(|c| etc::char_width(*c) == 0) {
                         None
                     } else {
                         Some(text.iter().collect())
