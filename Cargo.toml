@@ -1,8 +1,8 @@
 [package]
 name = "ped"
-version = "0.41.0"
+version = "0.42.0"
 edition = "2024"
-rust-version = "1.95"
+rust-version = "1.97"
 authors = ["David Edwards <david.l.edwards@gmail.com>"]
 description = "The pedestrian text editor"
 readme = "README.md"
