@@ -153,7 +153,13 @@ pub trait Renderer {
     fn remove(&mut self);
 
     /// Renders the display.
-    fn render(&mut self, tok: &Tokenizer, syn: Cursor, selected: Option<Range<usize>>);
+    fn render(
+        &mut self,
+        tok: &Tokenizer,
+        syn: Cursor,
+        selected: Option<Range<usize>>,
+        matched: Option<Range<usize>>,
+    );
 }
 
 /// The types of rendering engines.
@@ -1221,11 +1227,17 @@ mod wrapping {
             self.cursor.col = col;
         }
 
-        fn render(&mut self, tok: &Tokenizer, syn: Cursor, selected: Option<Range<usize>>) {
+        fn render(
+            &mut self,
+            tok: &Tokenizer,
+            syn: Cursor,
+            selected: Option<Range<usize>>,
+            matched: Option<Range<usize>>,
+        ) {
             // Create pen to format characters.
             let pen = self
                 .styler
-                .pen(self.cursor, self.cur_row.line + 1, selected);
+                .pen(self.cursor, self.cur_row.line + 1, selected, matched);
 
             // Initialize spot representing top-left cell.
             let spot = Spot::new(self, tok, syn);
@@ -2184,11 +2196,17 @@ mod scrolling {
             self.cursor.col = col;
         }
 
-        fn render(&mut self, tok: &Tokenizer, syn: Cursor, selected: Option<Range<usize>>) {
+        fn render(
+            &mut self,
+            tok: &Tokenizer,
+            syn: Cursor,
+            selected: Option<Range<usize>>,
+            matched: Option<Range<usize>>,
+        ) {
             // Create pen to format characters.
             let pen = self
                 .styler
-                .pen(self.cursor, self.cur_row.line + 1, selected);
+                .pen(self.cursor, self.cur_row.line + 1, selected, matched);
 
             // Initialize spot representing top-left cell.
             let spot = Spot::new(self, tok, syn);

@@ -81,8 +81,13 @@ pub struct Editor {
     /// EOL is written as `\n`.
     crlf: bool,
 
-    /// An optional last match from a prior search.
+    /// An optional last match from a prior search, which captures the starting buffer
+    /// position of the match and the pattern used by the search.
     last_match: Option<(usize, Box<dyn Pattern>)>,
+
+    /// A range in the buffer representing the current match from an active search
+    /// operation, otherwise the value should be `None`.
+    matched: Option<Range<usize>>,
 }
 
 pub type EditorRef = Rc<RefCell<Editor>>;
@@ -245,6 +250,16 @@ impl EditorBuilder {
     }
 }
 
+impl Capture {
+    /// Returns a new capture with the mark cleared.
+    pub fn without_mark(&self) -> Capture {
+        Capture {
+            mark: None,
+            ..*self
+        }
+    }
+}
+
 impl Editor {
     /// An upper bound on the tolerable number of milliseconds to tokenize the
     /// buffer in real-time, otherwise the operation is deferred.
@@ -315,6 +330,7 @@ impl Editor {
             tab_cols,
             crlf,
             last_match: None,
+            matched: None,
         }
     }
 
@@ -730,6 +746,16 @@ impl Editor {
         self.copy(start, end)
     }
 
+    /// Returns the buffer range of `mark` relative to the current buffer position.
+    fn get_mark_range(&self, mark: Mark) -> Range<usize> {
+        let Mark(pos, _) = mark;
+        if pos < self.pos() {
+            pos..self.pos()
+        } else {
+            self.pos()..pos
+        }
+    }
+
     /// Returns the text of the line on which the current buffer position rests.
     pub fn copy_line(&self) -> Vec<char> {
         let (start_pos, end_pos) = self.rendering.line();
@@ -785,7 +811,7 @@ impl Editor {
         }
     }
 
-    /// Returned the captured state of the editor.
+    /// Returns the captured state of the editor.
     pub fn capture(&self) -> Capture {
         Capture {
             pos: self.pos(),
@@ -835,8 +861,12 @@ impl Editor {
         });
 
         // Render text.
-        self.rendering
-            .render(&self.tokenizer.borrow(), self.syntax_cursor, selected);
+        self.rendering.render(
+            &self.tokenizer.borrow(),
+            self.syntax_cursor,
+            selected,
+            self.matched.clone(),
+        );
 
         // Renders additional information.
         self.window
@@ -858,6 +888,16 @@ impl Editor {
     /// Takes the last match from a prior search.
     pub fn take_last_match(&mut self) -> Option<(usize, Box<dyn Pattern>)> {
         self.last_match.take()
+    }
+
+    /// Sets the matched range in the buffer from `start_pos` to `end_pos`.
+    pub fn set_matched(&mut self, start_pos: usize, end_pos: usize) {
+        self.matched = Some(start_pos..end_pos);
+    }
+
+    /// Clears the matched range.
+    pub fn clear_matched(&mut self) {
+        self.matched = None;
     }
 
     /// Inserts the character `c` at the current buffer position.
@@ -1117,16 +1157,6 @@ impl Editor {
             self.tokenize_clock = self.clock;
         }
         self.align_syntax();
-    }
-
-    /// Returns buffer position range in `mark`.
-    fn get_mark_range(&self, mark: Mark) -> Range<usize> {
-        let Mark(pos, _) = mark;
-        if pos < self.pos() {
-            pos..self.pos()
-        } else {
-            self.pos()..pos
-        }
     }
 
     /// Reverts `change`.

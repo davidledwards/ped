@@ -729,8 +729,7 @@ fn search_next(env: &mut Environment) -> Option<Action> {
         match result {
             Some(Match(start_pos, end_pos)) => {
                 editor.move_to(start_pos, Align::Center, Justify::Center);
-                editor.clear_mark();
-                editor.set_soft_mark_at(end_pos);
+                editor.set_matched(start_pos, end_pos);
                 editor.render();
                 editor.set_last_match(start_pos, pattern);
             }

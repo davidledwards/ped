@@ -40,6 +40,10 @@ pub struct Pen<'a> {
     /// Range in the buffer containing selected text, if applicable, otherwise this
     /// span is assumed to be `0`..`0`.
     selected: Range<usize>,
+
+    /// Range in the buffer containing matched text, if applicable, otherwise this
+    /// span is assumed to be `0`..`0`.
+    matched: Range<usize>,
 }
 
 impl Styler {
@@ -64,9 +68,16 @@ impl Styler {
     /// State provided by caller:
     /// - `cursor`: current cursor position on display
     /// - `line`: current `1`-based line number in buffer
-    /// - `selected`: an optional region of selected text
-    pub fn pen(&self, cursor: Point, line: u32, selected: Option<Range<usize>>) -> Pen<'_> {
-        Pen::new(self, cursor, line, selected)
+    /// - `selected`: an optional span of selected text
+    /// - `matched`: an optional span of matched text
+    pub fn pen(
+        &self,
+        cursor: Point,
+        line: u32,
+        selected: Option<Range<usize>>,
+        matched: Option<Range<usize>>,
+    ) -> Pen<'_> {
+        Pen::new(self, cursor, line, selected, matched)
     }
 }
 
@@ -85,12 +96,14 @@ impl<'a> Pen<'a> {
         cursor: Point,
         line: u32,
         selected: Option<Range<usize>>,
+        matched: Option<Range<usize>>,
     ) -> Pen<'a> {
         Pen {
             styler,
             cursor,
             line,
             selected: selected.unwrap_or(0..0),
+            matched: matched.unwrap_or(0..0),
         }
     }
 
@@ -136,7 +149,9 @@ impl<'a> Pen<'a> {
             config.theme.text_fg
         };
 
-        let bg = if self.selected.contains(&pos) {
+        let bg = if self.matched.contains(&pos) {
+            config.theme.search_bg
+        } else if self.selected.contains(&pos) {
             config.theme.select_bg
         } else if config.settings.spotlight && row == self.cursor.row {
             config.theme.spotlight_bg

@@ -66,6 +66,7 @@ pub struct Theme {
     pub text_fg: u8,
     pub text_bg: u8,
     pub select_bg: u8,
+    pub search_bg: u8,
     pub spotlight_bg: u8,
     pub whitespace_fg: u8,
     pub gutter_fg: u8,
@@ -117,6 +118,9 @@ struct ExternalTheme {
 
     #[serde(rename = "select-bg")]
     select_bg: Option<ColorValue>,
+
+    #[serde(rename = "search-bg")]
+    search_bg: Option<ColorValue>,
 
     #[serde(rename = "spotlight-bg")]
     spotlight_bg: Option<ColorValue>,
@@ -202,6 +206,7 @@ impl Theme {
     const TEXT_FG: u8 = 252;
     const TEXT_BG: u8 = 233;
     const SELECT_BG: u8 = 88;
+    const SEARCH_BG: u8 = 24;
     const SPOTLIGHT_BG: u8 = 234;
     const WHITSPACE_FG: u8 = 243;
     const GUTTER_FG: u8 = 208;
@@ -234,6 +239,7 @@ impl Theme {
             self.text_fg = resolve(self.text_fg, &ext.text_fg, colors)?;
             self.text_bg = resolve(self.text_bg, &ext.text_bg, colors)?;
             self.select_bg = resolve(self.select_bg, &ext.select_bg, colors)?;
+            self.search_bg = resolve(self.search_bg, &ext.search_bg, colors)?;
             self.spotlight_bg = resolve(self.spotlight_bg, &ext.spotlight_bg, colors)?;
             self.whitespace_fg = resolve(self.whitespace_fg, &ext.whitespace_fg, colors)?;
             self.gutter_fg = resolve(self.gutter_fg, &ext.gutter_fg, colors)?;
@@ -258,6 +264,7 @@ impl Default for Theme {
             text_fg: Self::TEXT_FG,
             text_bg: Self::TEXT_BG,
             select_bg: Self::SELECT_BG,
+            search_bg: Self::SEARCH_BG,
             spotlight_bg: Self::SPOTLIGHT_BG,
             whitespace_fg: Self::WHITSPACE_FG,
             gutter_fg: Self::GUTTER_FG,

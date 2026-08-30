@@ -395,7 +395,12 @@ struct Search {
 
 impl Search {
     fn new(editor: EditorRef, using_regex: bool, case_strict: bool) -> Search {
+        // Captures current state of editor so it can be restored if search is
+        // cancelled.
         let capture = editor.borrow().capture();
+
+        // Very inefficient, but buffer must be cached if searching using regex because
+        // of regex library limitations.
         let buf_cache = if using_regex {
             let buf = editor.borrow().buffer().iter().collect::<String>();
             Some(buf)
@@ -422,15 +427,32 @@ impl Search {
                 .unwrap_or_default()
         };
 
-        // Prime search such that pressing TAB will find next match.
+        // Prime search operation such that pressing TAB will find next match.
         let (match_cache, match_index) = if last_value.len() > 0 {
-            let start_pos = capture.pos;
+            // Mark may appear before or after current buffer position, so ensure that
+            // start position of match is correct.
+            let mark_pos = capture.mark.expect("captured mark must contain value").0;
+            let start_pos = if mark_pos < capture.pos {
+                mark_pos
+            } else {
+                capture.pos
+            };
             let end_pos = start_pos + last_value.len();
+            editor.borrow_mut().set_matched(start_pos, end_pos);
             let pattern = search::using_term(&last_value, case_strict);
             (vec![(start_pos, end_pos)], Some((0, pattern)))
         } else {
             (vec![], None)
         };
+
+        // Clear mark if set when search was initiated. Note that if mark was set, then
+        // matched term is usually set as byproduct so long as term does not contain
+        // disallowed characters.
+        if capture.mark.is_some() {
+            let mut editor = editor.borrow_mut();
+            editor.clear_mark();
+            editor.render();
+        }
 
         Search {
             editor,
@@ -524,8 +546,7 @@ impl Search {
     fn highlight_match(&mut self, start_pos: usize, end_pos: usize) {
         let mut editor = self.editor.borrow_mut();
         editor.move_to(start_pos, Align::Center, Justify::Center);
-        editor.clear_mark();
-        editor.set_soft_mark_at(end_pos);
+        editor.set_matched(start_pos, end_pos);
         editor.render();
     }
 
@@ -536,9 +557,24 @@ impl Search {
         }
     }
 
+    fn partial_restore(&mut self) {
+        let mut editor = self.editor.borrow_mut();
+        editor.clear_matched();
+        editor.restore(&self.capture.without_mark());
+        editor.render();
+    }
+
     fn restore(&mut self) {
         let mut editor = self.editor.borrow_mut();
+        editor.clear_matched();
         editor.restore(&self.capture);
+        editor.render();
+    }
+
+    fn finish(&mut self, index: usize, pattern: Box<dyn Pattern>) {
+        let mut editor = self.editor.borrow_mut();
+        editor.clear_matched();
+        editor.set_last_match(self.match_cache[index].0, pattern);
         editor.render();
     }
 }
@@ -571,7 +607,7 @@ impl Question for Search {
             let hint = if value.len() > 0 {
                 self.find_first(value)
             } else {
-                self.restore();
+                self.partial_restore();
                 None
             };
             self.last_value = value.to_string();
@@ -584,9 +620,7 @@ impl Question for Search {
             && value.len() > 0
             && let Some((index, pattern)) = self.match_index.take()
         {
-            self.editor
-                .borrow_mut()
-                .set_last_match(self.match_cache[index].0, pattern);
+            self.finish(index, pattern);
         } else {
             self.restore();
         }

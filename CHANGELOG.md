@@ -2,6 +2,20 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
+### [0.42.0](https://github.com/davidledwards/ped/tree/v0.42.0) | `2026-??-??`
+
+#### Added
+
+- Configuration color `search-bg` for highlighting matched terms during incremental search.
+
+#### Changed
+
+- Incremental search now uses distinct background color `search-bg` rather than `select-bg`.
+
+#### Fixed
+
+- Highlighting of matched terms during incremental search would often disappear when scrolling with the mouse due to a side effect of using region selection as the means of showing matches, but this behavior has been replaced with a different mechanism.
+
 ### [0.41.0](https://github.com/davidledwards/ped/tree/v0.41.0) | `2026-05-16`
 
 #### Changed
