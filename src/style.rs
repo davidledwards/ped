@@ -7,8 +7,9 @@ use crate::grid::Cell;
 use crate::size::Point;
 use std::ops::Range;
 
-/// A _styler_ creates [pens](Pen) that are used during the rendering process.
-pub struct Styler {
+/// A _style builder_ creates [stylers](Style) that are, in turn, used to create
+/// [pens](Pen).
+pub struct StyleBuilder {
     /// Configuration that dictates colors and behaviors.
     config: ConfigurationRef,
 
@@ -25,17 +26,10 @@ pub struct Styler {
     gutter_color: Color,
 }
 
-/// A _pen_ captures state information that is used to format [cells](Cell) during the
-/// rendering process.
-pub struct Pen<'a> {
-    /// A reference to the styler that created this pen.
-    styler: &'a Styler,
-
-    /// Current cursor position.
-    cursor: Point,
-
-    /// Current `1`-based line number.
-    line: u32,
+/// A _style_ creates [pens](Pen) that are used during the rendering process.
+pub struct Style<'a> {
+    /// A reference to the builder that created this pen.
+    builder: &'a StyleBuilder,
 
     /// Range in the buffer containing selected text, if applicable, otherwise this
     /// span is assumed to be `0`..`0`.
@@ -46,20 +40,55 @@ pub struct Pen<'a> {
     matched: Range<usize>,
 }
 
-impl Styler {
-    /// Creates a new styler using `config`.
-    pub fn new(config: ConfigurationRef) -> Styler {
+/// A _pen_ captures state information that is used to format [cells](Cell) during the
+/// rendering process.
+pub struct Pen<'a> {
+    /// A reference to the style that created this pen.
+    style: &'a Style<'a>,
+
+    /// Current cursor position.
+    cursor: Point,
+
+    /// Current `1`-based line number.
+    line: u32,
+}
+
+impl StyleBuilder {
+    /// Creates a new style builder using `config`.
+    pub fn new(config: ConfigurationRef) -> StyleBuilder {
         let margin_color = Color::new(config.theme.margin_fg, config.theme.margin_bg);
         let line_color = Color::new(config.theme.line_fg, config.theme.margin_bg);
         let text_color = Color::new(config.theme.text_fg, config.theme.text_bg);
         let gutter_color = Color::new(config.theme.gutter_fg, config.theme.text_bg);
 
-        Styler {
+        StyleBuilder {
             config,
             margin_color,
             line_color,
             text_color,
             gutter_color,
+        }
+    }
+
+    pub fn style(
+        &self,
+        selected: Option<Range<usize>>,
+        matched: Option<Range<usize>>,
+    ) -> Style<'_> {
+        Style::new(self, selected, matched)
+    }
+}
+
+impl<'a> Style<'a> {
+    fn new(
+        builder: &'a StyleBuilder,
+        selected: Option<Range<usize>>,
+        matched: Option<Range<usize>>,
+    ) -> Style<'a> {
+        Style {
+            builder,
+            selected: selected.unwrap_or(0..0),
+            matched: matched.unwrap_or(0..0),
         }
     }
 
@@ -70,14 +99,8 @@ impl Styler {
     /// - `line`: current `1`-based line number in buffer
     /// - `selected`: an optional span of selected text
     /// - `matched`: an optional span of matched text
-    pub fn pen(
-        &self,
-        cursor: Point,
-        line: u32,
-        selected: Option<Range<usize>>,
-        matched: Option<Range<usize>>,
-    ) -> Pen<'_> {
-        Pen::new(self, cursor, line, selected, matched)
+    pub fn pen(&self, cursor: Point, line: u32) -> Pen<'_> {
+        Pen::new(self, cursor, line)
     }
 }
 
@@ -91,26 +114,18 @@ impl<'a> Pen<'a> {
     /// Special character shown for all other ASCII control characters.
     const CTRL_CHAR: char = '\u{00bf}';
 
-    fn new(
-        styler: &'a Styler,
-        cursor: Point,
-        line: u32,
-        selected: Option<Range<usize>>,
-        matched: Option<Range<usize>>,
-    ) -> Pen<'a> {
+    fn new(style: &'a Style, cursor: Point, line: u32) -> Pen<'a> {
         Pen {
-            styler,
+            style,
             cursor,
             line,
-            selected: selected.unwrap_or(0..0),
-            matched: matched.unwrap_or(0..0),
         }
     }
 
     /// Formats `c` using the margin color.
     #[inline]
     pub fn as_margin(&self, c: char) -> Cell {
-        Cell::new(c, self.styler.margin_color)
+        Cell::new(c, self.style.builder.margin_color)
     }
 
     /// Formats `c` using the line color if `line` is the current line, otherwise the
@@ -118,9 +133,9 @@ impl<'a> Pen<'a> {
     #[inline]
     pub fn as_line(&self, c: char, line: u32) -> Cell {
         let color = if line == self.line {
-            self.styler.line_color
+            self.style.builder.line_color
         } else {
-            self.styler.margin_color
+            self.style.builder.margin_color
         };
         Cell::new(c, color)
     }
@@ -128,18 +143,18 @@ impl<'a> Pen<'a> {
     /// Formats ` ` (space) using the text color.
     #[inline]
     pub fn as_blank(&self) -> Cell {
-        Cell::new(' ', self.styler.text_color)
+        Cell::new(' ', self.style.builder.text_color)
     }
 
     /// Formats `c` using the gutter color.
     #[inline]
     pub fn as_gutter(&self, c: char) -> Cell {
-        Cell::new(c, self.styler.gutter_color)
+        Cell::new(c, self.style.builder.gutter_color)
     }
 
     /// Formats `c` using a color depending on the current rendering context.
     pub fn as_text(&self, c: char, pos: usize, row: u32, syntax_color: Option<u8>) -> Cell {
-        let config = &self.styler.config;
+        let config = &self.style.builder.config;
 
         let fg = if (c == '\n' && config.settings.eol) || etc::char_width(c) == 0 {
             config.theme.whitespace_fg
@@ -149,9 +164,9 @@ impl<'a> Pen<'a> {
             config.theme.text_fg
         };
 
-        let bg = if self.matched.contains(&pos) {
+        let bg = if self.style.matched.contains(&pos) {
             config.theme.search_bg
-        } else if self.selected.contains(&pos) {
+        } else if self.style.selected.contains(&pos) {
             config.theme.select_bg
         } else if config.settings.spotlight && row == self.cursor.row {
             config.theme.spotlight_bg
@@ -167,7 +182,7 @@ impl<'a> Pen<'a> {
     fn convert_char(&self, c: char) -> char {
         match c {
             '\n' => {
-                if self.styler.config.settings.eol {
+                if self.style.builder.config.settings.eol {
                     Self::EOL_CHAR
                 } else {
                     ' '

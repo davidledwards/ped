@@ -4,9 +4,9 @@ use crate::buffer::{Buffer, BufferRef};
 use crate::config::ConfigurationRef;
 use crate::nav::{self, Location};
 use crate::size::{Point, Size};
+use crate::style::Style;
 use crate::token::{Cursor, Tokenizer};
 use crate::window::WindowRef;
-use std::ops::Range;
 
 /// A trait that all rendering engines are required to implement.
 pub trait Renderer {
@@ -153,13 +153,7 @@ pub trait Renderer {
     fn remove(&mut self);
 
     /// Renders the display.
-    fn render(
-        &mut self,
-        tok: &Tokenizer,
-        syn: Cursor,
-        selected: Option<Range<usize>>,
-        matched: Option<Range<usize>>,
-    );
+    fn render(&mut self, tok: &Tokenizer, syn: Cursor, style: &Style);
 }
 
 /// The types of rendering engines.
@@ -387,7 +381,7 @@ mod wrapping {
     use crate::buffer::Buffer;
     use crate::canvas::Canvas;
     use crate::nav;
-    use crate::style::{Pen, Styler};
+    use crate::style::Pen;
     use crate::window::Window;
     use std::cell::Ref;
     use std::cmp;
@@ -401,9 +395,6 @@ mod wrapping {
 
         /// Buffer position that corresponds to the cursor position.
         pos: usize,
-
-        /// Styler used to create pens for rendering.
-        styler: Styler,
 
         /// Window for rendering contents of the buffer.
         window: WindowRef,
@@ -721,13 +712,11 @@ mod wrapping {
         /// and `buffer`.
         pub fn new(config: ConfigurationRef, buffer: BufferRef) -> Engine {
             let pos = buffer.borrow().get_pos();
-            let styler = Styler::new(config.clone());
 
             Engine {
                 config,
                 buffer,
                 pos,
-                styler,
                 window: Window::zombie().into_ref(),
                 rows: 0,
                 cols: 0,
@@ -1227,17 +1216,9 @@ mod wrapping {
             self.cursor.col = col;
         }
 
-        fn render(
-            &mut self,
-            tok: &Tokenizer,
-            syn: Cursor,
-            selected: Option<Range<usize>>,
-            matched: Option<Range<usize>>,
-        ) {
+        fn render(&mut self, tok: &Tokenizer, syn: Cursor, style: &Style) {
             // Create pen to format characters.
-            let pen = self
-                .styler
-                .pen(self.cursor, self.cur_row.line + 1, selected, matched);
+            let pen = style.pen(self.cursor, self.cur_row.line + 1);
 
             // Initialize spot representing top-left cell.
             let spot = Spot::new(self, tok, syn);
@@ -1268,7 +1249,7 @@ mod scrolling {
     use crate::buffer::Buffer;
     use crate::canvas::Canvas;
     use crate::nav;
-    use crate::style::{Pen, Styler};
+    use crate::style::Pen;
     use crate::window::Window;
     use std::cell::Ref;
     use std::cmp;
@@ -1282,9 +1263,6 @@ mod scrolling {
 
         /// Buffer position that corresponds to the cursor position.
         pos: usize,
-
-        /// Styler used to create pens for rendering.
-        styler: Styler,
 
         /// Window for rendering contents of the buffer.
         window: WindowRef,
@@ -1602,13 +1580,11 @@ mod scrolling {
         /// and `buffer`.
         pub fn new(config: ConfigurationRef, buffer: BufferRef) -> Engine {
             let pos = buffer.borrow().get_pos();
-            let styler = Styler::new(config.clone());
 
             Engine {
                 config,
                 buffer,
                 pos,
-                styler,
                 window: Window::zombie().into_ref(),
                 rows: 0,
                 cols: 0,
@@ -2196,17 +2172,9 @@ mod scrolling {
             self.cursor.col = col;
         }
 
-        fn render(
-            &mut self,
-            tok: &Tokenizer,
-            syn: Cursor,
-            selected: Option<Range<usize>>,
-            matched: Option<Range<usize>>,
-        ) {
+        fn render(&mut self, tok: &Tokenizer, syn: Cursor, style: &Style) {
             // Create pen to format characters.
-            let pen = self
-                .styler
-                .pen(self.cursor, self.cur_row.line + 1, selected, matched);
+            let pen = style.pen(self.cursor, self.cur_row.line + 1);
 
             // Initialize spot representing top-left cell.
             let spot = Spot::new(self, tok, syn);

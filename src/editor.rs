@@ -10,6 +10,7 @@ use crate::render::{Align, Justify, Renderer, Rendering};
 use crate::search::Pattern;
 use crate::size::{Point, Size};
 use crate::source::Source;
+use crate::style::StyleBuilder;
 use crate::syntax::Syntax;
 use crate::token::{Cursor, Tokenizer, TokenizerRef};
 use crate::window::{Window, WindowRef};
@@ -32,6 +33,9 @@ pub struct Editor {
 
     /// An instance of the rendering engine.
     rendering: Box<dyn Renderer>,
+
+    /// A style builder used by the rendering engine.
+    styler: StyleBuilder,
 
     /// A value of `true` implies that _mutable_ operations are not allowed, though
     /// the notion of mutability is context-dependent and must be enforced by the
@@ -281,6 +285,9 @@ impl Editor {
         // Create renderer with unattached window.
         let rendering = rendering.create(config.clone(), buffer.clone());
 
+        // Create styler for rendering text.
+        let styler = StyleBuilder::new(config.clone());
+
         // Constructs syntax configuration based on type of buffer and file extension,
         // if applicable.
         let syntax = if let Source::File(path, _) = &source {
@@ -315,6 +322,7 @@ impl Editor {
             source,
             buffer,
             rendering,
+            styler,
             readonly,
             clock: 0,
             undo: Vec::new(),
@@ -860,13 +868,13 @@ impl Editor {
             }
         });
 
+        // Create styler for rendering engine that captures state of selected and
+        // matched regions of text.
+        let style = self.styler.style(selected, self.matched.clone());
+
         // Render text.
-        self.rendering.render(
-            &self.tokenizer.borrow(),
-            self.syntax_cursor,
-            selected,
-            self.matched.clone(),
-        );
+        self.rendering
+            .render(&self.tokenizer.borrow(), self.syntax_cursor, &style);
 
         // Renders additional information.
         self.window
