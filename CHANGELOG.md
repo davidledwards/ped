@@ -2,7 +2,7 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
-### [0.42.0](https://github.com/davidledwards/ped/tree/v0.42.0) | `2026-??-??`
+### [0.42.0](https://github.com/davidledwards/ped/tree/v0.42.0) | `2026-09-02`
 
 #### Added
 
