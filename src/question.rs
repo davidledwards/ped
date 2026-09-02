@@ -374,8 +374,7 @@ struct Search {
     /// limitation of current regex library.
     buf_cache: Option<String>,
 
-    /// List of pairs containing starting and ending buffer positions of matches
-    /// pertaining to `last_value`.
+    /// List of matches pertaining to `last_value`.
     ///
     /// Note that matches build incrementally, so list is not necessarily exhaustive of
     /// all possible matches.
@@ -383,7 +382,7 @@ struct Search {
     /// It must hold true that all start positions in this vector are strictly
     /// monotonically increasing. This property is intuitive because subsequent matches
     /// are always further along in buffer.
-    match_cache: Vec<(usize, usize)>,
+    match_cache: Vec<Match>,
 
     /// A pair containing an index into `match_cache` representing the current match
     /// position and the applicable pattern, or `None` if nothing matches `pattern`.
@@ -427,10 +426,10 @@ impl Search {
                 .unwrap_or_default()
         };
 
-        // Prime search operation such that pressing TAB will find next match.
+        // Prime the search operation such that pressing TAB will find next match.
         let (match_cache, match_index) = if last_value.len() > 0 {
-            // Mark may appear before or after current buffer position, so ensure that
-            // start position of match is correct.
+            // Mark may appear before or after current buffer position, so the order
+            // might need to be swapped.
             let mark_pos = capture.mark.expect("captured mark must contain value").0;
             let start_pos = if mark_pos < capture.pos {
                 mark_pos
@@ -438,9 +437,13 @@ impl Search {
                 capture.pos
             };
             let end_pos = start_pos + last_value.len();
-            editor.borrow_mut().set_matched(start_pos, end_pos);
+            let matched = Match(start_pos, end_pos);
+
+            // Effectively adds the prepopulated search term as the first match and
+            // highlights the text.
+            editor.borrow_mut().set_cur_match(matched);
             let pattern = search::using_term(&last_value, case_strict);
-            (vec![(start_pos, end_pos)], Some((0, pattern)))
+            (vec![matched], Some((0, pattern)))
         } else {
             (vec![], None)
         };
@@ -481,10 +484,10 @@ impl Search {
             Some(search::using_term(value, self.case_strict))
         };
         self.match_index = if let Some(pattern) = pattern
-            && let Some(Match(start_pos, end_pos)) = self.find_match(&*pattern, self.capture.pos)
+            && let Some(matched) = self.find_match(&*pattern, self.capture.pos)
         {
-            self.highlight_match(start_pos, end_pos);
-            self.match_cache.push((start_pos, end_pos));
+            self.highlight_match(matched);
+            self.match_cache.push(matched);
             Some((0, pattern))
         } else {
             None
@@ -497,14 +500,14 @@ impl Search {
             Some((index, pattern)) if index == self.match_cache.len() - 1 => {
                 // Find next match position since current index at end of cache.
                 let pos = self.match_cache[index].0 + 1;
-                if let Some(Match(start_pos, end_pos)) = self.find_match(&*pattern, pos) {
-                    self.highlight_match(start_pos, end_pos);
+                if let Some(matched @ Match(start_pos, _)) = self.find_match(&*pattern, pos) {
+                    self.highlight_match(matched);
                     if start_pos == self.match_cache[0].0 {
                         // Next match essentially wrapped.
                         Some((0, pattern))
                     } else {
                         // Add next match to cache.
-                        self.match_cache.push((start_pos, end_pos));
+                        self.match_cache.push(matched);
                         Some((index + 1, pattern))
                     }
                 } else {
@@ -513,8 +516,7 @@ impl Search {
             }
             Some((index, pattern)) => {
                 // Next match position already cached.
-                let (start_pos, end_pos) = self.match_cache[index + 1];
-                self.highlight_match(start_pos, end_pos);
+                self.highlight_match(self.match_cache[index + 1]);
                 Some((index + 1, pattern))
             }
             None => None,
@@ -526,8 +528,7 @@ impl Search {
         self.match_index = match self.match_index.take() {
             Some((index, pattern)) => {
                 let index = index.saturating_sub(1);
-                let (start_pos, end_pos) = self.match_cache[index];
-                self.highlight_match(start_pos, end_pos);
+                self.highlight_match(self.match_cache[index]);
                 Some((index, pattern))
             }
             None => None,
@@ -543,10 +544,10 @@ impl Search {
         }
     }
 
-    fn highlight_match(&mut self, start_pos: usize, end_pos: usize) {
+    fn highlight_match(&mut self, matched: Match) {
         let mut editor = self.editor.borrow_mut();
-        editor.move_to(start_pos, Align::Center, Justify::Center);
-        editor.set_matched(start_pos, end_pos);
+        editor.move_to(matched.0, Align::Center, Justify::Center);
+        editor.set_cur_match(matched);
         editor.render();
     }
 
@@ -559,21 +560,21 @@ impl Search {
 
     fn partial_restore(&mut self) {
         let mut editor = self.editor.borrow_mut();
-        editor.clear_matched();
+        editor.clear_cur_match();
         editor.restore(&self.capture.without_mark());
         editor.render();
     }
 
     fn restore(&mut self) {
         let mut editor = self.editor.borrow_mut();
-        editor.clear_matched();
+        editor.clear_cur_match();
         editor.restore(&self.capture);
         editor.render();
     }
 
     fn finish(&mut self, index: usize, pattern: Box<dyn Pattern>) {
         let mut editor = self.editor.borrow_mut();
-        editor.clear_matched();
+        editor.clear_cur_match();
         editor.set_last_match(self.match_cache[index].0, pattern);
         editor.render();
     }

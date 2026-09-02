@@ -7,7 +7,7 @@ use crate::buffer::{Buffer, BufferRef};
 use crate::config::ConfigurationRef;
 use crate::nav::{self, Location};
 use crate::render::{Align, Justify, Renderer, Rendering};
-use crate::search::Pattern;
+use crate::search::{Match, Pattern};
 use crate::size::{Point, Size};
 use crate::source::Source;
 use crate::style::StyleBuilder;
@@ -89,9 +89,9 @@ pub struct Editor {
     /// position of the match and the pattern used by the search.
     last_match: Option<(usize, Box<dyn Pattern>)>,
 
-    /// A range in the buffer representing the current match from an active search
-    /// operation, otherwise the value should be `None`.
-    matched: Option<Range<usize>>,
+    /// An optional match from an active search operation, otherwise the value should
+    /// be `None`.
+    cur_match: Option<Match>,
 }
 
 pub type EditorRef = Rc<RefCell<Editor>>;
@@ -338,7 +338,7 @@ impl Editor {
             tab_cols,
             crlf,
             last_match: None,
-            matched: None,
+            cur_match: None,
         }
     }
 
@@ -878,7 +878,7 @@ impl Editor {
 
         // Create styler for rendering engine that captures state of selected and
         // matched regions of text.
-        let style = self.styler.style(selected, self.matched.clone());
+        let style = self.styler.style(selected, self.cur_match.map(Match::into));
 
         // Render text.
         self.rendering
@@ -906,14 +906,14 @@ impl Editor {
         self.last_match.take()
     }
 
-    /// Sets the matched range in the buffer from `start_pos` to `end_pos`.
-    pub fn set_matched(&mut self, start_pos: usize, end_pos: usize) {
-        self.matched = Some(start_pos..end_pos);
+    /// Sets the current match.
+    pub fn set_cur_match(&mut self, matched: Match) {
+        self.cur_match = Some(matched);
     }
 
-    /// Clears the matched range.
-    pub fn clear_matched(&mut self) {
-        self.matched = None;
+    /// Clears the current match.
+    pub fn clear_cur_match(&mut self) {
+        self.cur_match = None;
     }
 
     /// Inserts the character `c` at the current buffer position.

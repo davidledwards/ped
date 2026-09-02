@@ -723,9 +723,9 @@ fn search_next(env: &mut Environment) -> Option<Action> {
         // Find next match and highlight if found.
         let result = pattern.find(&editor.buffer(), pos);
         match result {
-            Some(Match(start_pos, end_pos)) => {
+            Some(matched @ Match(start_pos, _)) => {
                 editor.move_to(start_pos, Align::Center, Justify::Center);
-                editor.set_matched(start_pos, end_pos);
+                editor.set_cur_match(matched);
                 editor.render();
                 editor.set_last_match(start_pos, pattern);
             }

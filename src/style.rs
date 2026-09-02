@@ -70,6 +70,11 @@ impl StyleBuilder {
         }
     }
 
+    /// Creates a style.
+    ///
+    /// State provided by caller:
+    /// - `selected`: an optional span of selected text
+    /// - `matched`: an optional span of matched text
     pub fn style(
         &self,
         selected: Option<Range<usize>>,
@@ -97,8 +102,6 @@ impl<'a> Style<'a> {
     /// State provided by caller:
     /// - `cursor`: current cursor position on display
     /// - `line`: current `1`-based line number in buffer
-    /// - `selected`: an optional span of selected text
-    /// - `matched`: an optional span of matched text
     pub fn pen(&self, cursor: Point, line: u32) -> Pen<'_> {
         Pen::new(self, cursor, line)
     }

@@ -29,8 +29,15 @@ pub trait Pattern {
 }
 
 /// Represents a pattern match, where the first value is the _starting_ buffer
-/// position and the second value is the _ending_ buffer position.
+/// position (inclusive) and the second value is the _ending_ buffer position (exclusive).
+#[derive(Copy, Clone)]
 pub struct Match(pub usize, pub usize);
+
+impl From<Match> for Range<usize> {
+    fn from(value: Match) -> Range<usize> {
+        value.0..value.1
+    }
+}
 
 /// Returns a pattern-matching algorithm using `term` as the search string, and
 /// `case_strict` to indicate the sensitivity of case when searching.
