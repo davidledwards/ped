@@ -643,10 +643,12 @@ impl Editor {
     ///
     /// Conceptually, this function moves the viewable area towards the top of the
     /// buffer.
-    pub fn scroll_up(&mut self, try_rows: u32) {
-        if self.rendering.scroll_up(try_rows) > 0 {
+    pub fn scroll_up(&mut self, try_rows: u32) -> u32 {
+        let rows = self.rendering.scroll_up(try_rows);
+        if rows > 0 {
             self.align_syntax();
         }
+        rows
     }
 
     /// Tries scrolling the contents of the display in a _downward_ direction by the
@@ -655,10 +657,12 @@ impl Editor {
     ///
     /// Conceptually, this function moves the viewable area towards the bottom of the
     /// buffer.
-    pub fn scroll_down(&mut self, try_rows: u32) {
-        if self.rendering.scroll_down(try_rows) > 0 {
+    pub fn scroll_down(&mut self, try_rows: u32) -> u32 {
+        let rows = self.rendering.scroll_down(try_rows);
+        if rows > 0 {
             self.align_syntax();
         }
+        rows
     }
 
     /// Tries scrolling the contents of the display in a _leftward_ direction by the
@@ -667,10 +671,12 @@ impl Editor {
     ///
     /// Conceptually, this function moves the viewable area towards the rightmost column
     /// of the current row.
-    pub fn scroll_left(&mut self, try_cols: u32) {
-        if self.rendering.scroll_left(try_cols) > 0 {
+    pub fn scroll_left(&mut self, try_cols: u32) -> u32 {
+        let cols = self.rendering.scroll_left(try_cols);
+        if cols > 0 {
             self.align_syntax();
         }
+        cols
     }
 
     /// Tries scrolling the contents of the display in a _rightward_ direction by the
@@ -679,10 +685,12 @@ impl Editor {
     ///
     /// Conceptually, this function moves the viewable area towards the leftmost column
     /// of the current row.
-    pub fn scroll_right(&mut self, try_cols: u32) {
-        if self.rendering.scroll_right(try_cols) > 0 {
+    pub fn scroll_right(&mut self, try_cols: u32) -> u32 {
+        let cols = self.rendering.scroll_right(try_cols);
+        if cols > 0 {
             self.align_syntax();
         }
+        cols
     }
 
     /// Sets a _hard_ mark at the current buffer position and returns the previous

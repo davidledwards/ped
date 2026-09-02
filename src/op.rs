@@ -328,17 +328,15 @@ fn move_bottom_select(env: &mut Environment) -> Option<Action> {
 /// Operation: `scroll-up`
 fn scroll_up(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
-
-    // Capture current buffer position before scrolling in case soft mark needs to
-    // be cleared.
-    let prior_pos = editor.pos();
-    editor.scroll_up(1);
-
-    // Clear soft mark if buffer position moved as a result of scrolling.
-    if editor.pos() != prior_pos {
-        editor.clear_soft_mark();
+    let last_pos = editor.pos();
+    if editor.scroll_up(1) > 0 {
+        if editor.pos() < last_pos {
+            // Implies the view not only scrolled up but also caused the buffer
+            // position to move backward, which means the soft mark must be cleared.
+            editor.clear_soft_mark();
+        }
+        editor.render();
     }
-    editor.render();
     None
 }
 
@@ -346,25 +344,24 @@ fn scroll_up(env: &mut Environment) -> Option<Action> {
 fn scroll_up_select(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
     editor.set_soft_mark();
-    editor.scroll_up(1);
-    editor.render();
+    if editor.scroll_up(1) > 0 {
+        editor.render();
+    }
     None
 }
 
 /// Operation: `scroll-down`
 fn scroll_down(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
-
-    // Capture current buffer position before scrolling in case soft mark needs to
-    // be cleared.
-    let prior_pos = editor.pos();
-    editor.scroll_down(1);
-
-    // Clear soft mark if buffer position moved as a result of scrolling.
-    if editor.pos() != prior_pos {
-        editor.clear_soft_mark();
+    let last_pos = editor.pos();
+    if editor.scroll_down(1) > 0 {
+        if editor.pos() > last_pos {
+            // Implies the view not only scrolled down but also caused the buffer
+            // position to move forward, which means the soft mark must be cleared.
+            editor.clear_soft_mark();
+        }
+        editor.render();
     }
-    editor.render();
     None
 }
 
@@ -372,25 +369,24 @@ fn scroll_down(env: &mut Environment) -> Option<Action> {
 fn scroll_down_select(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
     editor.set_soft_mark();
-    editor.scroll_down(1);
-    editor.render();
+    if editor.scroll_down(1) > 0 {
+        editor.render();
+    }
     None
 }
 
 /// Operation: `scroll-left`
 fn scroll_left(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
-
-    // Capture current buffer position before scrolling in case soft mark needs to
-    // be cleared.
-    let prior_pos = editor.pos();
-    editor.scroll_left(1);
-
-    // Clear soft mark if buffer position moved as a result of scrolling.
-    if editor.pos() != prior_pos {
-        editor.clear_soft_mark();
+    let last_pos = editor.pos();
+    if editor.scroll_left(1) > 0 {
+        if editor.pos() > last_pos {
+            // Implies the view not only scrolled left but also caused the buffer
+            // position to move forward, which means the soft mark must be cleared.
+            editor.clear_soft_mark();
+        }
+        editor.render();
     }
-    editor.render();
     None
 }
 
@@ -398,25 +394,24 @@ fn scroll_left(env: &mut Environment) -> Option<Action> {
 fn scroll_left_select(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
     editor.set_soft_mark();
-    editor.scroll_left(1);
-    editor.render();
+    if editor.scroll_left(1) > 0 {
+        editor.render();
+    }
     None
 }
 
 /// Operation: `scroll-right`
 fn scroll_right(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
-
-    // Capture current buffer position before scrolling in case soft mark needs to
-    // be cleared.
-    let prior_pos = editor.pos();
-    editor.scroll_right(1);
-
-    // Clear soft mark if buffer position moved as a result of scrolling.
-    if editor.pos() != prior_pos {
-        editor.clear_soft_mark();
+    let last_pos = editor.pos();
+    if editor.scroll_right(1) > 0 {
+        if editor.pos() > last_pos {
+            // Implies the view not only scrolled right but also caused the buffer
+            // position to move backward, which means the soft mark must be cleared.
+            editor.clear_soft_mark();
+        }
+        editor.render();
     }
-    editor.render();
     None
 }
 
@@ -424,8 +419,9 @@ fn scroll_right(env: &mut Environment) -> Option<Action> {
 fn scroll_right_select(env: &mut Environment) -> Option<Action> {
     let mut editor = env.get_active_editor().borrow_mut();
     editor.set_soft_mark();
-    editor.scroll_right(1);
-    editor.render();
+    if editor.scroll_right(1) > 0 {
+        editor.render();
+    }
     None
 }
 
@@ -977,25 +973,20 @@ pub fn track_up(env: &mut Environment, p: Point, select: bool) {
     let view = env.workspace.borrow().locate_view(p);
     if let Some((view_id, _)) = view {
         let mut editor = env.get_view_editor(view_id).borrow_mut();
-
-        // Update soft mark if selection is active, otherwise capture current buffer
-        // position before scrolling in case soft mark needs to be cleared.
-        let prior_pos = if select {
-            editor.set_soft_mark();
-            None
-        } else {
-            Some(editor.pos())
-        };
-        editor.scroll_up(1);
-
-        // If selection is inactive and buffer position moved as a result of scrolling,
-        // then soft mark must be cleared.
-        if let Some(prior_pos) = prior_pos
-            && editor.pos() != prior_pos
-        {
-            editor.clear_soft_mark();
+        let last_pos = editor.pos();
+        if editor.scroll_up(1) > 0 {
+            if editor.pos() < last_pos {
+                // Implies that the view not only scrolled up but also caused the
+                // buffer position to move backward, which means the mark must be
+                // adjusted accordingly.
+                if select {
+                    editor.set_soft_mark_at(last_pos);
+                } else {
+                    editor.clear_soft_mark();
+                }
+            }
+            editor.render();
         }
-        editor.render();
     }
 }
 
@@ -1006,25 +997,20 @@ pub fn track_down(env: &mut Environment, p: Point, select: bool) {
     let view = env.workspace.borrow().locate_view(p);
     if let Some((view_id, _)) = view {
         let mut editor = env.get_view_editor(view_id).borrow_mut();
-
-        // Update soft mark if selection is active, otherwise capture current buffer
-        // position before scrolling in case soft mark needs to be cleared.
-        let prior_pos = if select {
-            editor.set_soft_mark();
-            None
-        } else {
-            Some(editor.pos())
-        };
-        editor.scroll_down(1);
-
-        // If selection is inactive and buffer position moved as a result of scrolling,
-        // then soft mark must be cleared.
-        if let Some(prior_pos) = prior_pos
-            && editor.pos() != prior_pos
-        {
-            editor.clear_soft_mark();
+        let last_pos = editor.pos();
+        if editor.scroll_down(1) > 0 {
+            if editor.pos() > last_pos {
+                // Implies that the view not only scrolled down but also caused the
+                // buffer position to move forward, which means the mark must be
+                // adjusted accordingly.
+                if select {
+                    editor.set_soft_mark_at(last_pos);
+                } else {
+                    editor.clear_soft_mark();
+                }
+            }
+            editor.render();
         }
-        editor.render();
     }
 }
 
@@ -1035,13 +1021,20 @@ pub fn track_left(env: &mut Environment, p: Point, select: bool) {
     let view = env.workspace.borrow().locate_view(p);
     if let Some((view_id, _)) = view {
         let mut editor = env.get_view_editor(view_id).borrow_mut();
-        if select {
-            editor.set_soft_mark();
-        } else {
-            editor.clear_soft_mark();
+        let last_pos = editor.pos();
+        if editor.scroll_left(1) > 0 {
+            if editor.pos() > last_pos {
+                // Implies that the view not only scrolled left but also caused the
+                // buffer position to move forward, which means the mark must be
+                // adjusted accordingly.
+                if select {
+                    editor.set_soft_mark_at(last_pos);
+                } else {
+                    editor.clear_soft_mark();
+                }
+            }
+            editor.render();
         }
-        editor.scroll_left(1);
-        editor.render();
     }
 }
 
@@ -1052,13 +1045,20 @@ pub fn track_right(env: &mut Environment, p: Point, select: bool) {
     let view = env.workspace.borrow().locate_view(p);
     if let Some((view_id, _)) = view {
         let mut editor = env.get_view_editor(view_id).borrow_mut();
-        if select {
-            editor.set_soft_mark();
-        } else {
-            editor.clear_soft_mark();
+        let last_pos = editor.pos();
+        if editor.scroll_right(1) > 0 {
+            if editor.pos() < last_pos {
+                // Implies that the view not only scrolled right but also caused the
+                // buffer position to move backward, which means the mark must be
+                // adjusted accordingly.
+                if select {
+                    editor.set_soft_mark_at(last_pos);
+                } else {
+                    editor.clear_soft_mark();
+                }
+            }
+            editor.render();
         }
-        editor.scroll_right(1);
-        editor.render();
     }
 }
 
