@@ -22,14 +22,14 @@ pub struct Tokenizer {
 
 pub type TokenizerRef = Rc<RefCell<Tokenizer>>;
 
-/// A cursor represents a position in the [`Buffer`] that was used during tokenization,
-/// and importantly, the applicable token information.
+/// A representation of the position in the [`Buffer`] that was used during tokenization,
+/// as well as the corresponding token information.
 #[derive(Copy, Clone, Debug)]
-pub struct Cursor {
-    /// The buffer position associated with this cursor.
+pub struct Position {
+    /// The buffer position.
     pos: usize,
 
-    /// The applicable token corresponding to [`pos`](Self::pos).
+    /// The token corresponding to [`pos`](Self::pos).
     token: Token,
 
     /// The foreground color associated with this token or `None` if the token
@@ -74,9 +74,9 @@ impl Token {
     }
 }
 
-impl Cursor {
-    /// Returns the applicable foreground color at this cursor position or `None` if
-    /// the cursor is contained inside a gap.
+impl Position {
+    /// Returns the corresponding foreground color at this position or `None` if the
+    /// position is contained inside a gap.
     #[inline(always)]
     pub fn color(&self) -> Option<u8> {
         self.color
@@ -103,8 +103,8 @@ impl Tokenizer {
         &self.syntax
     }
 
-    /// Tokenizes `buffer` and returns a cursor at position `0`.
-    pub fn tokenize(&mut self, buffer: &Buffer) -> Cursor {
+    /// Tokenizes `buffer` and returns a position at `0`.
+    pub fn tokenize(&mut self, buffer: &Buffer) -> Position {
         self.spans.clear();
         self.chars = buffer.size();
         if self.chars > 0 {
@@ -148,8 +148,8 @@ impl Tokenizer {
             self.spans.push(Span::gap(0));
         }
 
-        // Return cursor at position 0.
-        Cursor {
+        // Return position at 0.
+        Position {
             pos: 0,
             token: Token {
                 index: 0,
@@ -160,36 +160,36 @@ impl Tokenizer {
         }
     }
 
-    /// Finds the cursor at position `pos` relative to `cursor`.
-    pub fn find(&self, cursor: Cursor, pos: usize) -> Cursor {
+    /// Finds the position at `pos` relative to position `p`.
+    pub fn find(&self, p: Position, pos: usize) -> Position {
         let pos = cmp::min(pos, self.chars);
-        if cursor.token.contains(pos) {
-            Cursor { pos, ..cursor }
+        if p.token.contains(pos) {
+            Position { pos, ..p }
         } else {
-            let token = if pos < cursor.pos {
-                self.find_backward(cursor.token, pos)
+            let token = if pos < p.pos {
+                self.find_backward(p.token, pos)
             } else {
-                self.find_forward(cursor.token, pos)
+                self.find_forward(p.token, pos)
             };
             let color = self.color(token.index);
-            Cursor { pos, token, color }
+            Position { pos, token, color }
         }
     }
 
-    /// Finds the cursor that is `n` characters after `cursor`.
-    pub fn forward(&self, cursor: Cursor, n: usize) -> Cursor {
-        let pos = cursor.pos + n;
-        self.find(cursor, pos)
+    /// Finds the position that is `n` characters after position `p`.
+    pub fn forward(&self, p: Position, n: usize) -> Position {
+        let pos = p.pos + n;
+        self.find(p, pos)
     }
 
-    /// Finds the cursor that is `n` characters before `cursor`.
+    /// Finds the position that is `n` characters before position `p`.
     #[allow(dead_code, reason = "possible future use")]
-    pub fn backward(&self, cursor: Cursor, n: usize) -> Cursor {
-        let pos = cursor.pos.saturating_sub(n);
-        self.find(cursor, pos)
+    pub fn backward(&self, p: Position, n: usize) -> Position {
+        let pos = p.pos.saturating_sub(n);
+        self.find(p, pos)
     }
 
-    /// Returns the token applicable to `pos` relative to the `from` token.
+    /// Returns the token corresponding to `pos` relative to the `from` token.
     ///
     /// If `pos` does occur _after_ `from`, then this function will panic.
     fn find_forward(&self, from: Token, pos: usize) -> Token {
@@ -215,7 +215,7 @@ impl Tokenizer {
         }
     }
 
-    /// Returns the token applicable to `pos` relative to the `from` token.
+    /// Returns the token corresponding to `pos` relative to the `from` token.
     ///
     /// If `pos` does occur _before_ `from`, then this function will panic.
     fn find_backward(&self, from: Token, pos: usize) -> Token {
@@ -240,36 +240,36 @@ impl Tokenizer {
         }
     }
 
-    /// Inserts `len` characters at the position of `cursor` by expanding the length
-    /// of the underlying span, returning a new cursor at the same position.
-    pub fn insert(&mut self, cursor: Cursor, len: usize) -> Cursor {
+    /// Inserts `len` characters at the position of `p` by expanding the length
+    /// of the underlying span, returning an updated position.
+    pub fn insert(&mut self, p: Position, len: usize) -> Position {
         if len > 0 {
-            let token = &cursor.token;
+            let token = &p.token;
             self.spans[token.index].len += len;
             self.chars += len;
 
-            Cursor {
+            Position {
                 token: Token {
                     end_pos: token.end_pos + len,
                     ..*token
                 },
-                ..cursor
+                ..p
             }
         } else {
-            cursor
+            p
         }
     }
 
-    /// Removes possibly many spans of `len` characters at the position of `cursor`,
-    /// returning a new cursor at the same position.
-    pub fn remove(&mut self, cursor: Cursor, len: usize) -> Cursor {
+    /// Removes possibly many spans of `len` characters at the position of `p`,
+    /// returning an updated position.
+    pub fn remove(&mut self, p: Position, len: usize) -> Position {
         if len > 0 {
-            // Find cursor following removal of specified length, noting that actual
+            // Find position following removal of specified length, noting that actual
             // length may be less if number of characters would extend beyond end.
-            let end_cursor = self.find(cursor, cursor.pos + len);
-            let len = end_cursor.pos - cursor.pos;
-            let token = &cursor.token;
-            let end_token = &end_cursor.token;
+            let end_p = self.find(p, p.pos + len);
+            let len = end_p.pos - p.pos;
+            let token = &p.token;
+            let end_token = &end_p.token;
 
             let token = if token.index == end_token.index {
                 // Removal is confined to current token, so simply reduce length of
@@ -283,15 +283,15 @@ impl Tokenizer {
                 // Removal includes at least one span but possibly many. Evaluate
                 // starting and ending boundaries to trim and/or include their
                 // corresponding spans for removal.
-                let start_index = if cursor.pos > token.start_pos {
-                    self.spans[token.index].len = cursor.pos - token.start_pos;
+                let start_index = if p.pos > token.start_pos {
+                    self.spans[token.index].len = p.pos - token.start_pos;
                     token.index + 1
                 } else {
                     token.index
                 };
 
-                let end_index = if end_cursor.pos < end_token.end_pos {
-                    self.spans[end_token.index].len = end_token.end_pos - end_cursor.pos;
+                let end_index = if end_p.pos < end_token.end_pos {
+                    self.spans[end_token.index].len = end_token.end_pos - end_p.pos;
                     end_token.index - 1
                 } else {
                     end_token.index
@@ -311,32 +311,32 @@ impl Tokenizer {
 
                 if start_index < self.spans.len() {
                     // Because start token is either truncated or entirely removed,
-                    // start position of next token is always cursor position.
+                    // start position of next token is always current position.
                     Token {
                         index: start_index,
-                        start_pos: cursor.pos,
-                        end_pos: cursor.pos + self.spans[start_index].len,
+                        start_pos: p.pos,
+                        end_pos: p.pos + self.spans[start_index].len,
                     }
                 } else {
                     // All spans following start index were removed, so token
                     // effectively points to prior span where its end position is
-                    // cursor position.
+                    // current position.
                     Token {
                         index: start_index - 1,
-                        start_pos: cursor.pos - self.spans[start_index - 1].len,
-                        end_pos: cursor.pos,
+                        start_pos: p.pos - self.spans[start_index - 1].len,
+                        end_pos: p.pos,
                     }
                 }
             };
             self.chars -= len;
 
-            Cursor {
-                pos: cursor.pos,
+            Position {
+                pos: p.pos,
                 token,
                 color: self.color(token.index),
             }
         } else {
-            cursor
+            p
         }
     }
 
@@ -423,68 +423,68 @@ mod tests {
     }
 
     #[test]
-    fn find_cursor() {
+    fn find_position() {
         // Pairs of (pos, index) associations.
         const POS_TOKENS: [(usize, usize); 5] = [(3, 0), (19, 4), (11, 3), (40, 11), (29, 7)];
 
         let mut tz = build_tokenizer();
         let buf = build_buffer();
-        let mut cursor = tz.tokenize(&buf);
+        let mut token_pos = tz.tokenize(&buf);
 
         for p in POS_TOKENS {
-            cursor = tz.find(cursor, p.0);
+            token_pos = tz.find(token_pos, p.0);
 
             // Verify that (pos, index) values match.
-            assert_eq!(cursor.pos, p.0);
-            assert_eq!(cursor.token.index, p.1);
+            assert_eq!(token_pos.pos, p.0);
+            assert_eq!(token_pos.token.index, p.1);
 
             // Verify that token information matches what exists in spans.
             let (id, len, _) = SPANS[p.1];
-            assert!(cursor.token.start_pos <= p.0);
-            assert!(cursor.token.end_pos > p.0);
-            assert_eq!(cursor.token.end_pos - cursor.token.start_pos, len);
-            assert_eq!(cursor.color, color_of(id));
+            assert!(token_pos.token.start_pos <= p.0);
+            assert!(token_pos.token.end_pos > p.0);
+            assert_eq!(token_pos.token.end_pos - token_pos.token.start_pos, len);
+            assert_eq!(token_pos.color, color_of(id));
         }
     }
 
     #[test]
-    fn cursor_forward() {
+    fn position_forward() {
         let mut tz = build_tokenizer();
         let buf = build_buffer();
-        let mut cursor = tz.tokenize(&buf);
+        let mut token_pos = tz.tokenize(&buf);
 
-        while cursor.pos < tz.chars {
+        while token_pos.pos < tz.chars {
             // Verify that token information matches what exists in spans.
-            let (id, len, _) = SPANS[cursor.token.index];
-            assert!(cursor.token.start_pos <= cursor.pos);
-            assert!(cursor.token.end_pos > cursor.pos);
-            assert_eq!(cursor.token.end_pos - cursor.token.start_pos, len);
-            assert_eq!(cursor.color, color_of(id));
-            cursor = tz.forward(cursor, 1);
+            let (id, len, _) = SPANS[token_pos.token.index];
+            assert!(token_pos.token.start_pos <= token_pos.pos);
+            assert!(token_pos.token.end_pos > token_pos.pos);
+            assert_eq!(token_pos.token.end_pos - token_pos.token.start_pos, len);
+            assert_eq!(token_pos.color, color_of(id));
+            token_pos = tz.forward(token_pos, 1);
         }
     }
 
     #[test]
-    fn cursor_backward() {
+    fn position_backward() {
         let mut tz = build_tokenizer();
         let buf = build_buffer();
-        let mut cursor = tz.tokenize(&buf);
+        let mut token_pos = tz.tokenize(&buf);
 
-        while cursor.pos > 0 {
+        while token_pos.pos > 0 {
             // Verify that token information matches what exists in spans.
-            let (id, len, _) = SPANS[cursor.token.index];
-            assert!(cursor.token.start_pos <= cursor.pos);
+            let (id, len, _) = SPANS[token_pos.token.index];
+            assert!(token_pos.token.start_pos <= token_pos.pos);
 
             // Special edge case when pos is at end of buffer.
-            if cursor.pos < tz.chars {
-                assert!(cursor.token.end_pos > cursor.pos);
+            if token_pos.pos < tz.chars {
+                assert!(token_pos.token.end_pos > token_pos.pos);
             } else {
-                assert!(cursor.token.end_pos == cursor.pos);
+                assert!(token_pos.token.end_pos == token_pos.pos);
             }
 
-            assert_eq!(cursor.token.end_pos - cursor.token.start_pos, len);
-            assert_eq!(cursor.color, color_of(id));
-            cursor = tz.backward(cursor, 1);
+            assert_eq!(token_pos.token.end_pos - token_pos.token.start_pos, len);
+            assert_eq!(token_pos.color, color_of(id));
+            token_pos = tz.backward(token_pos, 1);
         }
     }
 
@@ -495,24 +495,24 @@ mod tests {
 
         let mut tz = build_tokenizer();
         let buf = build_buffer();
-        let cursor = tz.tokenize(&buf);
+        let token_pos = tz.tokenize(&buf);
         let chars = tz.chars;
 
-        let cursor = tz.find(cursor, POS);
-        let (id, len, _) = SPANS[cursor.token.index];
-        assert_eq!(cursor.pos, POS);
-        assert_eq!(cursor.token.start_pos, POS);
+        let token_pos = tz.find(token_pos, POS);
+        let (id, len, _) = SPANS[token_pos.token.index];
+        assert_eq!(token_pos.pos, POS);
+        assert_eq!(token_pos.token.start_pos, POS);
 
-        // Expands span referenced by cursor token.
-        let cursor = tz.insert(cursor, LEN);
+        // Expands span referenced by token_pos token.
+        let token_pos = tz.insert(token_pos, LEN);
         assert_eq!(tz.chars, chars + LEN);
         assert_eq!(tz.spans.len(), SPANS.len());
 
         // Verify that token at current position is expanded span.
-        assert_eq!(cursor.pos, POS);
-        assert_eq!(cursor.token.start_pos, POS);
-        assert_eq!(cursor.token.end_pos, POS + len + LEN);
-        assert_eq!(cursor.color, color_of(id));
+        assert_eq!(token_pos.pos, POS);
+        assert_eq!(token_pos.token.start_pos, POS);
+        assert_eq!(token_pos.token.end_pos, POS + len + LEN);
+        assert_eq!(token_pos.color, color_of(id));
     }
 
     #[test]
@@ -523,24 +523,24 @@ mod tests {
 
         let mut tz = build_tokenizer();
         let buf = build_buffer();
-        let cursor = tz.tokenize(&buf);
+        let token_pos = tz.tokenize(&buf);
         let chars = tz.chars;
 
-        let cursor = tz.find(cursor, POS);
-        let (id, len, _) = SPANS[cursor.token.index];
-        assert_eq!(cursor.pos, POS);
-        assert_eq!(cursor.token.start_pos, START_POS);
+        let token_pos = tz.find(token_pos, POS);
+        let (id, len, _) = SPANS[token_pos.token.index];
+        assert_eq!(token_pos.pos, POS);
+        assert_eq!(token_pos.token.start_pos, START_POS);
 
-        // Expands span referenced by cursor token.
-        let cursor = tz.insert(cursor, LEN);
+        // Expands span referenced by token_pos token.
+        let token_pos = tz.insert(token_pos, LEN);
         assert_eq!(tz.chars, chars + LEN);
         assert_eq!(tz.spans.len(), SPANS.len());
 
         // Verify that token at current position is newly inserted span.
-        assert_eq!(cursor.pos, POS);
-        assert_eq!(cursor.token.start_pos, START_POS);
-        assert_eq!(cursor.token.end_pos, START_POS + len + LEN);
-        assert_eq!(cursor.color, color_of(id));
+        assert_eq!(token_pos.pos, POS);
+        assert_eq!(token_pos.token.start_pos, START_POS);
+        assert_eq!(token_pos.token.end_pos, START_POS + len + LEN);
+        assert_eq!(token_pos.color, color_of(id));
     }
 
     #[test]
@@ -551,24 +551,24 @@ mod tests {
 
         let mut tz = build_tokenizer();
         let buf = build_buffer();
-        let cursor = tz.tokenize(&buf);
+        let token_pos = tz.tokenize(&buf);
         let chars = tz.chars;
 
-        let cursor = tz.find(cursor, POS);
-        let (id, len, _) = SPANS[cursor.token.index];
-        assert_eq!(cursor.pos, POS);
-        assert_eq!(cursor.token.start_pos, START_POS);
+        let token_pos = tz.find(token_pos, POS);
+        let (id, len, _) = SPANS[token_pos.token.index];
+        assert_eq!(token_pos.pos, POS);
+        assert_eq!(token_pos.token.start_pos, START_POS);
 
         // Results in zero spans being removed.
-        let cursor = tz.remove(cursor, LEN);
+        let token_pos = tz.remove(token_pos, LEN);
         assert_eq!(tz.chars, chars - LEN);
         assert_eq!(tz.spans.len(), SPANS.len());
 
         // Verify that current token only changed in length.
-        assert_eq!(cursor.pos, POS);
-        assert_eq!(cursor.token.start_pos, START_POS);
-        assert_eq!(cursor.token.end_pos, START_POS + (len - LEN));
-        assert_eq!(cursor.color, color_of(id));
+        assert_eq!(token_pos.pos, POS);
+        assert_eq!(token_pos.token.start_pos, START_POS);
+        assert_eq!(token_pos.token.end_pos, START_POS + (len - LEN));
+        assert_eq!(token_pos.color, color_of(id));
     }
 
     #[test]
@@ -578,24 +578,24 @@ mod tests {
 
         let mut tz = build_tokenizer();
         let buf = build_buffer();
-        let cursor = tz.tokenize(&buf);
+        let token_pos = tz.tokenize(&buf);
         let chars = tz.chars;
 
-        let cursor = tz.find(cursor, POS);
-        let (id, len, _) = SPANS[cursor.token.index + 1];
-        assert_eq!(cursor.pos, POS);
-        assert_eq!(cursor.token.start_pos, POS);
+        let token_pos = tz.find(token_pos, POS);
+        let (id, len, _) = SPANS[token_pos.token.index + 1];
+        assert_eq!(token_pos.pos, POS);
+        assert_eq!(token_pos.token.start_pos, POS);
 
         // Results in current span being removed.
-        let cursor = tz.remove(cursor, LEN);
+        let token_pos = tz.remove(token_pos, LEN);
         assert_eq!(tz.chars, chars - LEN);
         assert_eq!(tz.spans.len(), SPANS.len() - 1);
 
-        // Verify that new token at cursor matches following token.
-        assert_eq!(cursor.pos, POS);
-        assert_eq!(cursor.token.start_pos, POS);
-        assert_eq!(cursor.token.end_pos, POS + len);
-        assert_eq!(cursor.color, color_of(id));
+        // Verify that new token at matches following token.
+        assert_eq!(token_pos.pos, POS);
+        assert_eq!(token_pos.token.start_pos, POS);
+        assert_eq!(token_pos.token.end_pos, POS + len);
+        assert_eq!(token_pos.color, color_of(id));
     }
 
     #[test]
@@ -605,24 +605,24 @@ mod tests {
 
         let mut tz = build_tokenizer();
         let buf = build_buffer();
-        let cursor = tz.tokenize(&buf);
+        let token_pos = tz.tokenize(&buf);
         let chars = tz.chars;
 
-        let cursor = tz.find(cursor, POS);
-        let (id, len, _) = SPANS[cursor.token.index + 8];
-        assert_eq!(cursor.pos, POS);
-        assert_eq!(cursor.token.start_pos, POS);
+        let token_pos = tz.find(token_pos, POS);
+        let (id, len, _) = SPANS[token_pos.token.index + 8];
+        assert_eq!(token_pos.pos, POS);
+        assert_eq!(token_pos.token.start_pos, POS);
 
         // Results in mutiple spans being removed, including edges.
-        let cursor = tz.remove(cursor, LEN);
+        let token_pos = tz.remove(token_pos, LEN);
         assert_eq!(tz.chars, chars - LEN);
         assert_eq!(tz.spans.len(), SPANS.len() - 8);
 
-        // Verify that new token at cursor matches token following last span removed.
-        assert_eq!(cursor.pos, POS);
-        assert_eq!(cursor.token.start_pos, POS);
-        assert_eq!(cursor.token.end_pos, POS + len);
-        assert_eq!(cursor.color, color_of(id));
+        // Verify that new token matches token following last span removed.
+        assert_eq!(token_pos.pos, POS);
+        assert_eq!(token_pos.token.start_pos, POS);
+        assert_eq!(token_pos.token.end_pos, POS + len);
+        assert_eq!(token_pos.color, color_of(id));
     }
 
     #[test]
@@ -633,29 +633,28 @@ mod tests {
 
         let mut tz = build_tokenizer();
         let buf = build_buffer();
-        let cursor = tz.tokenize(&buf);
+        let token_pos = tz.tokenize(&buf);
         let chars = tz.chars;
 
         // Find last token whose prefix will be truncated.
-        let cursor = tz.find(cursor, POS + LEN);
-        let (id, _, _) = SPANS[cursor.token.index];
-        let len = cursor.token.end_pos - cursor.pos;
+        let token_pos = tz.find(token_pos, POS + LEN);
+        let (id, _, _) = SPANS[token_pos.token.index];
+        let len = token_pos.token.end_pos - token_pos.pos;
 
-        let cursor = tz.find(cursor, POS);
-        assert_eq!(cursor.pos, POS);
-        assert_eq!(cursor.token.start_pos, START_POS);
+        let token_pos = tz.find(token_pos, POS);
+        assert_eq!(token_pos.pos, POS);
+        assert_eq!(token_pos.token.start_pos, START_POS);
 
         // Results in mutiple spans being removed, excluding edges.
-        let cursor = tz.remove(cursor, LEN);
+        let token_pos = tz.remove(token_pos, LEN);
         assert_eq!(tz.chars, chars - LEN);
         assert_eq!(tz.spans.len(), SPANS.len() - 5);
 
-        // Verify that new token at cursor matches final token whose prefix was
-        // truncated.
-        assert_eq!(cursor.pos, POS);
-        assert_eq!(cursor.token.start_pos, POS);
-        assert_eq!(cursor.token.end_pos, POS + len);
-        assert_eq!(cursor.color, color_of(id));
+        // Verify that new token matches final token whose prefix was truncated.
+        assert_eq!(token_pos.pos, POS);
+        assert_eq!(token_pos.token.start_pos, POS);
+        assert_eq!(token_pos.token.end_pos, POS + len);
+        assert_eq!(token_pos.color, color_of(id));
     }
 
     #[test]
@@ -664,24 +663,24 @@ mod tests {
 
         let mut tz = build_tokenizer();
         let buf = build_buffer();
-        let cursor = tz.tokenize(&buf);
+        let token_pos = tz.tokenize(&buf);
         let chars = tz.chars;
 
-        let cursor = tz.find(cursor, POS);
-        let cursor = tz.remove(cursor, chars - POS);
+        let token_pos = tz.find(token_pos, POS);
+        let token_pos = tz.remove(token_pos, chars - POS);
         assert_eq!(tz.chars, POS);
-        assert_eq!(cursor.pos, POS);
+        assert_eq!(token_pos.pos, POS);
     }
 
     #[test]
     fn remove_all_spans() {
         let mut tz = build_tokenizer();
         let buf = build_buffer();
-        let cursor = tz.tokenize(&buf);
+        let token_pos = tz.tokenize(&buf);
 
-        let cursor = tz.remove(cursor, tz.chars);
+        let token_pos = tz.remove(token_pos, tz.chars);
         assert_eq!(tz.chars, 0);
-        assert_eq!(cursor.pos, 0);
+        assert_eq!(token_pos.pos, 0);
     }
 
     fn build_tokenizer() -> Tokenizer {
@@ -696,10 +695,6 @@ mod tests {
     }
 
     fn color_of(id: usize) -> Option<u8> {
-        if id > 0 {
-            Some(TOKENS[id - 1].1)
-        } else {
-            None
-        }
+        if id > 0 { Some(TOKENS[id - 1].1) } else { None }
     }
 }

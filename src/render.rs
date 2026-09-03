@@ -5,7 +5,7 @@ use crate::config::ConfigurationRef;
 use crate::nav::{self, Location};
 use crate::size::{Point, Size};
 use crate::style::Style;
-use crate::token::{Cursor, Tokenizer};
+use crate::token::{Position, Tokenizer};
 use crate::window::WindowRef;
 
 /// A trait that all rendering engines are required to implement.
@@ -153,7 +153,7 @@ pub trait Renderer {
     fn remove(&mut self);
 
     /// Renders the display.
-    fn render(&mut self, tok: &Tokenizer, syn: Cursor, style: &Style);
+    fn render(&mut self, tokenizer: &Tokenizer, token_pos: Position, style: &Style);
 }
 
 /// The types of rendering engines.
@@ -469,12 +469,10 @@ mod wrapping {
         wrapped: bool,
 
         /// Reference to the tokenizer used for syntax coloring.
-        ///
-        /// This value does not change during the rendering process.
-        tok: &'a Tokenizer,
+        tokenizer: &'a Tokenizer,
 
-        /// Current rendering syntax cursor.
-        syn: Cursor,
+        /// Current token position for syntax coloring.
+        token_pos: Position,
     }
 
     impl Row {
@@ -668,22 +666,22 @@ mod wrapping {
 
     impl<'a> Spot<'a> {
         /// Creates a spot representing the top-left position on the display.
-        fn new(engine: &Engine, tok: &'a Tokenizer, syn: Cursor) -> Spot<'a> {
+        fn new(engine: &Engine, tokenizer: &'a Tokenizer, token_pos: Position) -> Spot<'a> {
             Spot {
                 pos: engine.top_row.row_pos,
                 row: 0,
                 col: 0,
                 line: engine.top_row.line + 1,
                 wrapped: false,
-                tok,
-                syn,
+                tokenizer,
+                token_pos,
             }
         }
 
         fn next_col(mut self) -> Spot<'a> {
             self.pos += 1;
             self.col += 1;
-            self.syn = self.tok.forward(self.syn, 1);
+            self.token_pos = self.tokenizer.forward(self.token_pos, 1);
             self
         }
 
@@ -692,7 +690,7 @@ mod wrapping {
             self.row += 1;
             self.col = 0;
             self.wrapped = true;
-            self.syn = self.tok.forward(self.syn, 1);
+            self.token_pos = self.tokenizer.forward(self.token_pos, 1);
             self
         }
 
@@ -702,7 +700,7 @@ mod wrapping {
             self.col = 0;
             self.line += 1;
             self.wrapped = false;
-            self.syn = self.tok.forward(self.syn, 1);
+            self.token_pos = self.tokenizer.forward(self.token_pos, 1);
             self
         }
     }
@@ -741,7 +739,7 @@ mod wrapping {
 
             // Bind these values locally to improve readability.
             let (row, col) = (spot.row, spot.col + self.margin_cols());
-            let color = spot.syn.color();
+            let color = spot.token_pos.color();
 
             // Render character.
             let spot = if c == '\n' {
@@ -772,7 +770,7 @@ mod wrapping {
 
             // Blank out rest of existing row.
             let (row, col) = (spot.row, spot.col + self.margin_cols());
-            let color = spot.syn.color();
+            let color = spot.token_pos.color();
             canvas.fill_cell_from(row, col, pen.as_text(' ', spot.pos, spot.row, color));
 
             // Blank out remaining rows.
@@ -1216,12 +1214,12 @@ mod wrapping {
             self.cursor.col = col;
         }
 
-        fn render(&mut self, tok: &Tokenizer, syn: Cursor, style: &Style) {
+        fn render(&mut self, tokenizer: &Tokenizer, token_pos: Position, style: &Style) {
             // Create pen to format characters.
             let pen = style.pen(self.cursor, self.cur_row.line + 1);
 
             // Initialize spot representing top-left cell.
-            let spot = Spot::new(self, tok, syn);
+            let spot = Spot::new(self, tokenizer, token_pos);
 
             // Borrow canvas once and pass to rendering functions to optimize.
             let window = self.window.borrow();
@@ -1340,12 +1338,10 @@ mod scrolling {
         line: u32,
 
         /// Reference to the tokenizer used for syntax coloring.
-        ///
-        /// This value does not change during the rendering process.
-        tok: &'a Tokenizer,
+        tokenizer: &'a Tokenizer,
 
-        /// Current rendering syntax cursor.
-        syn: Cursor,
+        /// Current token position for syntax coloring.
+        token_pos: Position,
     }
 
     impl Row {
@@ -1532,7 +1528,7 @@ mod scrolling {
 
     impl<'a> Spot<'a> {
         /// Creates a spot representing the top-left position on the display.
-        fn new(engine: &Engine, tok: &'a Tokenizer, syn: Cursor) -> Spot<'a> {
+        fn new(engine: &Engine, tokenizer: &'a Tokenizer, token_pos: Position) -> Spot<'a> {
             let offset = engine.offset;
             let pos = engine.top_row.line_pos;
             Spot {
@@ -1542,8 +1538,8 @@ mod scrolling {
                 row: 0,
                 col: 0,
                 line: engine.top_row.line + 1,
-                tok,
-                syn,
+                tokenizer,
+                token_pos,
             }
         }
 
@@ -1554,7 +1550,7 @@ mod scrolling {
             } else {
                 0
             };
-            self.syn = self.tok.forward(self.syn, 1);
+            self.token_pos = self.tokenizer.forward(self.token_pos, 1);
             self
         }
 
@@ -1564,7 +1560,7 @@ mod scrolling {
             self.row += 1;
             self.col = 0;
             self.line += 1;
-            self.syn = self.tok.forward(self.syn, 1);
+            self.token_pos = self.tokenizer.forward(self.token_pos, 1);
             self
         }
     }
@@ -1610,7 +1606,7 @@ mod scrolling {
 
             // Bind these values locally to improve readability.
             let (row, col) = (spot.row, spot.col + self.margin_cols());
-            let color = spot.syn.color();
+            let color = spot.token_pos.color();
 
             // Render character.
             let spot = if c == '\n' {
@@ -1676,7 +1672,7 @@ mod scrolling {
 
             // Bind these values locally to improve readability.
             let (row, col) = (spot.row, spot.col + self.margin_cols());
-            let color = spot.syn.color();
+            let color = spot.token_pos.color();
 
             // This is an edge case not handled by `render_cell` since reaching bottom of
             // buffer terminates the iteration, therefore display gutter if text exists
@@ -2172,12 +2168,12 @@ mod scrolling {
             self.cursor.col = col;
         }
 
-        fn render(&mut self, tok: &Tokenizer, syn: Cursor, style: &Style) {
+        fn render(&mut self, tokenizer: &Tokenizer, token_pos: Position, style: &Style) {
             // Create pen to format characters.
             let pen = style.pen(self.cursor, self.cur_row.line + 1);
 
             // Initialize spot representing top-left cell.
-            let spot = Spot::new(self, tok, syn);
+            let spot = Spot::new(self, tokenizer, token_pos);
 
             // Borrow canvas once and pass to rendering functions to optimize.
             let window = self.window.borrow();

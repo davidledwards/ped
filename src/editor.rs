@@ -12,7 +12,7 @@ use crate::size::{Point, Size};
 use crate::source::Source;
 use crate::style::StyleBuilder;
 use crate::syntax::Syntax;
-use crate::token::{Cursor, Tokenizer, TokenizerRef};
+use crate::token::{Position, Tokenizer, TokenizerRef};
 use crate::window::{Window, WindowRef};
 use std::cell::{Ref, RefCell, RefMut};
 use std::cmp;
@@ -62,9 +62,9 @@ pub struct Editor {
     /// The value of [`clock`](Self::clock) at the time of the last tokenization.
     tokenize_clock: u64,
 
-    /// A tokenization cursor that is always pointing to the top-left position on the
+    /// A tokenizer position that is always pointing to the top-left position on the
     /// display.
-    syntax_cursor: Cursor,
+    token_pos: Position,
 
     /// The value of `clock` when the buffer was most recently committed to storage.
     commit_clock: u64,
@@ -309,7 +309,7 @@ impl Editor {
         // Tokenize buffer.
         let mut tokenizer = Tokenizer::new(syntax);
         let timer = Instant::now();
-        let syntax_cursor = tokenizer.tokenize(&buffer.borrow());
+        let token_pos = tokenizer.tokenize(&buffer.borrow());
         let tokenize_cost = timer.elapsed().as_millis();
 
         // Additional settings.
@@ -330,7 +330,7 @@ impl Editor {
             tokenizer: tokenizer.into_ref(),
             tokenize_cost,
             tokenize_clock: 0,
-            syntax_cursor,
+            token_pos,
             commit_clock: 0,
             mark: None,
             window: Window::zombie().into_ref(),
@@ -882,7 +882,7 @@ impl Editor {
 
         // Render text.
         self.rendering
-            .render(&self.tokenizer.borrow(), self.syntax_cursor, &style);
+            .render(&self.tokenizer.borrow(), self.token_pos, &style);
 
         // Renders additional information.
         self.window
@@ -1008,12 +1008,12 @@ impl Editor {
         self.remove_internal(pos, Some(Log::Normal))
     }
 
-    /// Aligns the syntax cursor with the top line.
+    /// Aligns the tokenizer position with the top line.
     fn align_syntax(&mut self) {
-        self.syntax_cursor = self
+        self.token_pos = self
             .tokenizer
             .borrow()
-            .find(self.syntax_cursor, self.rendering.origin());
+            .find(self.token_pos, self.rendering.origin());
     }
 
     /// Sets the values of all banner attributes and draws it.
@@ -1081,10 +1081,10 @@ impl Editor {
             }
 
             // Update tokenizer with insertion range.
-            self.syntax_cursor = {
+            self.token_pos = {
                 let mut tokenizer = self.tokenizer_mut();
-                let cursor = tokenizer.find(self.syntax_cursor, self.pos());
-                tokenizer.insert(cursor, text.len())
+                let token_pos = tokenizer.find(self.token_pos, self.pos());
+                tokenizer.insert(token_pos, text.len())
             };
 
             // Inform renderer that text has been inserted,
@@ -1147,10 +1147,10 @@ impl Editor {
             }
 
             // Update tokenizer with removal range.
-            self.syntax_cursor = {
+            self.token_pos = {
                 let mut tokenizer = self.tokenizer_mut();
-                let cursor = tokenizer.find(self.syntax_cursor, from_pos);
-                tokenizer.remove(cursor, text.len())
+                let token_pos = tokenizer.find(self.token_pos, from_pos);
+                tokenizer.remove(token_pos, text.len())
             };
 
             // Inform renderer that text has been been removed.
@@ -1164,11 +1164,11 @@ impl Editor {
     /// limit or `force` is `true`, otherwise the operation is not performed.
     fn possibly_tokenize(&mut self, force: bool) {
         if force || self.tokenize_cost < Self::TOKENIZE_COST_LIMIT {
-            self.syntax_cursor = {
+            self.token_pos = {
                 let timer = Instant::now();
-                let cursor = self.tokenizer_mut().tokenize(&self.buffer());
+                let token_pos = self.tokenizer_mut().tokenize(&self.buffer());
                 self.tokenize_cost = timer.elapsed().as_millis();
-                cursor
+                token_pos
             };
             self.tokenize_clock = self.clock;
         }
