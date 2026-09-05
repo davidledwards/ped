@@ -33,11 +33,12 @@ pub trait Renderer {
     /// Returns the buffer position corresponding to the [`cursor`](Self::cursor).
     fn pos(&self) -> usize;
 
-    /// Returns the cursor position on the display in terms of _row_ and _column_.
+    /// Returns the cursor position on the display in terms of _row_ and _column_ if
+    /// visible, otherwise `None`.
     ///
     /// The _row_ and _column_ values are `0`-based and exclusively bounded by
     /// [`size()`](Self::size).
-    fn cursor(&self) -> Point;
+    fn cursor(&self) -> Option<Point>;
 
     /// Returns the location of the cursor position in the buffer.
     fn location(&self) -> Location;
@@ -49,21 +50,23 @@ pub trait Renderer {
     /// Returns the starting buffer position of the top row of the display.
     fn origin(&self) -> usize;
 
-    /// Sets the cursor location and corresponding buffer position to `cursor`, though
-    /// the final cursor location is constrained by end-of-line and end-of-buffer
-    /// boundaries.
+    /// Sets the cursor location and corresponding buffer position to `cursor`,
+    /// returning the actual cursor position which may be constrained by boundary
+    /// restrictions.
     ///
     /// This function was designed for responding to _mouse click_ events where the
     /// position of the click is captured in `cursor`.
     ///
     /// The coordinates in `cursor` are presumed to be relative to the origin of the
     /// editor canvas.
-    fn focus_cursor(&mut self, cursor: Point);
+    fn focus_cursor(&mut self, cursor: Point) -> Point;
 
-    /// Sets the position of the cursor based on the `align` and `justify` objectives.
-    fn align_cursor(&mut self, align: Align, justify: Justify);
+    /// Sets the position of the cursor based on the `align` and `justify` objectives,
+    /// returning the actual cursor position which may be constrained by boundary
+    /// restrictions.
+    fn align_cursor(&mut self, align: Align, justify: Justify) -> Point;
 
-    /// Makes the cursor visible on display.
+    /// Either _shows_ or _hides_ the cursor depending on the visbility of the cursor.
     fn show_cursor(&mut self);
 
     /// Tries to move the cursor _up_ by the specified number of `try_rows`,
@@ -107,7 +110,7 @@ pub trait Renderer {
     fn move_to(&mut self, pos: usize, align: Align, justify: Justify);
 
     /// Tries scrolling the contents of the display in an _upward_ direction by the
-    /// specified number of `try_rows` while also trying to preserve the cursor position,
+    /// specified number of `try_rows` while also preserving the cursor position,
     /// returning the actual number of rows scrolled.
     ///
     /// Conceptually, this function moves the viewable area towards the top of the
@@ -115,7 +118,7 @@ pub trait Renderer {
     fn scroll_up(&mut self, try_rows: u32) -> u32;
 
     /// Tries scrolling the contents of the display in a _downward_ direction by the
-    /// specified number of `try_rows` while also trying to preserve the cursor position,
+    /// specified number of `try_rows` while also preserving the cursor position,
     /// returning the actual number of rows scrolled.
     ///
     /// Conceptually, this function moves the viewable area towards the bottom of the
@@ -123,7 +126,7 @@ pub trait Renderer {
     fn scroll_down(&mut self, try_rows: u32) -> u32;
 
     /// Tries scrolling the contents of the display in a _leftward_ direction by the
-    /// specified number of `try_cols` while also trying to preserve the cursor position,
+    /// specified number of `try_cols` while also preserving the cursor position,
     /// returning the actual number of columns scrolled.
     ///
     /// Conceptually, this function moves the viewable area towards the rightmost column
@@ -131,7 +134,7 @@ pub trait Renderer {
     fn scroll_left(&mut self, try_cols: u32) -> u32;
 
     /// Tries scrolling the contents of the display in a _rightward_ direction by the
-    /// specified number of `try_cols` while also trying to preserve the cursor position,
+    /// specified number of `try_cols` while also preserving the cursor position,
     /// returning the actual number of columns scrolled.
     ///
     /// Conceptually, this function moves the viewable area towards the leftmost column
@@ -223,6 +226,10 @@ trait Rowable: Copy + Clone {
     /// Returns `true` if the row is the bottom-most line in the buffer.
     fn is_bottom(&self) -> bool;
 
+    /// Returns the starting (_inclusive_) and ending (_exclusive_) buffer positions
+    /// of the line occupied by the cursor.
+    fn line(&self) -> (usize, usize);
+
     /// Returns the adjusted length of the row.
     ///
     /// If the row is terminated by `\n`, then the adjusted length must be one less
@@ -309,6 +316,24 @@ trait Rowable: Copy + Clone {
             rows += 1;
         }
         (row, rows)
+    }
+
+    /// Finds the row _down_ from this row that contains `pos`, but scanning no more
+    /// than `n` rows before the operation is terminated.
+    ///
+    /// Returns a pair containing the resulting row and the total number of rows moved,
+    /// or `None` if the operation is terminated.
+    fn findn_down(&self, buffer: &Buffer, pos: usize, n: u32) -> Option<(Self, u32)>
+    where
+        Self: Sized,
+    {
+        let mut row = *self;
+        let mut rows = 0;
+        while rows < n && pos >= row.end_pos() && !row.is_bottom() {
+            row = row.next_unchecked(buffer);
+            rows += 1;
+        }
+        if rows < n { Some((row, rows)) } else { None }
     }
 
     /// An unchecked version of [`prev`](Self::prev) that assumes this row is not at the
@@ -417,8 +442,11 @@ mod wrapping {
         /// An optional column to which the cursor should _snap_ when moving up and down.
         snap: Option<u32>,
 
-        /// Position of the cursor on the display.
-        cursor: Point,
+        /// Position of the cursor on the display when visible, otherwise `None`.
+        cursor: Option<Point>,
+
+        /// Location of the cursor in the buffer.
+        loc: Location,
     }
 
     /// A _row_ on the display that corresponds to a _line_ in the buffer.
@@ -578,6 +606,11 @@ mod wrapping {
         }
 
         #[inline]
+        fn line(&self) -> (usize, usize) {
+            (self.line_pos, self.line_pos + self.line_len)
+        }
+
+        #[inline]
         fn adjusted_len(&self) -> usize {
             if self.is_bottom() {
                 self.row_len
@@ -722,7 +755,46 @@ mod wrapping {
                 top_row: Row::default(),
                 cur_row: Row::default(),
                 snap: None,
-                cursor: Point::ORIGIN,
+                cursor: Some(Point::ORIGIN),
+                loc: Location::TOP,
+            }
+        }
+
+        /// Returns the cursor position on the display, but also has the potential side
+        /// effect of realigning the cursor if _hidden_.
+        fn get_cursor(&mut self) -> Point {
+            self.cursor
+                .unwrap_or_else(|| self.align_cursor(Align::Center, Justify::Center))
+        }
+
+        /// Sets the cursor position to _row_ and _col_, and also updates the location
+        /// of the cursor in the buffer.
+        fn set_cursor(&mut self, row: u32, col: u32) -> Point {
+            let cursor = Point::new(row, col);
+            self.cursor = Some(cursor);
+            self.loc = Location::new(
+                self.cur_row.line,
+                (self.cur_row.row_pos - self.cur_row.line_pos) as u32 + col,
+            );
+            cursor
+        }
+
+        /// Possibly sets the cursor position if a previously hidden cursor becomes
+        /// visible.
+        fn possibly_unhide_cursor(&mut self) {
+            // Scrolling down may lead to the current row appearing before top row,
+            // which means the cursor can never be visible, so only consider cases
+            // where the current row appears after top row.
+            if self.top_row.row_pos <= self.cur_row.row_pos {
+                // Limit extent of row search by the numbers of rows on display.
+                let row_info = self
+                    .top_row
+                    .findn_down(&self.buffer(), self.pos, self.rows - 1);
+
+                if let Some((cur_row, row)) = row_info {
+                    let col = cur_row.col_of(self.pos);
+                    self.set_cursor(row, col);
+                }
             }
         }
 
@@ -926,24 +998,18 @@ mod wrapping {
         }
 
         #[inline]
-        fn cursor(&self) -> Point {
+        fn cursor(&self) -> Option<Point> {
             self.cursor
         }
 
         #[inline]
         fn location(&self) -> Location {
-            Location::new(
-                self.cur_row.line,
-                (self.cur_row.row_pos - self.cur_row.line_pos) as u32 + self.cursor.col,
-            )
+            self.loc
         }
 
         #[inline]
         fn line(&self) -> (usize, usize) {
-            (
-                self.cur_row.line_pos,
-                self.cur_row.line_pos + self.cur_row.line_len,
-            )
+            self.cur_row.line()
         }
 
         #[inline]
@@ -951,7 +1017,7 @@ mod wrapping {
             self.top_row.row_pos
         }
 
-        fn focus_cursor(&mut self, cursor: Point) {
+        fn focus_cursor(&mut self, cursor: Point) -> Point {
             // Ensure target cursor is bounded by effective area of canvas, which takes
             // into account left margin if enabled.
             let try_row = cmp::min(cursor.row, self.rows);
@@ -968,14 +1034,17 @@ mod wrapping {
             let col = self.cur_row.snap(try_col);
             self.pos = self.cur_row.pos_of(col);
             self.snap = Some(col);
-            self.cursor = Point::new(row, col);
+            self.set_cursor(row, col)
         }
 
-        fn align_cursor(&mut self, align: Align, _: Justify) {
+        fn align_cursor(&mut self, align: Align, _: Justify) -> Point {
             // Determine ideal row where cursor would like to be focused, though this
             // should be considered a hint.
             let try_row = match align {
-                Align::Auto => cmp::min(self.cursor.row, self.rows - 1),
+                Align::Auto => self
+                    .cursor
+                    .map(|cursor| cmp::min(cursor.row, self.rows - 1))
+                    .unwrap_or(self.rows / 2),
                 Align::Center => self.rows / 2,
                 Align::Top => 0,
                 Align::Bottom => self.rows - 1,
@@ -990,19 +1059,27 @@ mod wrapping {
             self.top_row = top_row;
             let col = self.cur_row.col_of(self.pos);
             self.snap = None;
-            self.cursor = Point::new(row, col);
+            self.set_cursor(row, col)
         }
 
         fn show_cursor(&mut self) {
-            let cursor = if self.margin_enabled {
-                self.cursor + Size::cols(MARGIN_COLS)
-            } else {
-                self.cursor
-            };
-            self.window.borrow().canvas.borrow_mut().set_cursor(cursor);
+            match self.cursor {
+                Some(cursor) => {
+                    let cursor = if self.margin_enabled {
+                        cursor + Size::cols(MARGIN_COLS)
+                    } else {
+                        cursor
+                    };
+                    self.window.borrow().canvas.borrow_mut().set_cursor(cursor);
+                }
+                None => {
+                    self.window.borrow().canvas.borrow_mut().hide_cursor();
+                }
+            }
         }
 
         fn move_up(&mut self, try_rows: u32, pin: bool) -> u32 {
+            let cursor = self.get_cursor();
             let rows = self.up_cur_row(try_rows);
             if rows > 0 {
                 let row = if pin {
@@ -1013,65 +1090,65 @@ mod wrapping {
                     } else {
                         // Try finding new top line by stepping backwards by number of rows
                         // equivalent to current row of cursor.
-                        self.set_top_row(self.cursor.row)
+                        self.set_top_row(cursor.row)
                     }
-                } else if rows > self.cursor.row {
+                } else if rows > cursor.row {
                     // Cursor would have moved beyond top of display.
                     self.set_top_row(0)
                 } else {
                     // Cursor remains visible without changing top line.
-                    self.cursor.row - rows
+                    cursor.row - rows
                 };
-                let try_col = self.snap.take().unwrap_or(self.cursor.col);
+                let try_col = self.snap.take().unwrap_or(cursor.col);
                 let col = self.cur_row.snap(try_col);
                 self.pos = self.cur_row.pos_of(col);
                 self.snap = Some(try_col);
-                self.cursor = Point::new(row, col);
+                self.set_cursor(row, col);
             }
             rows
         }
 
         fn move_down(&mut self, try_rows: u32, pin: bool) -> u32 {
+            let cursor = self.get_cursor();
             let rows = self.down_cur_row(try_rows);
             if rows > 0 {
                 let row = if pin {
                     // Keeping cursor on current row is guaranteed, because top line can
                     // always move down without reaching bottom of buffer.
                     let _ = self.down_top_row(rows);
-                    self.cursor.row
-                } else if self.cursor.row + rows < self.rows {
+                    cursor.row
+                } else if cursor.row + rows < self.rows {
                     // Cursor remains visible without changing top line.
-                    self.cursor.row + rows
+                    cursor.row + rows
                 } else {
                     // Cursor would have moved beyond bottom of display.
                     self.set_top_row(self.rows - 1)
                 };
-                let try_col = self.snap.take().unwrap_or(self.cursor.col);
+                let try_col = self.snap.take().unwrap_or(cursor.col);
                 let col = self.cur_row.snap(try_col);
                 self.pos = self.cur_row.pos_of(col);
                 self.snap = Some(try_col);
-                self.cursor = Point::new(row, col);
+                self.set_cursor(row, col);
             }
             rows
         }
 
         fn move_start(&mut self) {
-            self.move_to(
-                self.cur_row.row_pos,
-                Align::Row(self.cursor.row),
-                Justify::Auto,
-            );
+            let cursor = self.get_cursor();
+            self.move_to(self.cur_row.row_pos, Align::Row(cursor.row), Justify::Auto);
         }
 
         fn move_end(&mut self) {
+            let cursor = self.get_cursor();
             self.move_to(
                 self.cur_row.end_col_pos(),
-                Align::Row(self.cursor.row),
+                Align::Row(cursor.row),
                 Justify::Auto,
             );
         }
 
         fn move_to(&mut self, pos: usize, align: Align, _: Justify) {
+            let cursor = self.get_cursor();
             let row = if pos < self.top_row.row_pos {
                 let _ = self.find_up_cur_row(pos);
                 let rows = match align {
@@ -1082,7 +1159,7 @@ mod wrapping {
                 };
                 self.set_top_row(rows)
             } else if pos < self.cur_row.row_pos {
-                let row = self.cursor.row - self.find_up_cur_row(pos);
+                let row = cursor.row - self.find_up_cur_row(pos);
                 let maybe_rows = match align {
                     Align::Auto => None,
                     Align::Top => Some(0),
@@ -1106,12 +1183,12 @@ mod wrapping {
                 if let Some(rows) = maybe_rows {
                     self.set_top_row(rows)
                 } else {
-                    self.cursor.row
+                    cursor.row
                 }
             } else {
                 let rows = self.find_down_cur_row(pos);
                 let row = match align {
-                    Align::Auto => cmp::min(self.cursor.row + rows, self.rows - 1),
+                    Align::Auto => cmp::min(cursor.row + rows, self.rows - 1),
                     Align::Top => 0,
                     Align::Center => self.rows / 2,
                     Align::Bottom => self.rows - 1,
@@ -1122,27 +1199,25 @@ mod wrapping {
             self.pos = pos;
             let col = self.cur_row.col_of(self.pos);
             self.snap = None;
-            self.cursor = Point::new(row, col);
+            self.set_cursor(row, col);
         }
 
         fn scroll_up(&mut self, try_rows: u32) -> u32 {
             let rows = self.up_top_row(try_rows);
             if rows > 0 {
-                let row = self.cursor.row + rows;
-                let (row, col) = if row < self.rows {
-                    // Cursor still visible on display.
-                    (row, self.cursor.col)
+                if let Some(cursor) = self.cursor {
+                    let row = cursor.row + rows;
+                    if row < self.rows {
+                        // Cursor still visible on display.
+                        self.set_cursor(row, cursor.col);
+                    } else {
+                        // Cursor has moved below bottom of display.
+                        self.cursor = None;
+                    }
                 } else {
-                    // Cursor would have moved beyond bottom of display, which means
-                    // current buffer position changes accordingly.
-                    let _ = self.up_cur_row(row - self.rows + 1);
-                    let try_col = self.snap.take().unwrap_or(self.cursor.col);
-                    self.snap = Some(try_col);
-                    let col = self.cur_row.snap(try_col);
-                    self.pos = self.cur_row.pos_of(col);
-                    (self.rows - 1, col)
-                };
-                self.cursor = Point::new(row, col);
+                    // Cursor is hidden but may become visible.
+                    self.possibly_unhide_cursor();
+                }
             }
             rows
         }
@@ -1150,20 +1225,18 @@ mod wrapping {
         fn scroll_down(&mut self, try_rows: u32) -> u32 {
             let rows = self.down_top_row(try_rows);
             if rows > 0 {
-                let (row, col) = if rows > self.cursor.row {
-                    // Cursor would have moved beyond top of display, which means
-                    // current buffer position changes accordingly.
-                    self.cur_row = self.top_row;
-                    let try_col = self.snap.take().unwrap_or(self.cursor.col);
-                    self.snap = Some(try_col);
-                    let col = self.cur_row.snap(try_col);
-                    self.pos = self.cur_row.pos_of(col);
-                    (0, col)
+                if let Some(cursor) = self.cursor {
+                    if rows > cursor.row {
+                        // Cursor has moved above top of display.
+                        self.cursor = None;
+                    } else {
+                        // Cursor still visible on display.
+                        self.set_cursor(cursor.row - rows, cursor.col);
+                    }
                 } else {
-                    // Cursor still visible on display.
-                    (self.cursor.row - rows, self.cursor.col)
-                };
-                self.cursor = Point::new(row, col);
+                    // Cursor is hidden but may become visible.
+                    self.possibly_unhide_cursor();
+                }
             }
             rows
         }
@@ -1185,10 +1258,11 @@ mod wrapping {
 
                 // Update current row since insertion will changed boundaries for future
                 // navigation.
+                let cursor = self.get_cursor();
                 self.update_cur_row();
 
                 // Find possibly new current row.
-                let row = self.cursor.row + self.find_down_cur_row(self.pos);
+                let row = cursor.row + self.find_down_cur_row(self.pos);
 
                 // New current row could extend beyond display boundary, so update or
                 // find new top row.
@@ -1200,18 +1274,19 @@ mod wrapping {
                 };
                 let col = self.cur_row.col_of(self.pos);
                 self.snap = None;
-                self.cursor = Point::new(row, col);
+                self.set_cursor(row, col);
             }
         }
 
         fn remove(&mut self) {
             // Removal of text requires both current row and top row to be updated since
             // boundaries may have changed.
+            let cursor = self.get_cursor();
             self.update_cur_row();
             self.update_top_row();
             let col = self.cur_row.col_of(self.pos);
             self.snap = None;
-            self.cursor.col = col;
+            self.set_cursor(cursor.row, col);
         }
 
         fn render(&mut self, tokenizer: &Tokenizer, token_pos: Position, style: &Style) {
@@ -1291,8 +1366,11 @@ mod scrolling {
         /// and down.
         snap: Option<(usize, u32)>,
 
-        /// Position of the cursor on the display.
-        cursor: Point,
+        /// Position of the cursor on the display when visible, otherwise `None`.
+        cursor: Option<Point>,
+
+        /// Location of the cursor in the buffer.
+        loc: Location,
     }
 
     /// A _row_ on the display that corresponds to a _line_ in the buffer.
@@ -1468,6 +1546,11 @@ mod scrolling {
         }
 
         #[inline]
+        fn line(&self) -> (usize, usize) {
+            (self.line_pos, self.line_pos + self.line_len)
+        }
+
+        #[inline]
         fn adjusted_len(&self) -> usize {
             if self.is_bottom() {
                 self.line_len
@@ -1589,7 +1672,50 @@ mod scrolling {
                 cur_row: Row::default(),
                 offset: 0,
                 snap: None,
-                cursor: Point::ORIGIN,
+                cursor: Some(Point::ORIGIN),
+                loc: Location::TOP,
+            }
+        }
+
+        /// Returns the cursor position on the display, but also has the potential side
+        /// effect of realigning the cursor if _hidden_.
+        fn get_cursor(&mut self) -> Point {
+            self.cursor
+                .unwrap_or_else(|| self.align_cursor(Align::Center, Justify::Center))
+        }
+
+        /// Sets the cursor position to _row_ and _col_, and also updates the location
+        /// of the cursor in the buffer.
+        fn set_cursor(&mut self, row: u32, col: u32) -> Point {
+            let cursor = Point::new(row, col);
+            self.cursor = Some(cursor);
+            self.loc = Location::new(self.cur_row.line, (self.offset as u32) + cursor.col);
+            cursor
+        }
+
+        /// Possibly sets the cursor position if a previously hidden cursor becomes
+        /// visible.
+        fn possibly_unhide_cursor(&mut self) {
+            // Scrolling down may lead to the current row appearing before top row,
+            // which means the cursor can never be visible, so only consider cases
+            // where the current row appears after top row.
+            if self.top_row.line_pos <= self.cur_row.line_pos {
+                // Limit extent of row search by the numbers of rows on display.
+                let row_info = self
+                    .top_row
+                    .findn_down(&self.buffer(), self.pos, self.rows - 1);
+
+                if let Some((cur_row, row)) = row_info {
+                    // Cursor may be on this row but still hidden if it appears to the
+                    // left or right of display. A simple test to determine if visible
+                    // is to compare the computed offset to the current offset, as any
+                    // change would indicate that cursor would be outside the display
+                    // area if the current offset was not adjusted.
+                    let (offset, col) = cur_row.col_of(self.offset, self.pos, None);
+                    if offset == self.offset {
+                        self.set_cursor(row, col);
+                    }
+                }
             }
         }
 
@@ -1838,21 +1964,18 @@ mod scrolling {
         }
 
         #[inline]
-        fn cursor(&self) -> Point {
+        fn cursor(&self) -> Option<Point> {
             self.cursor
         }
 
         #[inline]
         fn location(&self) -> Location {
-            Location::new(self.cur_row.line, (self.offset as u32) + self.cursor.col)
+            self.loc
         }
 
         #[inline]
         fn line(&self) -> (usize, usize) {
-            (
-                self.cur_row.line_pos,
-                self.cur_row.line_pos + self.cur_row.line_len,
-            )
+            self.cur_row.line()
         }
 
         #[inline]
@@ -1860,7 +1983,7 @@ mod scrolling {
             self.top_row.line_pos
         }
 
-        fn focus_cursor(&mut self, cursor: Point) {
+        fn focus_cursor(&mut self, cursor: Point) -> Point {
             // Ensure target cursor is bounded by effective area of canvas, which takes
             // into account left margin if enabled.
             let try_row = cmp::min(cursor.row, self.rows);
@@ -1878,14 +2001,17 @@ mod scrolling {
             self.offset = offset;
             self.pos = self.cur_row.pos_of(self.offset, col);
             self.snap = Some((self.offset, col));
-            self.cursor = Point::new(row, col);
+            self.set_cursor(row, col)
         }
 
-        fn align_cursor(&mut self, align: Align, justify: Justify) {
+        fn align_cursor(&mut self, align: Align, justify: Justify) -> Point {
             // Determine ideal row and column where cursor would like to be focused,
             // though these should be considered hints.
             let try_row = match align {
-                Align::Auto => cmp::min(self.cursor.row, self.rows - 1),
+                Align::Auto => self
+                    .cursor
+                    .map(|cursor| cmp::min(cursor.row, self.rows - 1))
+                    .unwrap_or(self.rows / 2),
                 Align::Center => self.rows / 2,
                 Align::Top => 0,
                 Align::Bottom => self.rows - 1,
@@ -1908,19 +2034,27 @@ mod scrolling {
             let (offset, col) = self.cur_row.col_of(self.offset, self.pos, try_col);
             self.snap = None;
             self.offset = offset;
-            self.cursor = Point::new(row, col);
+            self.set_cursor(row, col)
         }
 
         fn show_cursor(&mut self) {
-            let cursor = if self.margin_enabled {
-                self.cursor + Size::cols(MARGIN_COLS)
-            } else {
-                self.cursor
-            };
-            self.window.borrow().canvas.borrow_mut().set_cursor(cursor);
+            match self.cursor {
+                Some(cursor) => {
+                    let cursor = if self.margin_enabled {
+                        cursor + Size::cols(MARGIN_COLS)
+                    } else {
+                        cursor
+                    };
+                    self.window.borrow().canvas.borrow_mut().set_cursor(cursor);
+                }
+                None => {
+                    self.window.borrow().canvas.borrow_mut().hide_cursor();
+                }
+            }
         }
 
         fn move_up(&mut self, try_rows: u32, pin: bool) -> u32 {
+            let cursor = self.get_cursor();
             let rows = self.up_cur_row(try_rows);
             if rows > 0 {
                 let row = if pin {
@@ -1931,69 +2065,67 @@ mod scrolling {
                     } else {
                         // Try finding new top line by stepping backwards by number of rows
                         // equivalent to current row of cursor.
-                        self.set_top_row(self.cursor.row)
+                        self.set_top_row(cursor.row)
                     }
-                } else if rows > self.cursor.row {
+                } else if rows > cursor.row {
                     // Cursor would have moved beyond top of display.
                     self.set_top_row(0)
                 } else {
                     // Cursor remains visible without changing top line.
-                    self.cursor.row - rows
+                    cursor.row - rows
                 };
-                let (try_offset, try_col) =
-                    self.snap.take().unwrap_or((self.offset, self.cursor.col));
+                let (try_offset, try_col) = self.snap.take().unwrap_or((self.offset, cursor.col));
                 let (offset, col) = self.cur_row.snap(try_offset, try_col);
                 self.offset = offset;
                 self.pos = self.cur_row.pos_of(self.offset, col);
                 self.snap = Some((try_offset, try_col));
-                self.cursor = Point::new(row, col);
+                self.set_cursor(row, col);
             }
             rows
         }
 
         fn move_down(&mut self, try_rows: u32, pin: bool) -> u32 {
+            let cursor = self.get_cursor();
             let rows = self.down_cur_row(try_rows);
             if rows > 0 {
                 let row = if pin {
                     // Keeping cursor on current row is guaranteed, because top line can
                     // always move down without reaching bottom of buffer.
                     let _ = self.down_top_row(rows);
-                    self.cursor.row
-                } else if self.cursor.row + rows < self.rows {
+                    cursor.row
+                } else if cursor.row + rows < self.rows {
                     // Cursor remains visible without changing top line.
-                    self.cursor.row + rows
+                    cursor.row + rows
                 } else {
                     // Cursor would have moved beyond bottom of display.
                     self.set_top_row(self.rows - 1)
                 };
-                let (try_offset, try_col) =
-                    self.snap.take().unwrap_or((self.offset, self.cursor.col));
+                let (try_offset, try_col) = self.snap.take().unwrap_or((self.offset, cursor.col));
                 let (offset, col) = self.cur_row.snap(try_offset, try_col);
                 self.offset = offset;
                 self.pos = self.cur_row.pos_of(self.offset, col);
                 self.snap = Some((try_offset, try_col));
-                self.cursor = Point::new(row, col);
+                self.set_cursor(row, col);
             }
             rows
         }
 
         fn move_start(&mut self) {
-            self.move_to(
-                self.cur_row.line_pos,
-                Align::Row(self.cursor.row),
-                Justify::Auto,
-            );
+            let cursor = self.get_cursor();
+            self.move_to(self.cur_row.line_pos, Align::Row(cursor.row), Justify::Auto);
         }
 
         fn move_end(&mut self) {
+            let cursor = self.get_cursor();
             self.move_to(
                 self.cur_row.end_col_pos(),
-                Align::Row(self.cursor.row),
+                Align::Row(cursor.row),
                 Justify::Auto,
             );
         }
 
         fn move_to(&mut self, pos: usize, align: Align, justify: Justify) {
+            let cursor = self.get_cursor();
             let row = if pos < self.top_row.line_pos {
                 let _ = self.find_up_cur_row(pos);
                 let rows = match align {
@@ -2004,7 +2136,7 @@ mod scrolling {
                 };
                 self.set_top_row(rows)
             } else if pos < self.cur_row.line_pos {
-                let row = self.cursor.row - self.find_up_cur_row(pos);
+                let row = cursor.row - self.find_up_cur_row(pos);
                 let maybe_rows = match align {
                     Align::Auto => None,
                     Align::Top => Some(0),
@@ -2028,12 +2160,12 @@ mod scrolling {
                 if let Some(rows) = maybe_rows {
                     self.set_top_row(rows)
                 } else {
-                    self.cursor.row
+                    cursor.row
                 }
             } else {
                 let rows = self.find_down_cur_row(pos);
                 let row = match align {
-                    Align::Auto => cmp::min(self.cursor.row + rows, self.rows - 1),
+                    Align::Auto => cmp::min(cursor.row + rows, self.rows - 1),
                     Align::Top => 0,
                     Align::Center => self.rows / 2,
                     Align::Bottom => self.rows - 1,
@@ -2052,29 +2184,25 @@ mod scrolling {
             let (offset, col) = self.cur_row.col_of(self.offset, self.pos, try_col);
             self.offset = offset;
             self.snap = None;
-            self.cursor = Point::new(row, col);
+            self.set_cursor(row, col);
         }
 
         fn scroll_up(&mut self, try_rows: u32) -> u32 {
             let rows = self.up_top_row(try_rows);
             if rows > 0 {
-                let row = self.cursor.row + rows;
-                let (row, col) = if row < self.rows {
-                    // Cursor still visible on display.
-                    (row, self.cursor.col)
+                if let Some(cursor) = self.cursor {
+                    let row = cursor.row + rows;
+                    if row < self.rows {
+                        // Cursor still visible on display.
+                        self.set_cursor(row, cursor.col);
+                    } else {
+                        // Cursor has moved below bottom of display.
+                        self.cursor = None;
+                    }
                 } else {
-                    // Cursor would have moved beyond bottom of display, which means
-                    // current buffer position changes accordingly.
-                    let _ = self.up_cur_row(row - self.rows + 1);
-                    let (try_offset, try_col) =
-                        self.snap.take().unwrap_or((self.offset, self.cursor.col));
-                    self.snap = Some((try_offset, try_col));
-                    let (offset, col) = self.cur_row.snap(try_offset, try_col);
-                    self.offset = offset;
-                    self.pos = self.cur_row.pos_of(self.offset, col);
-                    (self.rows - 1, col)
-                };
-                self.cursor = Point::new(row, col);
+                    // Cursor is hidden but may become visible.
+                    self.possibly_unhide_cursor();
+                }
             }
             rows
         }
@@ -2082,50 +2210,58 @@ mod scrolling {
         fn scroll_down(&mut self, try_rows: u32) -> u32 {
             let rows = self.down_top_row(try_rows);
             if rows > 0 {
-                let (row, col) = if rows > self.cursor.row {
-                    // Cursor would have moved beyond top of display, which means
-                    // current buffer position changes accordingly.
-                    self.cur_row = self.top_row;
-                    let (try_offset, try_col) =
-                        self.snap.take().unwrap_or((self.offset, self.cursor.col));
-                    self.snap = Some((try_offset, try_col));
-                    let (offset, col) = self.cur_row.snap(try_offset, try_col);
-                    self.offset = offset;
-                    self.pos = self.cur_row.pos_of(self.offset, col);
-                    (0, col)
+                if let Some(cursor) = self.cursor {
+                    if rows > cursor.row {
+                        // Cursor has moved above top of display.
+                        self.cursor = None;
+                    } else {
+                        // Cursor still visible on display.
+                        self.set_cursor(cursor.row - rows, cursor.col);
+                    };
                 } else {
-                    // Cursor still visible on display.
-                    (self.cursor.row - rows, self.cursor.col)
-                };
-                self.cursor = Point::new(row, col);
+                    // Cursor is hidden but may become visible.
+                    self.possibly_unhide_cursor();
+                }
             }
             rows
         }
 
         fn scroll_left(&mut self, try_cols: u32) -> u32 {
-            // Actual number of columns available to shift is bounded by distance
-            // between current offset and end of line.
-            let cols = cmp::min(
-                self.offset + (try_cols as usize),
-                self.cur_row.adjusted_len(),
-            ) - self.offset;
+            let cols = self.offset.saturating_add(try_cols as usize) - self.offset;
             if cols > 0 {
                 self.offset += cols;
-                self.cursor.col = self.cursor.col.saturating_sub(cols as u32);
-                self.snap = Some((self.offset, self.cursor.col));
-                self.pos = self.cur_row.pos_of(self.offset, self.cursor.col);
+                if let Some(cursor) = self.cursor {
+                    if cols as u32 > cursor.col {
+                        // Cursor has moved left of display.
+                        self.cursor = None;
+                    } else {
+                        // Cursor still visible on display.
+                        self.set_cursor(cursor.row, cursor.col - cols as u32);
+                    }
+                } else {
+                    // Cursor is hidden but may become visible.
+                    self.possibly_unhide_cursor();
+                }
             }
             cols as u32
         }
 
         fn scroll_right(&mut self, try_cols: u32) -> u32 {
-            // Actual number of columns available to shift is bounded by current offset.
             let cols = cmp::min(try_cols as usize, self.offset);
             if cols > 0 {
                 self.offset -= cols as usize;
-                self.cursor.col = cmp::min(self.cursor.col + (cols as u32), self.cols - 1);
-                self.snap = Some((self.offset, self.cursor.col));
-                self.pos = self.cur_row.pos_of(self.offset, self.cursor.col);
+                if let Some(cursor) = self.cursor {
+                    if cursor.col + (cols as u32) > self.cols - 1 {
+                        // Cursor has moved right of display.
+                        self.cursor = None;
+                    } else {
+                        // Cursor still visible on display.
+                        self.set_cursor(cursor.row, cursor.col + (cols as u32));
+                    }
+                } else {
+                    // Cursor is hidden but may become visible.
+                    self.possibly_unhide_cursor();
+                }
             }
             cols as u32
         }
@@ -2137,10 +2273,11 @@ mod scrolling {
 
                 // Update current row since insertion will changed boundaries for future
                 // navigation.
+                let cursor = self.get_cursor();
                 self.update_cur_row();
 
                 // Find possibly new current row.
-                let row = self.cursor.row + self.find_down_cur_row(self.pos);
+                let row = cursor.row + self.find_down_cur_row(self.pos);
 
                 // New current row could extend beyond display boundary, so update or
                 // find new top row.
@@ -2153,19 +2290,20 @@ mod scrolling {
                 let (offset, col) = self.cur_row.col_of(self.offset, self.pos, None);
                 self.offset = offset;
                 self.snap = None;
-                self.cursor = Point::new(row, col);
+                self.set_cursor(row, col);
             }
         }
 
         fn remove(&mut self) {
             // Removal of text requires both current row and top row to be updated since
             // boundaries may have changed.
+            let cursor = self.get_cursor();
             self.update_cur_row();
             self.update_top_row();
             let (offset, col) = self.cur_row.col_of(self.offset, self.pos, None);
             self.offset = offset;
             self.snap = None;
-            self.cursor.col = col;
+            self.set_cursor(cursor.row, col);
         }
 
         fn render(&mut self, tokenizer: &Tokenizer, token_pos: Position, style: &Style) {

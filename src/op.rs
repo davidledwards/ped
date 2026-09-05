@@ -434,13 +434,16 @@ fn scroll_center(env: &mut Environment) -> Option<Action> {
     // behavior allows user to quickly align cursor with successive key presses.
     let mut editor = env.get_active_editor().borrow_mut();
     let Size { rows, .. } = editor.size();
-    let Point { row, .. } = editor.cursor();
-    let align = if row == 0 {
-        Align::Center
-    } else if row == rows / 2 {
-        Align::Bottom
-    } else if row == rows - 1 {
-        Align::Top
+    let align = if let Some(Point { row, .. }) = editor.cursor() {
+        if row == 0 {
+            Align::Center
+        } else if row == rows / 2 {
+            Align::Bottom
+        } else if row == rows - 1 {
+            Align::Top
+        } else {
+            Align::Center
+        }
     } else {
         Align::Center
     };

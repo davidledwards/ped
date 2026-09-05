@@ -161,6 +161,12 @@ impl Canvas {
         self.writer.send();
     }
 
+    /// Hides the cursor.
+    pub fn hide_cursor(&mut self) {
+        self.writer.hide_cursor();
+        self.writer.send();
+    }
+
     /// Draw pending canvas modifications.
     pub fn draw(&mut self) {
         // Determine which cells changed in back grid, if any, which then results in

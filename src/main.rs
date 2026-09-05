@@ -175,10 +175,11 @@ fn prepare_term() -> Result<()> {
     term::init()?;
     write!(
         stdout(),
-        "{}{}{}",
+        "{}{}{}{}",
         ansi::alt_screen(true),
         ansi::track_mouse(true),
-        ansi::clear_screen()
+        ansi::clear_screen(),
+        ansi::show_cursor(),
     )?;
     Ok(())
 }
@@ -186,7 +187,8 @@ fn prepare_term() -> Result<()> {
 fn restore_term() -> Result<()> {
     write!(
         stdout(),
-        "{}{}{}",
+        "{}{}{}{}",
+        ansi::show_cursor(),
         ansi::clear_screen(),
         ansi::track_mouse(false),
         ansi::alt_screen(false)

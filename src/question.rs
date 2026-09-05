@@ -720,8 +720,11 @@ impl Save {
                 let new_editor = editor
                     .borrow()
                     .duplicate(Source::as_file(path, Some(timestamp)));
-                let row = new_editor.cursor().row;
-                env.set_editor(new_editor.into_ref(), Align::Row(row));
+                let align = match new_editor.cursor() {
+                    Some(cursor) => Align::Row(cursor.row),
+                    None => Align::Center,
+                };
+                env.set_editor(new_editor.into_ref(), align);
 
                 // Reset mutable ephemeral editors, which currently only applies to
                 // `@scratch`.

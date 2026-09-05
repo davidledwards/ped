@@ -46,8 +46,8 @@ pub struct Pen<'a> {
     /// A reference to the style that created this pen.
     style: &'a Style<'a>,
 
-    /// Current cursor position.
-    cursor: Point,
+    /// Current row of cursor position if visible, otherwise value is `u32::MAX`.
+    cursor_row: u32,
 
     /// Current `1`-based line number.
     line: u32,
@@ -102,7 +102,7 @@ impl<'a> Style<'a> {
     /// State provided by caller:
     /// - `cursor`: current cursor position on display
     /// - `line`: current `1`-based line number in buffer
-    pub fn pen(&self, cursor: Point, line: u32) -> Pen<'_> {
+    pub fn pen(&self, cursor: Option<Point>, line: u32) -> Pen<'_> {
         Pen::new(self, cursor, line)
     }
 }
@@ -117,10 +117,10 @@ impl<'a> Pen<'a> {
     /// Special character shown for all other ASCII control characters.
     const CTRL_CHAR: char = '\u{00bf}';
 
-    fn new(style: &'a Style, cursor: Point, line: u32) -> Pen<'a> {
+    fn new(style: &'a Style, cursor: Option<Point>, line: u32) -> Pen<'a> {
         Pen {
             style,
-            cursor,
+            cursor_row: cursor.map(|c| c.row).unwrap_or(u32::MAX),
             line,
         }
     }
@@ -171,7 +171,7 @@ impl<'a> Pen<'a> {
             config.theme.search_bg
         } else if self.style.selected.contains(&pos) {
             config.theme.select_bg
-        } else if config.settings.spotlight && row == self.cursor.row {
+        } else if config.settings.spotlight && row == self.cursor_row {
             config.theme.spotlight_bg
         } else {
             config.theme.text_bg

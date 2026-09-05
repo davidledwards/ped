@@ -169,7 +169,7 @@ pub struct Mark(pub usize, pub bool);
 /// restoration.
 pub struct Capture {
     pub pos: usize,
-    pub cursor: Point,
+    pub cursor: Option<Point>,
     pub mark: Option<Mark>,
 }
 
@@ -415,12 +415,13 @@ impl Editor {
         self.show_banner();
     }
 
-    /// Returns the cursor position on the display in terms of _row_ and _column_.
+    /// Returns the cursor position on the display in terms of _row_ and _column_ if
+    /// visible, otherwise `None`.
     ///
     /// The _row_ and _column_ values are `0`-based and exclusively bounded by
     /// [`size()`](Self::size).
     #[inline]
-    pub fn cursor(&self) -> Point {
+    pub fn cursor(&self) -> Option<Point> {
         self.rendering.cursor()
     }
 
@@ -841,11 +842,11 @@ impl Editor {
     /// Note that if the editor changes after state has been captured, there is no
     /// guarantee that said state will be restored precisely as it was.
     pub fn restore(&mut self, capture: &Capture) {
-        self.move_to(
-            capture.pos,
-            Align::Row(capture.cursor.row),
-            Justify::Col(capture.cursor.col),
-        );
+        let (align, justify) = match capture.cursor {
+            Some(cursor) => (Align::Row(cursor.row), Justify::Col(cursor.col)),
+            None => (Align::Center, Justify::Center),
+        };
+        self.move_to(capture.pos, align, justify);
         if let Some(Mark(pos, soft)) = capture.mark {
             let pos = cmp::min(pos, self.buffer().size());
             self.mark = Some(Mark(pos, soft));
