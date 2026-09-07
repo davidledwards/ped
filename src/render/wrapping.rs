@@ -1,4 +1,24 @@
-//! This module implements the [wrapping](Rendering::Wrapping) rendering engine.
+//! Implements the [wrapping](Rendering::Wrapping) rendering engine.
+//!
+//! A wrapping engine wraps long lines of text across multiple rows on the display.
+//! Text can be scrolled up and and down, but not left and right.
+//!
+//! This diagram illustrates the manner in which long lines automatically wrap, with
+//! numbers on the left depicting the _line_ number and those on the right showing the
+//! _row_ number.
+//!
+//! ```text
+//!  line                                 row
+//!       +-----------------------------+
+//!    0  |fn main() -> ExitCode {      |  0
+//!    1  |   match run() {             |  1
+//!    2  |      Err(e) => {            |  2
+//!    3  |         let _ = writeln!(std|  3
+//!       |err(), "{e}");               |  4
+//!    4  |         ExitCode::from(1)   |  5
+//!    5  |      }                      |  6
+//!       +-----------------------------+
+//! ```
 
 use super::*;
 use crate::buffer::Buffer;
@@ -51,6 +71,57 @@ pub struct WrappingRenderer {
 ///
 /// A row should not be confused with a line in the buffer, the latter of which
 /// could conceivably span more than one row on the display.
+///
+/// Consider the following line of text in the buffer, where `↵` is a `\n` character.
+/// The line, including `\n`, is `44` characters.
+///
+/// ```text
+/// 00000000001111111111222222222233333333334444
+/// 01234567890123456789012345678901234567890123
+/// --------------------------------------------
+/// The quick brown fox jumps over the lazy dog↵
+/// ```
+///
+/// Now consider that the display width is `16` characters. The line would wrap across
+/// multiple rows on the display. The numbers on the left show the _line_ number, whereas
+/// those on the right represent the _row_ number.
+///
+/// ```text
+///  line                    row
+///       +----------------+
+///    0  |The quick brown |  0
+///       |fox jumps over t|  1
+///       |he lazy dog↲    |  2
+///    1  |                |  3
+///       +----------------+
+/// ```
+///
+/// This shows how each of the three rows would be initialized.
+///
+/// ```text
+///                       +----------------+
+///                       |  row_pos = 16  |
+///                       |  row_len = 16  |
+///                       |  line_pos = 0  |
+///                       |  line_len = 44 |
+///                       |  line = 0      |
+///                       Row 1 -----------+
+///                         |
+///                   ____________
+///                  /            \
+///                 v              v
+/// The quick brown fox jumps over the lazy dog↵
+/// ^              ^                ^          ^
+///  \____________/                  \________/
+///         |                             |
+///       Row 0 -----------+            Row 2 -----------+
+///       |  row_pos = 0   |            |  row_pos = 32  |
+///       |  row_len = 16  |            |  row_len = 12  |
+///       |  line_pos = 0  |            |  line_pos = 0  |
+///       |  line_len = 44 |            |  line_len = 44 |
+///       |  line = 0      |            |  line = 0      |
+///       +----------------+            +----------------+
+/// ```
 #[derive(Copy, Clone)]
 struct Row {
     /// Buffer position corresponding to the first character of the display row,

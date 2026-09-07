@@ -1,4 +1,27 @@
-//! This module implements the [scrolling](Rendering::Scrolling) rendering engine.
+//! Implements the [scrolling](Rendering::Scrolling) rendering engine.
+//!
+//! A scrolling engine visually truncates long lines of text such that an entire line of
+//! text appears on a single row of the display. This mean text can be scrolled left and
+//! right in addition to up and down.
+//!
+//! Since long lines of text must be visually truncated, this is prominently shown using
+//! special characters in both the left and right margin gutters, depending on the
+//! direction of scrolling.
+//!
+//! This diagram illustrates the visual truncation on the left and right margins where
+//! a portion of the line appears to the left or to the right of the display. The `◀︎`
+//! and `▶︎` characters appear in the margin gutters.
+//!
+//! ```text
+//!         +-------------------------+
+//!   fn mai|◀︎n() -> ExitCode {       |
+//!      mat|◀︎ch run() {              |
+//!         |◀︎Err(e) => {             |
+//!         |◀︎   let _ = writeln!(std▶︎|err(), "{e}");
+//!         |◀︎   ExitCode::from(1)    |
+//!         |◀︎}                       |
+//!         +-------------------------+
+//! ```
 
 use super::*;
 use crate::buffer::Buffer;

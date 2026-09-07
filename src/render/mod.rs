@@ -1,4 +1,56 @@
-//! Provides text rendering engines.
+//! A specification for text rendering engines.
+//!
+//! Every rendering engine is required to implement the [Renderer] trait, which allows
+//! the editor to interact with a consistent interface.
+//!
+//! There are currently two rendering engines available to the editor:
+//! - a _wrapping_ engine that wraps long lines, and
+//! - a _scrolling_ engine that does not wrap long lines.
+//!
+//! Both engines share a common strategy that optimizes for a minimal amount of overhead
+//! in managing state information in exchange for a slightly less efficient use of
+//! computational resources. In practice, the additional computing overhead is negligible
+//! due to the efficiency of the algorithm.
+//!
+//! The rendering engine keeps two key pieces of information that allows it to
+//! efficiently move around the buffer:
+//! - a reference to the _top_ row of the display, and
+//! - a reference to the _current_ row, which is where the cursor appears.
+//!
+//! THe distinction between a row and a line of text is important. A line of text,
+//! as one might expect, is a sequence of characters in a buffer ending with `\n`. A
+//! row represents a single line on the display, which may or may not contain an
+//! entire line of text from the buffer. That depends on the type of rendering engine.
+//!
+//! The following illustrates how the _top_ and _current_ references point to specific
+//! areas of the display. Both are instances of a `Row` struct that contains similar
+//! but different information based on the type of rendering engine.
+//!
+//! ```text
+//!            +-----------------------------------------------+
+//!     top -> |fn main() -> ExitCode {                        |
+//!            |   match run() {                               |
+//!            |      Err(e) => {                              |
+//! current -> |         let _ = writeln!(stderr(), "{e}");    |
+//!            |         ExitCode::from(1)                     |
+//!            |      }                                        |
+//!            +-----------------------------------------------+
+//! ```
+//!
+//! As the user moves the cursor around the display, _top_ and _current_ rows change
+//! accordingly. For example, if the cursor is somewhere in the middle of the display
+//! and moves up, the _current_ row reference will point to the prior row but the _top_
+//! row stays the same. However, if the cursor is at the top or bottom row and the
+//! cursor moves up or down, the _top_ row reference will also change accordingly
+//! because the entire contents of the display shifts up or down.
+//!
+//! Moving a row reference up or down requires scanning the text buffer forward or
+//! backward depending on the direction of the move. Most operations only move a short
+//! distance, so the cost of scanning is negligible.
+//!
+//! The rendering algorithm starts at the _top_ row, which contains the buffer position
+//! of the top-left cell in the display, moving left to right and top to bottom, writing
+//! each character to the canvas.
 
 mod scrolling;
 mod wrapping;
