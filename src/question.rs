@@ -714,17 +714,18 @@ impl Save {
     fn save_ephemeral(editor: &EditorRef, env: &mut Environment, path: &str) -> Option<Action> {
         let timestamp = ed::write_editor(editor, path);
         match timestamp {
-            Ok(timestamp) => {
+            Ok(ts) => {
                 // Replace ephemeral editor in current window with duplicate version,
                 // keeping position of cursor at same location on terminal.
-                let new_editor = editor
-                    .borrow()
-                    .duplicate(Source::as_file(path, Some(timestamp)));
-                let align = match new_editor.cursor() {
+                let dup_editor = editor.borrow().duplicate(Source::as_file(path, Some(ts)));
+
+                // Restores cursor position if visible, otherwise aligns in center of
+                // display.
+                let align = match editor.borrow().cursor() {
                     Some(cursor) => Align::Row(cursor.row),
                     None => Align::Center,
                 };
-                env.set_editor(new_editor.into_ref(), align);
+                env.set_editor(dup_editor.into_ref(), align);
 
                 // Reset mutable ephemeral editors, which currently only applies to
                 // `@scratch`.
