@@ -2,6 +2,12 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
+### [0.44.0](https://github.com/davidledwards/ped/tree/v0.44.0) | `2026-09-??`
+
+#### Fixed
+
+- Cursor was not being retained in its current position after saving an _ephemeral_ editor, such as `@scratch`.
+
 ### [0.43.0](https://github.com/davidledwards/ped/tree/v0.43.0) | `2026-09-05`
 
 #### Added
