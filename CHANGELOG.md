@@ -2,6 +2,12 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
+### [0.43.2](https://github.com/davidledwards/ped/tree/v0.43.2) | `2026-10-??`
+
+#### Fixed
+
+- Rendering problem in the left margin when `--no-lines` was enabled.
+
 ### [0.43.1](https://github.com/davidledwards/ped/tree/v0.43.1) | `2026-09-08`
 
 #### Fixed

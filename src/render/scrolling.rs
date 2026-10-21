@@ -524,10 +524,13 @@ impl ScrollingRenderer {
 
         // Blank out remaining rows.
         for row in (spot.row + 1)..self.rows {
-            if self.margin_enabled {
+            let text_col = if self.margin_enabled {
                 canvas.fill_cell(row, 0..MARGIN_COLS, pen.as_margin(' '));
-            }
-            canvas.fill_cell_from(row, MARGIN_COLS, pen.as_blank());
+                MARGIN_COLS
+            } else {
+                0
+            };
+            canvas.fill_cell_from(row, text_col, pen.as_blank());
         }
     }
 
