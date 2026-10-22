@@ -8,6 +8,7 @@ This file contains relevant information for each release. Please refer to the co
 
 - Rendering problem in the left margin when `--no-lines` was enabled.
 - Rendering issue on last row of buffer under certain conditions when using `--no-wrap` that causes a panic.
+- Incorrect _line_:_column_ values on the banner bar when entering text at the end of the buffer and wrapping to the next row.
 
 ### [0.43.1](https://github.com/davidledwards/ped/tree/v0.43.1) | `2026-09-08`
 

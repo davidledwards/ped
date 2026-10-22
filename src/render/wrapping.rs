@@ -233,7 +233,7 @@ impl Row {
         cmp::min(col, self.adjusted_len() as u32)
     }
 
-    /// Returns an update version of this row based on the assumption of underlying
+    /// Returns an updated version of this row based on the assumption of underlying
     /// changes to the buffer.
     ///
     /// Note that none of `row_pos`, `line_pos`, and `line` are modified as part of
@@ -320,7 +320,7 @@ impl Rowable for Row {
     fn next(&self, buffer: &Buffer) -> Option<Row> {
         if self.is_bottom() {
             None
-        } else if self.is_wrapping() {
+        } else if self.is_wrapping() || self.is_bottom {
             let row_pos = self.row_pos + self.row_len;
             let row_len = cmp::min(
                 self.line_len - (row_pos - self.line_pos),
