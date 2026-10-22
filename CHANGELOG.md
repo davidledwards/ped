@@ -7,6 +7,7 @@ This file contains relevant information for each release. Please refer to the co
 #### Fixed
 
 - Rendering problem in the left margin when `--no-lines` was enabled.
+- Rendering issue on last row of buffer under certain conditions when using `--no-wrap` that causes a panic.
 
 ### [0.43.1](https://github.com/davidledwards/ped/tree/v0.43.1) | `2026-09-08`
 

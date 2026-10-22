@@ -509,18 +509,22 @@ impl ScrollingRenderer {
         let (row, col) = (spot.row, spot.col + self.margin_cols());
         let color = spot.token_pos.color();
 
-        // This is an edge case not handled by `render_cell` since reaching bottom of
-        // buffer terminates the iteration, therefore display gutter if text exists
-        // left of left margin and there is no text visible on row.
-        let fill_col = if spot.offset > 0 && spot.col == 0 {
-            canvas.set_cell(row, col, pen.as_gutter(Self::GUTTER_LEFT));
-            col + 1
-        } else {
-            col
-        };
+        // This is an edge case not handled by `render_cell` because reaching bottom
+        // of buffer terminates the iteration before remainder of the row can be
+        // rendered.
+        if spot.col < self.cols {
+            // Display gutter if text exists left of left margin and there is no
+            // text visible on row.
+            let fill_col = if spot.offset > 0 && spot.col == 0 {
+                canvas.set_cell(row, col, pen.as_gutter(Self::GUTTER_LEFT));
+                col + 1
+            } else {
+                col
+            };
 
-        // Blank out rest of existing row.
-        canvas.fill_cell_from(row, fill_col, pen.as_text(' ', spot.pos, spot.row, color));
+            // Blank out rest of existing row.
+            canvas.fill_cell_from(row, fill_col, pen.as_text(' ', spot.pos, spot.row, color));
+        }
 
         // Blank out remaining rows.
         for row in (spot.row + 1)..self.rows {
