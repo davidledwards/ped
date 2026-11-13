@@ -490,6 +490,7 @@ impl Editor {
         // Align cursor and draw contents only if window is not a zombie.
         if self.rendering.is_attached() {
             self.rendering.align_cursor(align, Justify::Auto);
+            self.align_syntax();
             self.draw();
         }
     }
