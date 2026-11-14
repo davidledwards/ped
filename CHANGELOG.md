@@ -2,6 +2,12 @@
 
 This file contains relevant information for each release. Please refer to the commit history for more details.
 
+### [0.43.2](https://github.com/davidledwards/ped/tree/v0.43.3) | `2026-11-14`
+
+#### Fixed
+
+- Syntax rendering problem in existing windows when opening new window.
+
 ### [0.43.2](https://github.com/davidledwards/ped/tree/v0.43.2) | `2026-10-22`
 
 #### Fixed
